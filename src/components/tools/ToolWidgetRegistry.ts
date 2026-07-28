@@ -13,6 +13,7 @@ import LSWidget from './LSWidget';
 import MCPWidget from './MCPWidget';
 import NotebookEditWidget from './NotebookEditWidget';
 import AgentWidget from './AgentWidget';
+import { AskUserQuestionWidget, ExitPlanModeWidget } from './InteractiveWidgets';
 
 export interface ToolWidgetProps {
   name: string;
@@ -39,6 +40,8 @@ const registry: Record<string, React.ComponentType<ToolWidgetProps>> = {
   Agent: AgentWidget,
   TaskCreate: AgentWidget,
   TaskUpdate: AgentWidget,
+  AskUserQuestion: AskUserQuestionWidget,
+  ExitPlanMode: ExitPlanModeWidget,
 };
 
 export function getToolWidget(toolName: string): React.ComponentType<ToolWidgetProps> {

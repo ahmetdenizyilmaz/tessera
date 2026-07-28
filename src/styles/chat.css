@@ -1128,6 +1128,225 @@
   flex-shrink: 0;
 }
 
+/* ── Control request cards (permissions / questions / plan) ── */
+
+.control-card {
+  margin: 10px 20px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(74, 158, 255, 0.35);
+  background: rgba(74, 158, 255, 0.06);
+  font-size: 13px;
+}
+
+.control-card--plan {
+  border-color: rgba(63, 185, 80, 0.35);
+  background: rgba(63, 185, 80, 0.05);
+}
+
+.control-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.control-card__description {
+  color: var(--text-secondary, #9aa4b2);
+  margin-bottom: 8px;
+}
+
+.control-card__input {
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.control-card__plan {
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px 2px;
+}
+
+.control-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.control-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.control-btn--allow {
+  background: rgba(63, 185, 80, 0.2);
+  border-color: rgba(63, 185, 80, 0.5);
+  color: #3fb950;
+}
+
+.control-btn--allow:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.32);
+}
+
+.control-btn--allow-always {
+  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(63, 185, 80, 0.35);
+  color: #3fb950;
+}
+
+.control-btn--deny {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.45);
+  color: #f85149;
+}
+
+.control-btn--deny:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.28);
+}
+
+.control-btn--neutral:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.control-question {
+  margin: 10px 0;
+}
+
+.control-question__header {
+  display: inline-block;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary, #9aa4b2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 6px;
+}
+
+.control-question__text {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.control-question__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.control-option:hover:not(:disabled) {
+  border-color: rgba(74, 158, 255, 0.5);
+  background: rgba(74, 158, 255, 0.08);
+}
+
+.control-option--selected {
+  border-color: rgba(74, 158, 255, 0.8);
+  background: rgba(74, 158, 255, 0.14);
+}
+
+.control-option__label {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-option__description {
+  color: var(--text-secondary, #9aa4b2);
+  font-size: 11.5px;
+}
+
+.control-question__freetext {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  font-size: 12.5px;
+}
+
+/* Read-only transcript widgets */
+
+.tool-widget__header--static {
+  cursor: default;
+}
+
+.question-widget__item {
+  margin: 6px 0;
+}
+
+.question-widget__question {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.question-widget__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.question-widget__option {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11.5px;
+  color: var(--text-secondary, #9aa4b2);
+}
+
+.question-widget__option--chosen {
+  border-color: rgba(63, 185, 80, 0.6);
+  background: rgba(63, 185, 80, 0.12);
+  color: #3fb950;
+}
+
+.question-widget__free-answer {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #3fb950;
+}
+
+.plan-widget__content {
+  max-height: 280px;
+  overflow: auto;
+}
+
 /* ── Permission banner (stream-JSON chat) ──────────────── */
 
 .chat-permission-banner {

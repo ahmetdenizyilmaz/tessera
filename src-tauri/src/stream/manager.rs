@@ -230,11 +230,13 @@ fn ensure_process(
             }
         }
     }
-    // TODO(interactive-prompts): replace this interim bypass with
-    // `--permission-prompt-tool stdio` once the frontend can answer
-    // can_use_tool control requests (permission cards / AskUserQuestion UI).
-    if cfg.dangerously_skip_permissions || mode == "default" {
+    if cfg.dangerously_skip_permissions {
         cmd.arg("--dangerously-skip-permissions");
+    } else {
+        // Permission prompts, AskUserQuestion and plan approval arrive as
+        // can_use_tool control requests on stdout and are answered over stdin
+        // (the same mechanism the official SDK uses).
+        cmd.arg("--permission-prompt-tool").arg("stdio");
     }
 
     cmd.current_dir(&cfg.cwd);

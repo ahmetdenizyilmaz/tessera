@@ -8,6 +8,7 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { useChatStore } from '../../store/chatStore';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { ControlRequestArea } from './ControlRequestArea';
 import { isUserMessage } from '../../types/stream';
 import { ClaudeIcon } from '../icons/ProviderIcons';
 import type { SessionInfo } from '../../types/session';
@@ -50,10 +51,12 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
   const {
     messages,
     isStreaming,
+    controlRequests,
     systemInfo,
     error,
     spawn,
     send,
+    respondControl,
     cancel,
   } = useStreamJson(instanceId);
 
@@ -429,8 +432,15 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
           ))
         )}
 
+        {/* Interactive control requests: permissions, questions, plan approval */}
+        <ControlRequestArea
+          instanceId={instanceId}
+          requests={controlRequests}
+          respond={respondControl}
+        />
+
         {/* Thinking/streaming indicator */}
-        {isStreaming && (
+        {isStreaming && controlRequests.length === 0 && (
           <div className="chat-thinking-indicator">
             <div className="chat-thinking-dot" />
             <span>Claude is thinking...</span>
