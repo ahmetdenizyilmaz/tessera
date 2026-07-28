@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
-import { useLayoutStore, type PanelType } from '../store/layoutStore';
+import { useLayoutStore, getDefaultConfig, computeRects, type PanelType } from '../store/layoutStore';
 import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
 import type { InstanceConfig } from '../types/instance';
-import type { LayoutConfig, PanelRect, SavedWorkspace } from '../types/session';
+import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export interface SerializedGroup {
   panelRects: Record<string, PanelRect>;
   focusedChildId: string | null;
   activeChildId: string | null;
-  stealFraction: number;
+  stealFraction: StealFraction;
 }
 
 export interface SavedLayout {
@@ -45,7 +45,7 @@ export interface SavedLayout {
   focusedId: string | null;
   layoutConfig: LayoutConfig | null;
   panelRects: Record<string, PanelRect>;
-  stealFraction: number;
+  stealFraction: StealFraction;
   panelTypes: Record<string, PanelType>;
   widgetKinds: Record<string, string>;
 }
@@ -135,6 +135,18 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
 
 // ─── Migration ───────────────────────────────────────────────────────────────
 
+/**
+ * stealFraction used to be a single scalar applied to both axes; it is now
+ * per-axis. Old snapshots (autosave, .ady files, group snapshots) may still
+ * carry a number — expand it to both axes.
+ */
+export function normalizeStealFraction(
+  v: StealFraction | number | null | undefined,
+): StealFraction {
+  if (typeof v === 'number') return { x: v, y: v };
+  return v ?? { x: 0.5, y: 0.5 };
+}
+
 function readLegacyGroups(): Record<string, SerializedGroup> {
   try {
     const raw = localStorage.getItem(LEGACY_GROUPS_KEY);
@@ -162,7 +174,7 @@ function migrateV2(saved: SavedWorkspace): NormalizedSnapshot | null {
         focusedId: saved.layout.focusedId ?? null,
         layoutConfig: saved.layout.layoutConfig ?? null,
         panelRects: saved.layout.panelRects ?? {},
-        stealFraction: saved.layout.stealFraction ?? 0.5,
+        stealFraction: normalizeStealFraction(saved.layout.stealFraction),
         panelTypes: saved.layout.panelTypes ?? {},
         widgetKinds: saved.layout.widgetKinds ?? {},
       }
@@ -196,6 +208,8 @@ function normalizeSnapshot(raw: unknown): NormalizedSnapshot | null {
       layout: snap.layout
         ? {
             ...snap.layout,
+            // Older v3 snapshots stored a scalar stealFraction
+            stealFraction: normalizeStealFraction(snap.layout.stealFraction),
             panelTypes: snap.layout.panelTypes ?? {},
             widgetKinds: snap.layout.widgetKinds ?? {},
           }
@@ -301,7 +315,7 @@ export function deserializeWorkspace(raw: unknown): void {
       panelRects,
       focusedChildId: focused && childIds.includes(focused) ? focused : (childIds[0] ?? null),
       activeChildId: active && childIds.includes(active) ? active : (childIds[0] ?? null),
-      stealFraction: sg.stealFraction ?? 0.5,
+      stealFraction: normalizeStealFraction(sg.stealFraction),
     });
   }
   useGroupStore.getState().restoreGroups(newGroups);
@@ -321,6 +335,8 @@ export function deserializeWorkspace(raw: unknown): void {
       ? null
       : (keepId(remappedFocused) ? remappedFocused : (newTabOrder[0] ?? null));
 
+    const stealFraction = normalizeStealFraction(layout.stealFraction);
+
     let newLayoutConfig = layout.layoutConfig;
     if (newLayoutConfig) {
       newLayoutConfig = {
@@ -329,10 +345,21 @@ export function deserializeWorkspace(raw: unknown): void {
       };
     }
 
-    const newPanelRects = new Map<string, PanelRect>();
+    let newPanelRects = new Map<string, PanelRect>();
     for (const [oldId, rect] of Object.entries(layout.panelRects ?? {})) {
       const nid = remapId(oldId);
       if (keepId(nid)) newPanelRects.set(nid, rect);
+    }
+
+    // Guard: if the saved config/rects no longer cover the tab set (e.g. a
+    // panel was moved to root while inside a group), fall back to a default
+    if (newTabOrder.length > 0) {
+      if (!newLayoutConfig || newLayoutConfig.panelOrder.length !== newTabOrder.length) {
+        newLayoutConfig = getDefaultConfig(newTabOrder, newFocusedId);
+      }
+      if (newPanelRects.size !== newTabOrder.length) {
+        newPanelRects = computeRects(newLayoutConfig, newFocusedId, stealFraction);
+      }
     }
 
     const newPanelTypes: Record<string, PanelType> = {};
@@ -353,7 +380,7 @@ export function deserializeWorkspace(raw: unknown): void {
       newFocusedId,
       newLayoutConfig,
       newPanelRects,
-      layout.stealFraction ?? 0.5,
+      stealFraction,
       newPanelTypes,
       newWidgetKinds,
     );

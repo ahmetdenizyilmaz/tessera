@@ -8,7 +8,7 @@ import { lazy, Suspense } from 'react';
 // Lazy: UsageDashboard drags in recharts — keep it out of the startup chunk
 const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
-import { useLayoutStore, sidebarDragState, detectSnapZone } from '../../store/layoutStore';
+import { useLayoutStore, sidebarDragState, detectSnapZone, MAX_PANELS } from '../../store/layoutStore';
 import type { ProjectInfo } from '../../store/projectStore';
 
 type SidebarTab = 'projects' | 'agents' | 'mcp' | 'analytics' | 'timeline';
@@ -71,7 +71,10 @@ export function Sidebar() {
     const kinds = useLayoutStore.getState().widgetKinds;
     if (Object.values(kinds).includes(tabId)) return;
     // Don't start drag if max panels reached
-    if (useLayoutStore.getState().tabOrder.length >= 5) return;
+    if (useLayoutStore.getState().tabOrder.length >= MAX_PANELS) {
+      console.warn(`Panel limit reached (${MAX_PANELS}); cannot drag widget to workspace`);
+      return;
+    }
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -116,7 +119,7 @@ export function Sidebar() {
     const onUp = () => {
       if (started) {
         const currentCount = useLayoutStore.getState().tabOrder.length;
-        if (currentCount < 5) {
+        if (currentCount < MAX_PANELS) {
           const zone = currentCount === 0
             ? undefined
             : (sidebarDragState.currentSnap ?? undefined);
@@ -273,7 +276,10 @@ export function Sidebar() {
               {!openKinds.has(activeTab) && (
                 <button
                   onClick={() => {
-                    if (useLayoutStore.getState().tabOrder.length >= 5) return;
+                    if (useLayoutStore.getState().tabOrder.length >= MAX_PANELS) {
+                      console.warn(`Panel limit reached (${MAX_PANELS}); cannot open widget as panel`);
+                      return;
+                    }
                     useLayoutStore.getState().addWidgetPanel(activeTab);
                     setIsOpen(false);
                   }}

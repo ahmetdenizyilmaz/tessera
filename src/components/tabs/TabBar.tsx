@@ -193,22 +193,10 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
         // If we're at root and dropping on root, nothing to do
         if (currentGroupId === null && targetGroupId === null) return;
 
-        // Move the panel from current group to the target group/root
-        if (currentGroupId !== null) {
-          // Remove from current group
-          useGroupStore.getState().removeFromGroup(currentGroupId, activeId);
-        }
-
-        // Remove from current tabOrder (visible level)
-        useLayoutStore.getState().removePanel(activeId);
-
-        // Add to target group or root
-        if (targetGroupId !== null) {
-          useGroupStore.getState().addToGroup(targetGroupId, activeId);
-        } else {
-          // Add to root tabOrder
-          useLayoutStore.getState().addPanel(activeId, panelTypes[activeId] ?? 'terminal');
-        }
+        // Move the panel out of the current level into the target level's
+        // saved layout (root = bottom of the layout stack) — adding it back
+        // to the live tabOrder here would re-add it to the current group
+        useGroupStore.getState().movePanelToLevel(activeId, targetGroupId);
         return;
       }
 
@@ -235,7 +223,7 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
         moveTab(fromIndex, toIndex);
       }
     },
-    [tabOrder, moveTab, panelTypes],
+    [tabOrder, moveTab],
   );
 
   const handleDragCancel = useCallback(() => {

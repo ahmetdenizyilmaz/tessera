@@ -1,9 +1,13 @@
 import { create } from 'zustand';
-import type { PanelRect, LayoutConfig, SnapZone } from '../types/session';
+import type { PanelRect, LayoutConfig, SnapZone, StealFraction } from '../types/session';
 
 // ─── Panel Type ──────────────────────────────────────────────────────────────
 
 export type PanelType = 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin';
+
+// ─── Panel Limit ─────────────────────────────────────────────────────────────
+
+export const MAX_PANELS = 12;
 
 // ─── Sidebar Drag State (module-level, shared between Sidebar & MosaicLayout)
 // Anchored to globalThis so it survives Vite HMR module re-evaluation
@@ -56,7 +60,7 @@ export function focusAxis(
 export function computeRects(
   config: LayoutConfig,
   focusedId: string | null,
-  stealFraction: number,
+  stealFraction: StealFraction,
 ): Map<string, PanelRect> {
   const rects = new Map<string, PanelRect>();
   const order = config.panelOrder;
@@ -78,14 +82,14 @@ export function computeRects(
         // Vertical split (top/bottom)
         const [first, second] = dir === 'top' ? [0, 1] : [1, 0];
         const fIdx = focusIdx === -1 ? -1 : (order[focusIdx] === order[first] ? 0 : 1);
-        const sizes = focusAxis(2, fIdx, stealFraction);
+        const sizes = focusAxis(2, fIdx, stealFraction.y);
         rects.set(order[first], { x: 0, y: 0, w: 100, h: sizes[0] });
         rects.set(order[second], { x: 0, y: sizes[0], w: 100, h: sizes[1] });
       } else {
         // Horizontal split (left/right)
         const [first, second] = dir === 'left' ? [0, 1] : [1, 0];
         const fIdx = focusIdx === -1 ? -1 : (order[focusIdx] === order[first] ? 0 : 1);
-        const sizes = focusAxis(2, fIdx, stealFraction);
+        const sizes = focusAxis(2, fIdx, stealFraction.x);
         rects.set(order[first], { x: 0, y: 0, w: sizes[0], h: 100 });
         rects.set(order[second], { x: sizes[0], y: 0, w: sizes[1], h: 100 });
       }
@@ -103,8 +107,9 @@ export function computeRects(
       const stackFocusIdx = focusedId === stack1Id ? 0 : (focusedId === stack2Id ? 1 : -1);
 
       if (dir === 'left' || dir === 'right') {
-        const colSizes = focusAxis(2, mainGroupFocus, stealFraction);
-        const rowSizes = focusAxis(2, stackFocusIdx, stealFraction);
+        // Main/stack column split → x, stack row split → y
+        const colSizes = focusAxis(2, mainGroupFocus, stealFraction.x);
+        const rowSizes = focusAxis(2, stackFocusIdx, stealFraction.y);
 
         if (dir === 'left') {
           rects.set(mainId, { x: 0, y: 0, w: colSizes[0], h: 100 });
@@ -116,9 +121,9 @@ export function computeRects(
           rects.set(stack2Id, { x: 0, y: rowSizes[0], w: colSizes[1], h: rowSizes[1] });
         }
       } else {
-        // top or bottom
-        const rowSizes = focusAxis(2, mainGroupFocus, stealFraction);
-        const colSizes = focusAxis(2, stackFocusIdx, stealFraction);
+        // top or bottom — main/stack row split → y, stack column split → x
+        const rowSizes = focusAxis(2, mainGroupFocus, stealFraction.y);
+        const colSizes = focusAxis(2, stackFocusIdx, stealFraction.x);
 
         if (dir === 'top') {
           rects.set(mainId, { x: 0, y: 0, w: 100, h: rowSizes[0] });
@@ -134,7 +139,7 @@ export function computeRects(
     }
 
     case 'three-col': {
-      const sizes = focusAxis(3, focusIdx, stealFraction);
+      const sizes = focusAxis(3, focusIdx, stealFraction.x);
       let xOffset = 0;
       for (let i = 0; i < 3 && i < n; i++) {
         rects.set(order[i], { x: xOffset, y: 0, w: sizes[i], h: 100 });
@@ -158,11 +163,11 @@ export function computeRects(
       const focusedIsTop = focusedId ? topRow.includes(focusedId) : false;
       const focusedIsBottom = focusedId ? bottomRow.includes(focusedId) : false;
       const rowFocusIdx = focusedIsTop ? 0 : (focusedIsBottom ? 1 : -1);
-      const rowSizes = focusAxis(2, rowFocusIdx, stealFraction);
+      const rowSizes = focusAxis(2, rowFocusIdx, stealFraction.y);
 
       // Column split for the pair row
       const pairFocusIdx = focusedId === p1 ? 0 : (focusedId === p2 ? 1 : -1);
-      const colSizes = focusAxis(2, pairFocusIdx, stealFraction);
+      const colSizes = focusAxis(2, pairFocusIdx, stealFraction.x);
 
       if (dir.startsWith('top')) {
         // top pair, bottom full
@@ -209,8 +214,8 @@ export function computeRects(
         return focusIdx < 2 ? 0 : 1; // 0,1 = top; 2,3 = bottom
       })();
 
-      const colSizes = focusAxis(2, colFocus, stealFraction);
-      const rowSizes = focusAxis(2, rowFocus, stealFraction);
+      const colSizes = focusAxis(2, colFocus, stealFraction.x);
+      const rowSizes = focusAxis(2, rowFocus, stealFraction.y);
 
       if (n >= 1) rects.set(order[0], { x: 0, y: 0, w: colSizes[0], h: rowSizes[0] });
       if (n >= 2) rects.set(order[1], { x: colSizes[0], y: 0, w: colSizes[1], h: rowSizes[0] });
@@ -246,6 +251,22 @@ export function computeRects(
         bottomIds.forEach((id, i) => {
           rects.set(id, { x: i * botW, y: mainH, w: botW, h: SIDE });
         });
+      }
+      break;
+    }
+
+    case 'grid': {
+      // 6+ panels: near-square grid of equal cells; the last row's panels
+      // stretch to fill the full row width
+      const cols = Math.ceil(Math.sqrt(n));
+      const rows = Math.ceil(n / cols);
+      const rowH = 100 / rows;
+      for (let i = 0; i < n; i++) {
+        const row = Math.floor(i / cols);
+        const colsInRow = row === rows - 1 ? n - row * cols : cols;
+        const colW = 100 / colsInRow;
+        const col = i - row * cols;
+        rects.set(order[i], { x: col * colW, y: row * rowH, w: colW, h: rowH });
       }
       break;
     }
@@ -383,14 +404,18 @@ export function getDefaultConfig(
   if (n === 4) {
     return { type: 'quarters', panelOrder: [...tabOrder] };
   }
-  // 5+: main layout with focusedId as main panel
-  const order = [...tabOrder];
-  if (focusedId && order.includes(focusedId)) {
-    const idx = order.indexOf(focusedId);
-    order.splice(idx, 1);
-    order.unshift(focusedId);
+  if (n === 5) {
+    // 5: main layout with focusedId as main panel
+    const order = [...tabOrder];
+    if (focusedId && order.includes(focusedId)) {
+      const idx = order.indexOf(focusedId);
+      order.splice(idx, 1);
+      order.unshift(focusedId);
+    }
+    return { type: 'main', panelOrder: order };
   }
-  return { type: 'main', panelOrder: order };
+  // 6+: equal-cell grid
+  return { type: 'grid', panelOrder: [...tabOrder] };
 }
 
 // ─── Build Snap Config ──────────────────────────────────────────────────────
@@ -464,9 +489,13 @@ export function buildSnapConfig(
     return { type: 'quarters', panelOrder: existing };
   }
 
-  // 5+: main layout with snappedId as main
-  const order = [snappedId, ...others];
-  return { type: 'main', panelOrder: order };
+  if (n === 5) {
+    // 5: main layout with snappedId as main
+    return { type: 'main', panelOrder: [snappedId, ...others] };
+  }
+
+  // 6+: grid with the snapped panel first
+  return { type: 'grid', panelOrder: [snappedId, ...others] };
 }
 
 // ─── Snap Zone Detection ────────────────────────────────────────────────────
@@ -559,7 +588,7 @@ interface LayoutState {
   focusedId: string | null;
   layoutConfig: LayoutConfig | null;
   panelRects: Map<string, PanelRect>;
-  stealFraction: number;
+  stealFraction: StealFraction;
   panelTypes: Record<string, PanelType>;
   widgetKinds: Record<string, string>;
   sidebarDragging: boolean;
@@ -577,7 +606,7 @@ interface LayoutState {
     focusedId: string | null,
     layoutConfig: LayoutConfig | null,
     panelRects: Map<string, PanelRect>,
-    stealFraction: number,
+    stealFraction: StealFraction,
     panelTypes?: Record<string, PanelType>,
     widgetKinds?: Record<string, string>,
   ) => void;
@@ -595,7 +624,7 @@ interface LayoutState {
 function recompute(
   tabOrder: string[],
   focusedId: string | null,
-  stealFraction: number,
+  stealFraction: StealFraction,
   currentConfig: LayoutConfig | null,
 ): { layoutConfig: LayoutConfig; panelRects: Map<string, PanelRect> } {
   const config = currentConfig && currentConfig.panelOrder.length === tabOrder.length
@@ -612,7 +641,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   focusedId: null,
   layoutConfig: null,
   panelRects: new Map(),
-  stealFraction: 0.5,
+  stealFraction: { x: 0.5, y: 0.5 },
   panelTypes: {},
   widgetKinds: {},
   sidebarDragging: false,
@@ -625,6 +654,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   addPanel: (id: string, type: PanelType = 'terminal') => {
     const state = get();
     if (state.tabOrder.includes(id)) return;
+    if (state.tabOrder.length >= MAX_PANELS) {
+      console.warn(`Panel limit reached (${MAX_PANELS}); cannot add panel ${id}`);
+      return;
+    }
 
     const newOrder = [...state.tabOrder, id];
     const newTypes = { ...state.panelTypes, [id]: type };
@@ -658,7 +691,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }
       return '';
     }
-    if (state.tabOrder.length >= 5) return '';
+    if (state.tabOrder.length >= MAX_PANELS) {
+      console.warn(`Panel limit reached (${MAX_PANELS}); cannot add widget ${kind}`);
+      return '';
+    }
     const id = `widget-${kind}-${Date.now()}`;
 
     const newOrder = [...state.tabOrder, id];
@@ -784,14 +820,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const [moved] = newOrder.splice(fromIndex, 1);
     newOrder.splice(toIndex, 0, moved);
 
-    const { layoutConfig, panelRects } = recompute(
-      newOrder,
-      state.focusedId,
-      state.stealFraction,
-      state.layoutConfig,
-    );
-
-    set({ tabOrder: newOrder, layoutConfig, panelRects });  },
+    // Only the tab strip's display order changes — layoutConfig.panelOrder
+    // stays authoritative for geometry, so reordering tabs never destroys
+    // a snap arrangement.
+    set({ tabOrder: newOrder });  },
 
   setPanelRect: (id: string, rect: PanelRect) => {
     set((state) => {
@@ -816,14 +848,16 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       gutterAxis,
     );
 
-    set({ stealFraction: newFraction });  },
+    // Only the dragged axis updates — the cross axis keeps its fraction
+    set({ stealFraction: { ...state.stealFraction, [gutterAxis]: newFraction } });  },
 
   resetStealFraction: () => {
     const state = get();
     if (!state.layoutConfig) return;
 
-    const rects = computeRects(state.layoutConfig, state.focusedId, 0.5);
-    set({ stealFraction: 0.5, panelRects: rects });  },
+    const reset = { x: 0.5, y: 0.5 };
+    const rects = computeRects(state.layoutConfig, state.focusedId, reset);
+    set({ stealFraction: reset, panelRects: rects });  },
 
   clearPanelRects: () => {
     set({ panelRects: new Map() });

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { LayoutConfig, PanelRect } from '../types/session';
+import type { LayoutConfig, PanelRect, StealFraction } from '../types/session';
 import { useLayoutStore, getDefaultConfig, computeRects, type PanelType } from './layoutStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ export interface GroupState {
   panelRects: Map<string, PanelRect>;
   focusedChildId: string | null;
   activeChildId: string | null;
-  stealFraction: number;
+  stealFraction: StealFraction;
 }
 
 export interface BreadcrumbSegment {
@@ -42,7 +42,7 @@ export interface SavedLayoutState {
   focusedId: string | null;
   layoutConfig: LayoutConfig | null;
   panelRects: Map<string, PanelRect>;
-  stealFraction: number;
+  stealFraction: StealFraction;
   panelTypes: Record<string, PanelType>;
   widgetKinds: Record<string, string>;
 }
@@ -71,12 +71,16 @@ function applyLayoutFromGroup(group: GroupState) {
   const childIds = group.childIds;
 
   if (childIds.length === 0) {
-    ls.restoreLayout([], null, null, null, new Map(), 0.5, ls.panelTypes, ls.widgetKinds);
+    ls.restoreLayout([], null, null, null, new Map(), { x: 0.5, y: 0.5 }, ls.panelTypes, ls.widgetKinds);
     return;
   }
 
-  const config = group.layoutConfig ?? getDefaultConfig(childIds, group.focusedChildId);
-  const rects = group.panelRects.size > 0
+  // Recompute when the stored config no longer covers the child set
+  // (e.g. a panel was moved into this group while it wasn't open)
+  const config = group.layoutConfig && group.layoutConfig.panelOrder.length === childIds.length
+    ? group.layoutConfig
+    : getDefaultConfig(childIds, group.focusedChildId);
+  const rects = group.panelRects.size === childIds.length
     ? group.panelRects
     : computeRects(config, group.focusedChildId, group.stealFraction);
 
@@ -98,12 +102,26 @@ function restoreLayoutFromSaved(saved: SavedLayoutState) {
   // so that type info survives even if current state was wiped (e.g. empty tabOrder)
   const mergedTypes = { ...saved.panelTypes, ...ls.panelTypes };
   const mergedKinds = { ...saved.widgetKinds, ...ls.widgetKinds };
+
+  // Recompute when the saved config no longer covers the tab set
+  // (e.g. a panel was moved to this level via movePanelToLevel)
+  let config = saved.layoutConfig;
+  let rects = saved.panelRects;
+  if (saved.tabOrder.length > 0) {
+    if (!config || config.panelOrder.length !== saved.tabOrder.length) {
+      config = getDefaultConfig(saved.tabOrder, saved.focusedId);
+    }
+    if (rects.size !== saved.tabOrder.length) {
+      rects = computeRects(config, saved.focusedId, saved.stealFraction);
+    }
+  }
+
   ls.restoreLayout(
     saved.tabOrder,
     saved.activeTabId,
     saved.focusedId,
-    saved.layoutConfig,
-    saved.panelRects,
+    config,
+    rects,
     saved.stealFraction,
     mergedTypes,
     mergedKinds,
@@ -181,13 +199,14 @@ interface GroupStoreState {
   addToGroup: (groupId: string, panelId: string) => void;
   removeFromGroup: (groupId: string, panelId: string) => void;
   moveToGroup: (panelId: string, fromGroupId: string | null, toGroupId: string | null) => void;
+  movePanelToLevel: (panelId: string, targetGroupId: string | null) => void;
 
   // Update group layout state
   setGroupLayoutConfig: (groupId: string, config: LayoutConfig | null) => void;
   setGroupPanelRects: (groupId: string, rects: Map<string, PanelRect>) => void;
   setGroupFocusedChild: (groupId: string, childId: string | null) => void;
   setGroupActiveChild: (groupId: string, childId: string | null) => void;
-  setGroupStealFraction: (groupId: string, fraction: number) => void;
+  setGroupStealFraction: (groupId: string, fraction: StealFraction) => void;
 
   // Current view helpers (computed, not stored)
   getCurrentGroupId: () => string | null;
@@ -299,7 +318,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
       panelRects: new Map(),
       focusedChildId: null,
       activeChildId: null,
-      stealFraction: 0.5,
+      stealFraction: { x: 0.5, y: 0.5 },
     };
 
     const newGroups = new Map(state.groups);
@@ -465,6 +484,65 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     set({ groups: newGroups });
   },
 
+  movePanelToLevel: (panelId: string, targetGroupId: string | null) => {
+    const state = get();
+    const currentGroupId = state.groupStack.length > 0
+      ? state.groupStack[state.groupStack.length - 1]
+      : null;
+    if (currentGroupId === targetGroupId) return;
+
+    // removePanel drops the panel's type/kind mapping — capture it first so
+    // the panel doesn't render as a plain terminal at its new level
+    const ls = useLayoutStore.getState();
+    const panelType = ls.panelTypes[panelId];
+    const widgetKind = ls.widgetKinds[panelId];
+
+    // Remove from the current group and the live tabOrder (visible level)
+    if (currentGroupId !== null) {
+      get().removeFromGroup(currentGroupId, panelId);
+    }
+    ls.removePanel(panelId);
+
+    if (panelType !== undefined) {
+      const cur = useLayoutStore.getState();
+      useLayoutStore.setState({
+        panelTypes: { ...cur.panelTypes, [panelId]: panelType },
+        widgetKinds: widgetKind !== undefined
+          ? { ...cur.widgetKinds, [panelId]: widgetKind }
+          : cur.widgetKinds,
+      });
+    }
+
+    if (targetGroupId !== null) {
+      // Append to the target group's childIds
+      get().addToGroup(targetGroupId, panelId);
+
+      // If the target is an ancestor on the navigation stack, the layout that
+      // gets restored on the way back is its savedLayoutStack snapshot — the
+      // panel must be appended there too or it would be lost on return.
+      // savedLayoutStack[i + 1] is the live layout of groupStack[i].
+      const stackIdx = get().groupStack.indexOf(targetGroupId);
+      const savedIdx = stackIdx + 1;
+      if (stackIdx !== -1 && savedIdx < savedLayoutStack.length) {
+        const saved = savedLayoutStack[savedIdx];
+        if (!saved.tabOrder.includes(panelId)) {
+          savedLayoutStack[savedIdx] = { ...saved, tabOrder: [...saved.tabOrder, panelId] };
+        }
+      }
+    } else if (savedLayoutStack.length > 0) {
+      // Root level: append to the root layout at the bottom of the saved
+      // stack — restoreLayoutFromSaved recomputes the layout on return
+      // because the saved config/rects no longer match the tab count
+      const saved = savedLayoutStack[0];
+      if (!saved.tabOrder.includes(panelId)) {
+        savedLayoutStack[0] = { ...saved, tabOrder: [...saved.tabOrder, panelId] };
+      }
+    } else {
+      // Already at root with no saved stack: add straight to the live layout
+      useLayoutStore.getState().addPanel(panelId, panelType ?? 'terminal');
+    }
+  },
+
   // ─── Group Layout State ──────────────────────────────────────────────
 
   setGroupLayoutConfig: (groupId: string, config: LayoutConfig | null) => {
@@ -506,7 +584,7 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     set({ groups: newGroups });
   },
 
-  setGroupStealFraction: (groupId: string, fraction: number) => {
+  setGroupStealFraction: (groupId: string, fraction: StealFraction) => {
     const state = get();
     const group = state.groups.get(groupId);
     if (!group) return;

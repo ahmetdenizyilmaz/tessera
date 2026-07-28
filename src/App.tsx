@@ -216,14 +216,20 @@ export default function App() {
           onUsageClick={() => setShowUsage(true)}
         />
 
-        <NewInstanceDialog
-          isOpen={showNewInstance}
-          onClose={() => setShowNewInstance(false)}
-        />
-        <ResumeSessionDialog
-          isOpen={showResumeSession}
-          onClose={() => setShowResumeSession(false)}
-        />
+        {/* Mount conditionally so useState initializers run fresh on every open
+            (stale name/cwd otherwise persist for the app's lifetime) */}
+        {showNewInstance && (
+          <NewInstanceDialog
+            isOpen={true}
+            onClose={() => setShowNewInstance(false)}
+          />
+        )}
+        {showResumeSession && (
+          <ResumeSessionDialog
+            isOpen={true}
+            onClose={() => setShowResumeSession(false)}
+          />
+        )}
         {showSaveLoad && (
           <SaveLoadDialog
             isOpen={true}

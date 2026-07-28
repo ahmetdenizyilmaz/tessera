@@ -16,8 +16,14 @@ export interface PanelRect {
   h: number;
 }
 
+/** Per-axis focus steal fraction: x = column splits, y = row splits */
+export interface StealFraction {
+  x: number;
+  y: number;
+}
+
 export interface LayoutConfig {
-  type: 'single' | 'split' | 'half-stack' | 'three-col' | 'quarter-fill' | 'quarters' | 'main';
+  type: 'single' | 'split' | 'half-stack' | 'three-col' | 'quarter-fill' | 'quarters' | 'main' | 'grid';
   direction?: string;
   panelOrder: string[];
 }

@@ -246,13 +246,6 @@ export function MosaicLayout() {
 
     const toolbar = target.closest('.terminal-toolbar');
 
-    // At max panel count, only focus (no drag)
-    if (tabOrderRef.current.length >= 5) {
-      startResizeLock();
-      setFocused(panelId);
-      return;
-    }
-
     // Start drag from toolbar
     if (toolbar) {
       dragState.current = {

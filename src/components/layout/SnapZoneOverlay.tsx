@@ -22,21 +22,16 @@ function getZoneRect(zone: SnapZone): { x: number; y: number; w: number; h: numb
 export function SnapZoneOverlay({ zone, containerRect }: SnapZoneOverlayProps) {
   const zr = getZoneRect(zone);
 
+  // Visual styling (background, border, z-index, transition) comes from the
+  // .snap-zone-preview class in mosaic.css — only the geometry is inline
   return (
     <div
       className="snap-zone-preview"
       style={{
-        position: 'absolute',
         left: `${(zr.x / 100) * containerRect.width}px`,
         top: `${(zr.y / 100) * containerRect.height}px`,
         width: `${(zr.w / 100) * containerRect.width}px`,
         height: `${(zr.h / 100) * containerRect.height}px`,
-        background: 'rgba(74, 158, 255, 0.15)',
-        border: '2px solid rgba(74, 158, 255, 0.4)',
-        borderRadius: 8,
-        transition: 'all 150ms ease',
-        pointerEvents: 'none',
-        zIndex: 20,
       }}
     />
   );

@@ -115,7 +115,8 @@
   border: 2px dashed rgba(74, 158, 255, 0.6);
   border-radius: 10px;
   pointer-events: none;
-  z-index: 40;
+  /* Above the dragged tile (z-index 50) so the preview is always visible */
+  z-index: 60;
   transition: left 0.15s ease, top 0.15s ease, width 0.15s ease, height 0.15s ease;
   box-shadow: inset 0 0 30px rgba(74, 158, 255, 0.08);
 }
