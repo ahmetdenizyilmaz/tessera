@@ -18,18 +18,11 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({ input, result
   const answers = (input.answers ?? {}) as Record<string, string>;
   const hasAnswers = Object.keys(answers).length > 0;
 
-  // While unanswered, the interactive card below the transcript shows the
-  // full question — a duplicate here is just noise, so render a stub row.
+  // While unanswered, the interactive card below the transcript carries the
+  // question — show nothing here. The widget appears once the answer exists,
+  // as the permanent Q&A record.
   if (!hasAnswers && result == null) {
-    return (
-      <div className="tool-widget tool-widget--question">
-        <div className="tool-widget__header tool-widget__header--static">
-          <span className="tool-widget__icon">{'❓'}</span>
-          <span className="tool-widget__label">Question</span>
-          <span className="question-widget__pending">answer below ↓</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
