@@ -60,6 +60,27 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   // Initializer checks isPtySpawned so a group-move remount keeps the terminal.
   const [termMounted, setTermMounted] = useState(() => isPtySpawned(instanceId));
   const [showCheckpoints, setShowCheckpoints] = useState(false);
+
+  // Compact toolbar: below this panel width all controls collapse into ☰ —
+  // one threshold, one mechanism, no per-element breakpoints
+  const COMPACT_TOOLBAR_WIDTH = 430;
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  const [showToolbarMenu, setShowToolbarMenu] = useState(false);
+
+  useEffect(() => {
+    const el = toolbarRef.current;
+    if (!el) return;
+    const check = () => setCompact(el.clientWidth < COMPACT_TOOLBAR_WIDTH);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!compact) setShowToolbarMenu(false);
+  }, [compact]);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto');
   const setModel = useInstanceStore((s) => s.setModel);
 
@@ -194,10 +215,85 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
 
   if (!instance) return null;
 
+  // Toolbar controls — rendered inline when there's room, inside the ☰ menu
+  // when the panel is narrow
+  const statusBadge = (
+    <span
+      className="status-badge"
+      style={{ color: statusColors[instance.status] ?? '#a0a0a0' }}
+    >
+      <span
+        className="color-dot"
+        style={{
+          backgroundColor: statusColors[instance.status] ?? '#a0a0a0',
+          width: 6,
+          height: 6,
+        }}
+      />
+      <span className="status-label">{statusLabels[instance.status] ?? instance.status}</span>
+    </span>
+  );
+
+  const modelSelect = (
+    <select
+      className="model-selector"
+      value={instance.config.model}
+      onChange={handleModelChange}
+      title="Change model (applies to next message)"
+    >
+      {CLAUDE_MODELS.map((m) => (
+        <option key={m} value={m}>{m.replace('claude-', '').replace(/-20\d+$/, '')}</option>
+      ))}
+    </select>
+  );
+
+  const thinkingSelect = (
+    <ThinkingModeSelector
+      instanceId={instanceId}
+      value={thinkingMode}
+      onChange={setThinkingMode}
+    />
+  );
+
+  const viewToggle = (
+    <div className="view-toggle">
+      <button
+        className={viewMode === 'chat' ? 'active' : ''}
+        onClick={() => setViewMode('chat')}
+      >
+        Chat
+      </button>
+      <button
+        className={viewMode === 'terminal' ? 'active' : ''}
+        onClick={() => {
+          setTermMounted(true);
+          setViewMode('terminal');
+        }}
+      >
+        Terminal
+      </button>
+    </div>
+  );
+
+  const checkpointsBtn = (
+    <button
+      className="toolbar-btn"
+      onClick={() => setShowCheckpoints((p) => !p)}
+      title="Checkpoints"
+      style={{
+        color: showCheckpoints ? 'var(--accent)' : undefined,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <History size={14} />
+    </button>
+  );
+
   return (
     <div className="terminal-panel" style={colorStyles.panel}>
       {/* Toolbar with color-tinted background */}
       <div
+        ref={toolbarRef}
         className="terminal-toolbar"
         style={colorStyles.toolbar}
         onContextMenu={handleContextMenu}
@@ -235,68 +331,37 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
             </span>
           )}
 
-          <span
-            className="status-badge"
-            style={{ color: statusColors[instance.status] ?? '#a0a0a0' }}
-          >
-            <span
-              className="color-dot"
-              style={{
-                backgroundColor: statusColors[instance.status] ?? '#a0a0a0',
-                width: 6,
-                height: 6,
-              }}
-            />
-            <span className="status-label">{statusLabels[instance.status] ?? instance.status}</span>
-          </span>
+          {!compact && statusBadge}
         </div>
 
-        {/* Right side: model selector + view toggle + close */}
+        {/* Right side: full controls, or a single ☰ menu when narrow */}
         <div className="toolbar-actions">
-          <select
-            className="model-selector"
-            value={instance.config.model}
-            onChange={handleModelChange}
-            title="Change model (applies to next message)"
-          >
-            {CLAUDE_MODELS.map((m) => (
-              <option key={m} value={m}>{m.replace('claude-', '').replace(/-20\d+$/, '')}</option>
-            ))}
-          </select>
-          <ThinkingModeSelector
-            instanceId={instanceId}
-            value={thinkingMode}
-            onChange={setThinkingMode}
-          />
-          <div className="view-toggle">
-            <button
-              className={viewMode === 'chat' ? 'active' : ''}
-              onClick={() => setViewMode('chat')}
-            >
-              Chat
-            </button>
-            <button
-              className={viewMode === 'terminal' ? 'active' : ''}
-              onClick={() => {
-                setTermMounted(true);
-                setViewMode('terminal');
-              }}
-            >
-              Terminal
-            </button>
-          </div>
-
-          <button
-            className="toolbar-btn"
-            onClick={() => setShowCheckpoints((p) => !p)}
-            title="Checkpoints"
-            style={{
-              color: showCheckpoints ? 'var(--accent)' : undefined,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <History size={14} />
-          </button>
+          {compact ? (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="toolbar-btn"
+                onClick={() => setShowToolbarMenu((v) => !v)}
+                title="Panel controls"
+                style={{ color: showToolbarMenu ? 'var(--accent)' : undefined }}
+              >
+                {'☰'}
+              </button>
+              {showToolbarMenu && (
+                <div className="toolbar-menu" onMouseLeave={() => setShowToolbarMenu(false)}>
+                  <div className="toolbar-menu-row">{statusBadge}</div>
+                  <div className="toolbar-menu-row">{viewToggle}{checkpointsBtn}</div>
+                  <div className="toolbar-menu-row">{modelSelect}{thinkingSelect}</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {modelSelect}
+              {thinkingSelect}
+              {viewToggle}
+              {checkpointsBtn}
+            </>
+          )}
         </div>
 
         {/* Close button always visible, outside toolbar-actions */}

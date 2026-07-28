@@ -362,37 +362,42 @@ body,
   border-bottom: 1px solid var(--border);
   user-select: none;
   flex-shrink: 0;
-  /* Width container so the toolbar can collapse per-panel, not per-window */
-  container-type: inline-size;
 }
 
-/* Never half-clip the status into "STA…" — it either fits or is hidden by
-   the container rules below */
+/* Status never half-clips into "STA…" — inline it either fits or the whole
+   toolbar is in compact (☰) mode */
 .status-badge {
   flex-shrink: 0;
 }
 
-/* Progressive collapse as the panel narrows: status text → status badge +
-   thinking selector → model selector */
-@container (max-width: 460px) {
-  .status-label {
-    display: none;
-  }
+/* ── Compact toolbar menu (☰) — all controls in one dropdown when the
+      panel is too narrow to show them inline ── */
+
+.toolbar-menu {
+  position: absolute;
+  top: 26px;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-@container (max-width: 380px) {
-  .status-badge {
-    display: none;
-  }
-  .thinking-selector {
-    display: none;
-  }
+.toolbar-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-@container (max-width: 300px) {
-  .model-selector {
-    display: none;
-  }
+.toolbar-menu-row .model-selector {
+  max-width: none;
+  flex: 1;
 }
 
 .terminal-toolbar-left {
