@@ -25,22 +25,32 @@ export function useAutoSave() {
     let cancelled = false;
     let unlistenFn: (() => void) | null = null;
 
-    getCurrentWindow().onCloseRequested(() => {
-      const instances = useInstanceStore.getState().instances;
-      const sessionStore = useSessionStore.getState();
-      instances.forEach((inst) => {
-        sessionStore.addSession({
-          instanceId: inst.id,
-          name: inst.name,
-          projectPath: inst.config.cwd,
-          messageCount: 0,
-          startedAt: Date.now(),
-          endedAt: Date.now(),
+    // Registering this listener makes Tauri PREVENT the native close and wait
+    // for JS to destroy the window. So the save work must never be able to
+    // throw (or the window would stay open forever), and we destroy the
+    // window ourselves rather than relying on the default path.
+    getCurrentWindow().onCloseRequested(async (event) => {
+      event.preventDefault();
+      try {
+        const instances = useInstanceStore.getState().instances;
+        const sessionStore = useSessionStore.getState();
+        instances.forEach((inst) => {
+          sessionStore.addSession({
+            instanceId: inst.id,
+            name: inst.name,
+            projectPath: inst.config.cwd,
+            messageCount: 0,
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          });
         });
-      });
-      if (useSettingsStore.getState().settings.autoSave) {
-        saveNow();
+        if (useSettingsStore.getState().settings.autoSave) {
+          saveNow();
+        }
+      } catch (err) {
+        console.error('Save on close failed:', err);
       }
+      await getCurrentWindow().destroy().catch(() => {});
     }).then((fn) => {
       if (cancelled) {
         fn();
