@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { homeDir } from '@tauri-apps/api/path';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -50,9 +51,9 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
     }
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const config: InstanceConfig = {
-      cwd: cwd || '.',
+      cwd: cwd || (await homeDir().catch(() => '')),
       model,
       dangerouslySkipPermissions: skipPermissions,
       permissionMode,

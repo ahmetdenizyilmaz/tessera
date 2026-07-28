@@ -139,3 +139,14 @@ pub async fn session_debug_history() -> Result<String, String> {
 
     Ok(output)
 }
+
+/// Check whether a session's JSONL file still exists on disk.
+/// Used by the frontend to drop stale session ids at restore time.
+#[tauri::command]
+pub fn session_exists(project_path: String, session_id: String) -> bool {
+    if session_id.is_empty() {
+        return false;
+    }
+    let resolved = claude_paths::resolve_work_dir(&project_path);
+    claude_paths::session_file_path(&resolved, &session_id).exists()
+}

@@ -79,6 +79,24 @@ pub fn session_file_path(project_path: &str, session_id: &str) -> PathBuf {
     projects_dir().join(encoded).join(format!("{}.jsonl", session_id))
 }
 
+/// Resolve a possibly-empty or relative cwd to an absolute path string.
+/// Empty and "." fall back to the user's home directory — a desktop app's
+/// process current_dir is meaningless to the user, and `encode_project_path(".")`
+/// would produce a bogus "-" project key.
+pub fn resolve_work_dir(cwd: &str) -> String {
+    let trimmed = cwd.trim();
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    if trimmed.is_empty() || trimmed == "." {
+        return home.to_string_lossy().to_string();
+    }
+    let p = PathBuf::from(trimmed);
+    if p.is_absolute() {
+        trimmed.to_string()
+    } else {
+        home.join(p).to_string_lossy().to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

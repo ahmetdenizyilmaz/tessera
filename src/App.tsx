@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { homeDir } from '@tauri-apps/api/path';
 import { useSystemMonitor } from './hooks/useSystemMonitor';
 import { useUsagePolling } from './hooks/useUsagePolling';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -51,10 +52,13 @@ export default function App() {
   const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [showClaudeMd, setShowClaudeMd] = useState(false);
 
-  const handleNewInstance = useCallback(() => {
+  const handleNewInstance = useCallback(async () => {
     const settings = useSettingsStore.getState().settings;
+    // Real path, not '.' — encode_project_path('.') breaks session-file
+    // resolution and usage polling on the Rust side
+    const home = await homeDir().catch(() => '');
     const id = useInstanceStore.getState().addInstance({
-      cwd: '.',
+      cwd: home,
       model: settings.defaultModel,
       dangerouslySkipPermissions: settings.defaultSkipPermissions,
       permissionMode: settings.defaultPermissionMode,

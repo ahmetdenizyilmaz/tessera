@@ -28,9 +28,11 @@ export const ResumeSessionDialog: React.FC<ResumeSessionDialogProps> = ({ isOpen
     setLoading(true);
     setError(null);
 
-    invoke<SessionInfo[]>('session_scan_all')
+    // session_list_recent filters out sessions whose JSONL no longer exists —
+    // resuming those is guaranteed to fail ("No conversation found …").
+    invoke<SessionInfo[]>('session_list_recent')
       .then((result) => {
-        setSessions(result);
+        setSessions(result.filter((s) => s.hasFile && s.project));
       })
       .catch((err) => {
         console.error('Failed to scan sessions:', err);
@@ -59,8 +61,9 @@ export const ResumeSessionDialog: React.FC<ResumeSessionDialogProps> = ({ isOpen
   };
 
   const handleSelect = (session: SessionInfo) => {
+    if (!session.project) return;
     const config: InstanceConfig = {
-      cwd: session.project || '.',
+      cwd: session.project,
       model: settings.defaultModel,
       dangerouslySkipPermissions: settings.defaultSkipPermissions,
       permissionMode: settings.defaultPermissionMode,

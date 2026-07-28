@@ -166,6 +166,9 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
       if (!mounted) return;
       const inst = useInstanceStore.getState().instances.get(instanceId);
       if (!inst) return;
+      // Only capture a session id when this instance has NONE — never
+      // overwrite a deliberately chosen or already-captured session.
+      if (inst.claudeSessionId) return;
       const cwd = inst.config.cwd;
       if (!cwd) return;
       scanAttempts++;
@@ -173,15 +176,14 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
       invoke<SessionInfo[]>('session_scan_all')
         .then((sessions) => {
           if (!mounted) return;
+          const current = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;
+          if (current) return;
           const cwdNorm = normPath(cwd);
           const match = sessions
             .filter((s) => normPath(s.project) === cwdNorm && s.hasFile)
             .sort((a, b) => b.timestamp - a.timestamp)[0];
           if (match) {
-            const current = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;
-            if (match.sessionId !== current) {
-              useInstanceStore.getState().setClaudeSessionId(instanceId, match.sessionId);
-            }
+            useInstanceStore.getState().setClaudeSessionId(instanceId, match.sessionId);
           } else if (scanAttempts < SESSION_SCAN_MAX_RETRIES) {
             setTimeout(tryScan, SESSION_SCAN_RETRY_MS);
           }

@@ -37,6 +37,22 @@ impl StreamJsonManager {
             instances: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
+    /// Kill every running stream child. Called on app exit so no claude.exe
+    /// processes outlive the window.
+    pub fn kill_all(&self) {
+        if let Ok(mut instances) = self.instances.lock() {
+            for (_, instance) in instances.drain() {
+                if let Ok(mut flag) = instance.kill_flag.lock() {
+                    *flag = true;
+                }
+                if let Some(mut child) = instance.child {
+                    crate::util::proc::kill_tree(child.id());
+                    let _ = child.kill();
+                }
+            }
+        }
+    }
 }
 
 /// Debug: push a test event via eval to verify the JS bridge works
@@ -81,14 +97,7 @@ pub async fn stream_spawn(
     dangerously_skip_permissions: Option<bool>,
     state: tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
-    let work_dir = if cwd.is_empty() || cwd == "." {
-        std::env::current_dir()
-            .unwrap_or_else(|_| dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(".")))
-            .to_string_lossy()
-            .to_string()
-    } else {
-        cwd
-    };
+    let work_dir = claude_paths::resolve_work_dir(&cwd);
 
     let instance = StreamInstance {
         cwd: work_dir,
@@ -168,13 +177,23 @@ pub async fn stream_send_message(
     // Build command arguments
     let mut cmd = Command::new(&claude_exe);
 
-    // Resume existing session or continue conversation
-    if let Some(ref sid) = session_id {
-        if !sid.is_empty() {
-            cmd.arg("--resume").arg(sid);
+    // Resume existing session or continue conversation. Guard --resume on the
+    // session file actually existing — the CLI does not fall back, it prints
+    // "No conversation found with session ID: …" and exits.
+    let resume_sid = session_id.as_deref().filter(|sid| {
+        if sid.is_empty() {
+            return false;
         }
+        let exists = claude_paths::session_file_path(&cwd, sid).exists();
+        if !exists {
+            eprintln!("[stream:{}] session {} has no file on disk — not resuming", id, sid);
+        }
+        exists
+    });
+    if let Some(sid) = resume_sid {
+        cmd.arg("--resume").arg(sid);
     } else if message_count > 0 {
-        // No session_id captured yet but not the first message — use -c to continue
+        // No (valid) session_id but not the first message — use -c to continue
         cmd.arg("-c");
     }
 

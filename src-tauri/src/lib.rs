@@ -50,6 +50,7 @@ pub fn run() {
             sessions::scanner::session_scan_all,
             sessions::scanner::session_list_recent,
             sessions::scanner::session_debug_history,
+            sessions::scanner::session_exists,
             sessions::history_loader::session_load_history,
             sessions::usage_parser::session_parse_usage,
             sessions::usage_parser::session_parse_recent_usage,
@@ -143,6 +144,15 @@ pub fn run() {
             analytics::posthog::posthog_set_enabled,
             analytics::posthog::posthog_is_enabled,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Kill every spawned claude process when the app exits — otherwise
+            // ConPTY/stream children are orphaned and survive until reboot.
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                use tauri::Manager;
+                app.state::<PtyManager>().kill_all();
+                app.state::<StreamJsonManager>().kill_all();
+            }
+        });
 }

@@ -13,10 +13,25 @@ const BUFFER_KEEP: usize = 512 * 1024; // 512KB on drain
 pub struct PtyInstance {
     #[allow(dead_code)]
     master: Box<dyn MasterPty + Send>,
+    /// Handle to the spawned claude process — required to actually kill it.
+    child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Option<Box<dyn Write + Send>>,
     output_buffer: Arc<Mutex<Vec<u8>>>,
     kill_flag: Arc<Mutex<bool>>,
     suppress_events: Arc<AtomicBool>,
+}
+
+fn kill_instance(instance: &mut PtyInstance) {
+    if let Ok(mut flag) = instance.kill_flag.lock() {
+        *flag = true;
+    }
+    // Tree-kill first: a claude.cmd shim spawns node.exe children that a
+    // plain kill() would orphan.
+    if let Some(pid) = instance.child.process_id() {
+        crate::util::proc::kill_tree(pid);
+    }
+    let _ = instance.child.kill();
+    instance.writer = None;
 }
 
 pub struct PtyManager {
@@ -27,6 +42,16 @@ impl PtyManager {
     pub fn new() -> Self {
         Self {
             instances: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Kill every running PTY child. Called on app exit so no claude.exe
+    /// processes outlive the window.
+    pub fn kill_all(&self) {
+        if let Ok(mut instances) = self.instances.lock() {
+            for (_, mut instance) in instances.drain() {
+                kill_instance(&mut instance);
+            }
         }
     }
 }
@@ -129,13 +154,30 @@ pub async fn pty_spawn(
         None
     };
 
+    // Resolve the working directory BEFORE building args — the resume guard
+    // below needs it to locate the session file.
+    let work_dir = claude_paths::resolve_work_dir(&cwd);
+
+    // Drop --resume when the session JSONL no longer exists: the CLI does not
+    // fall back, it prints "No conversation found with session ID: …" and exits.
+    let effective_session_id = claude_session_id.filter(|sid| {
+        if sid.is_empty() {
+            return false;
+        }
+        let exists = claude_paths::session_file_path(&work_dir, sid).exists();
+        if !exists {
+            eprintln!("[pty:{}] session {} has no file on disk — starting fresh", id, sid);
+        }
+        exists
+    });
+
     let args = build_claude_args(
         &model,
         dangerously_skip_permissions.unwrap_or(false),
         &permission_mode,
         &allowed_tools,
         &system_prompt,
-        &claude_session_id,
+        &effective_session_id,
         &effective_mcp_config,
     );
 
@@ -147,20 +189,12 @@ pub async fn pty_spawn(
         cmd.arg(arg);
     }
 
-    let work_dir = if cwd.is_empty() {
-        dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .to_string_lossy()
-            .to_string()
-    } else {
-        cwd
-    };
     cmd.cwd(&work_dir);
 
     // Remove CLAUDECODE env var to prevent nested context detection
     cmd.env_remove("CLAUDECODE");
 
-    let _child = pair
+    let child = pair
         .slave
         .spawn_command(cmd)
         .map_err(|e| format!("Failed to spawn claude: {}", e))?;
@@ -184,6 +218,7 @@ pub async fn pty_spawn(
 
     let instance = PtyInstance {
         master: pair.master,
+        child,
         writer: Some(writer),
         output_buffer: output_buffer.clone(),
         kill_flag: kill_flag.clone(),
@@ -192,6 +227,10 @@ pub async fn pty_spawn(
 
     {
         let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+        // Replacing an existing instance must not leak its process
+        if let Some(mut old) = instances.remove(&id) {
+            kill_instance(&mut old);
+        }
         instances.insert(id.clone(), instance);
     }
 
@@ -228,25 +267,21 @@ pub async fn pty_spawn(
                     data.extend_from_slice(&buf[..n]);
                     utf8_remainder.clear();
 
-                    // Handle incomplete UTF-8 at the end
-                    let text = match String::from_utf8(data.clone()) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            let valid_up_to = e.utf8_error().valid_up_to();
-                            if valid_up_to < data.len() {
+    // Handle incomplete UTF-8 at the end. `error_len()` distinguishes
+                    // a truncated multi-byte sequence at the tail (None → carry
+                    // it into the next read, ≤3 bytes by construction) from a
+                    // genuinely invalid byte (Some → decode lossily, no carry —
+                    // carrying it would poison every subsequent chunk).
+                    let text = match std::str::from_utf8(&data) {
+                        Ok(s) => s.to_owned(),
+                        Err(e) => match e.error_len() {
+                            Some(_) => String::from_utf8_lossy(&data).into_owned(),
+                            None => {
+                                let valid_up_to = e.valid_up_to();
                                 utf8_remainder.extend_from_slice(&data[valid_up_to..]);
-                                // Guard against unbounded growth from malformed input.
-                                // Valid UTF-8 sequences are at most 4 bytes; use 64 bytes
-                                // as a generous safety margin. If exceeded, the data is
-                                // not a valid partial sequence — discard it.
-                                if utf8_remainder.len() > 64 {
-                                    utf8_remainder.clear();
-                                }
                                 String::from_utf8_lossy(&data[..valid_up_to]).into_owned()
-                            } else {
-                                String::from_utf8_lossy(&data).into_owned()
                             }
-                        }
+                        },
                     };
 
                     if text.is_empty() {
@@ -348,12 +383,7 @@ pub async fn pty_kill(
 ) -> Result<(), String> {
     let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
     if let Some(mut instance) = instances.remove(&id) {
-        // Set kill flag to stop reader thread
-        if let Ok(mut flag) = instance.kill_flag.lock() {
-            *flag = true;
-        }
-        // Drop the writer to close stdin
-        instance.writer = None;
+        kill_instance(&mut instance);
     }
     Ok(())
 }

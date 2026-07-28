@@ -20,6 +20,12 @@ function registerExitListener(id: string) {
   listen<void>(`pty-exit-${id}`, () => {
     // PTY died — auto-clean the tracking state
     spawnedPtys.delete(id);
+    // Reflect the death in the instance status so the UI stops showing a
+    // green "Running" badge (and usage polling stops)
+    const inst = useInstanceStore.getState().instances.get(id);
+    if (inst && (inst.status === 'running' || inst.status === 'starting')) {
+      useInstanceStore.getState().setStatus(id, 'stopped');
+    }
     // Clean up this listener
     const cleanup = exitListeners.get(id);
     exitListeners.delete(id);
@@ -77,6 +83,8 @@ export function usePty(instanceId: string) {
         cleanup();
         exitListeners.delete(instanceId);
       }
+      // Propagate so callers can show the failure instead of "Running"
+      throw err;
     }
   };
 

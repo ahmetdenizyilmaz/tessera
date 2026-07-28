@@ -214,11 +214,16 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
           const rows = terminal.rows;
 
           if (cols > 0 && rows > 0) {
-            spawn(cols, rows).then(() => {
-              if (isMountedRef.current) {
-                useInstanceStore.getState().setStatus(instanceId, 'running');
-              }
-            });
+            spawn(cols, rows)
+              .then(() => {
+                if (isMountedRef.current) {
+                  useInstanceStore.getState().setStatus(instanceId, 'running');
+                }
+              })
+              .catch((err) => {
+                useInstanceStore.getState().setStatus(instanceId, 'error');
+                terminal.writeln(`\r\n\x1b[31mFailed to start claude: ${err}\x1b[0m`);
+              });
           } else {
             // Retry up to 5 times at 200ms intervals
             let retries = 0;
@@ -245,11 +250,16 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
                   clearInterval(retryIntervalRef.current);
                   retryIntervalRef.current = null;
                 }
-                spawn(c, r).then(() => {
-                  if (isMountedRef.current) {
-                    useInstanceStore.getState().setStatus(instanceId, 'running');
-                  }
-                });
+                spawn(c, r)
+                  .then(() => {
+                    if (isMountedRef.current) {
+                      useInstanceStore.getState().setStatus(instanceId, 'running');
+                    }
+                  })
+                  .catch((err) => {
+                    useInstanceStore.getState().setStatus(instanceId, 'error');
+                    terminal.writeln(`\r\n\x1b[31mFailed to start claude: ${err}\x1b[0m`);
+                  });
               } else if (retries >= 5) {
                 if (retryIntervalRef.current !== null) {
                   clearInterval(retryIntervalRef.current);

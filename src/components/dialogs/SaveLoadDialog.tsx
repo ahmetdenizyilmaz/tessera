@@ -91,9 +91,20 @@ export const SaveLoadDialog: React.FC<SaveLoadDialogProps> = ({ isOpen, onClose,
         // Restore color
         useInstanceStore.getState().setColor(newId, inst.color);
 
-        // Restore session ID if available
+        // Restore session ID if available — drop it when the session file is gone
         if (inst.claudeSessionId) {
           useInstanceStore.getState().setClaudeSessionId(newId, inst.claudeSessionId);
+          const sid = inst.claudeSessionId;
+          invoke<boolean>('session_exists', { projectPath: inst.config.cwd || '', sessionId: sid })
+            .then((exists) => {
+              if (!exists) {
+                const cur = useInstanceStore.getState().instances.get(newId)?.claudeSessionId;
+                if (cur === sid) {
+                  useInstanceStore.getState().setClaudeSessionId(newId, '');
+                }
+              }
+            })
+            .catch(() => {});
         }
       }
 

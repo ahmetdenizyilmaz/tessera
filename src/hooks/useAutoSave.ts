@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore } from '../store/layoutStore';
@@ -41,6 +42,19 @@ export function useAutoSave() {
         }
         if (inst.claudeSessionId) {
           useInstanceStore.getState().setClaudeSessionId(newId, inst.claudeSessionId);
+          // Drop stale session ids at restore time so they stop being
+          // re-persisted forever (the Rust-side resume guard is authoritative)
+          const sid = inst.claudeSessionId;
+          invoke<boolean>('session_exists', { projectPath: inst.config.cwd || '', sessionId: sid })
+            .then((exists) => {
+              if (!exists) {
+                const cur = useInstanceStore.getState().instances.get(newId)?.claudeSessionId;
+                if (cur === sid) {
+                  useInstanceStore.getState().setClaudeSessionId(newId, '');
+                }
+              }
+            })
+            .catch(() => {});
         }
       }
 
