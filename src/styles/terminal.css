@@ -1,0 +1,32 @@
+/* xterm.js container (inside .terminal-content) */
+.xterm-container .xterm-viewport {
+  overflow-y: auto;
+}
+
+/* Scrollbar inside terminal */
+.xterm-container .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.xterm-container .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-container .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.xterm-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Cursor */
+.xterm-container .xterm-cursor-layer .xterm-cursor {
+  opacity: 1;
+}
+
+/* Selection */
+.xterm-container .xterm .xterm-selection div {
+  background: rgba(74, 158, 255, 0.3);
+}

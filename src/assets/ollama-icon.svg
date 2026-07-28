@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" fill="white">
+  <!-- Ears -->
+  <path d="M38 8C38 3 42 0 46 0C50 0 54 4 54 9L54 35C50 32 44 30 40 32L38 8Z"/>
+  <path d="M82 8C82 3 78 0 74 0C70 0 66 4 66 9L66 35C70 32 76 30 80 32L82 8Z"/>
+  <!-- Head/Body -->
+  <path d="M60 28C35 28 16 44 16 68C16 78 16 100 18 110C20 120 26 128 36 132C42 135 50 136 60 136C70 136 78 135 84 132C94 128 100 120 102 110C104 100 104 78 104 68C104 44 85 28 60 28Z"/>
+  <!-- Eyes -->
+  <circle cx="44" cy="68" r="7" fill="#1a1a2e"/>
+  <circle cx="76" cy="68" r="7" fill="#1a1a2e"/>
+  <!-- Nose/Mouth -->
+  <ellipse cx="60" cy="88" rx="14" ry="11" fill="none" stroke="#1a1a2e" stroke-width="4"/>
+  <ellipse cx="60" cy="85" rx="4" ry="3" fill="#1a1a2e"/>
+</svg>

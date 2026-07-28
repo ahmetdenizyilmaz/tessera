@@ -1,0 +1,43 @@
+[package]
+name = "claude-gui"
+version = "0.0.2"
+edition = "2021"
+
+[lib]
+name = "claude_gui_lib"
+crate-type = ["lib"]
+
+[[bin]]
+name = "claude-gui"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
+tauri-build = { version = "2", features = [] }
+portable-pty = "0.8"
+sysinfo = "0.33"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+xcap = "0.0.9"
+enigo = "0.2"
+base64 = "0.22"
+image = "0.25"
+futures-util = "0.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = "0.4"
+whoami = "1"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-process = "2"
+zstd = "0.13"
+ignore = "0.4"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

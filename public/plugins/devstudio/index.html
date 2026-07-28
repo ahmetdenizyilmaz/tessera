@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevStudio</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --bg-surface: #282840;
+    --bg-elevated: #313244;
+    --bg-input: #181825;
+    --text: #cdd6f4;
+    --text-muted: #6c7086;
+    --text-dim: #585b70;
+    --accent: #f97316;
+    --accent-dim: #c2410c;
+    --green: #a6e3a1;
+    --red: #f38ba8;
+    --yellow: #f9e2af;
+    --blue: #89b4fa;
+    --purple: #cba6f7;
+    --border: #45475a;
+    --hover: #3b3b52;
+    --pass: #a6e3a1;
+    --fail: #f38ba8;
+    --warn: #f9e2af;
+  }
+  .light {
+    --bg: #ffffff;
+    --bg-surface: #f5f5f5;
+    --bg-elevated: #ebebeb;
+    --bg-input: #e0e0e0;
+    --text: #1e1e2e;
+    --text-muted: #666;
+    --text-dim: #999;
+    --accent: #f97316;
+    --accent-dim: #ea580c;
+    --green: #16a34a;
+    --red: #dc2626;
+    --yellow: #ca8a04;
+    --blue: #2563eb;
+    --purple: #7c3aed;
+    --border: #ddd;
+    --hover: #eee;
+    --pass: #16a34a;
+    --fail: #dc2626;
+    --warn: #ca8a04;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  button { cursor: pointer; font-family: inherit; }
+
+  /* ─── Header / Phase Tabs ─── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    margin-right: 12px;
+  }
+  .phase-tab {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+  .phase-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .phase-tab.done {
+    background: var(--green);
+    color: #000;
+    border-color: var(--green);
+  }
+  .phase-tab.future { opacity: 0.4; }
+  .header-spacer { flex: 1; }
+  .header-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* ─── Main Content ─── */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ─── Left Sidebar: Agents ─── */
+  .sidebar {
+    width: 180px;
+    min-width: 180px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding: 10px 12px 6px;
+  }
+  .agent-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .agent-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .agent-dot.idle { background: var(--text-dim); }
+  .agent-dot.busy { background: var(--yellow); animation: pulse 1s infinite; }
+  .agent-dot.done { background: var(--green); }
+  .agent-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .agent-name { flex: 1; }
+  .agent-msgs {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* Progress bar */
+  .progress-section {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    margin-top: auto;
+  }
+  .progress-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .progress-bar {
+    height: 6px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+  .progress-text {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    text-align: right;
+  }
+
+  /* ─── Content Area ─── */
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  /* ─── Plan Phase ─── */
+  .plan-area textarea {
+    width: 100%;
+    height: calc(100% - 50px);
+    min-height: 200px;
+    padding: 12px;
+    font-size: 13px;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    resize: none;
+    outline: none;
+    line-height: 1.5;
+  }
+  .plan-area textarea:focus { border-color: var(--accent); }
+  .plan-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .btn {
+    padding: 8px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--hover); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-dim); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .plan-cwd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .plan-cwd label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .plan-cwd input {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    outline: none;
+    font-family: monospace;
+  }
+  .plan-cwd input:focus { border-color: var(--accent); }
+
+  /* ─── Task List ─── */
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    background: var(--bg-surface);
+  }
+  .task-num {
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 24px;
+  }
+  .task-text { flex: 1; line-height: 1.4; }
+  .task-status {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .task-status.pending { background: var(--bg-input); color: var(--text-dim); }
+  .task-status.active { background: var(--yellow); color: #000; }
+  .task-status.done { background: var(--green); color: #000; }
+  .task-status.failed { background: var(--red); color: #fff; }
+
+  /* ─── Error / Review List ─── */
+  .error-item {
+    padding: 8px 12px;
+    border-left: 3px solid var(--red);
+    background: var(--bg-surface);
+    margin-bottom: 6px;
+    border-radius: 0 5px 5px 0;
+    font-size: 12px;
+  }
+  .error-item.warning { border-left-color: var(--yellow); }
+  .error-item.info { border-left-color: var(--blue); }
+  .error-header {
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .error-fix {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  /* ─── Test Results ─── */
+  .test-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .test-table th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 2px solid var(--border);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+  .test-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .test-pass { color: var(--pass); font-weight: 600; }
+  .test-fail { color: var(--fail); font-weight: 600; }
+
+  /* ─── Done Summary ─── */
+  .summary-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .summary-card h3 {
+    font-size: 13px;
+    margin-bottom: 8px;
+    color: var(--accent);
+  }
+  .summary-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+  }
+  .summary-stat .label { color: var(--text-muted); }
+  .summary-stat .value { font-weight: 600; }
+
+  /* ─── Activity Log ─── */
+  .log-panel {
+    height: 160px;
+    min-height: 100px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-input);
+    overflow-y: auto;
+    padding: 8px 12px;
+    flex-shrink: 0;
+  }
+  .log-panel-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding: 6px 12px 4px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+    flex-shrink: 0;
+  }
+  .log-entry {
+    font-size: 11px;
+    line-height: 1.6;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .log-time { color: var(--text-dim); margin-right: 8px; }
+  .log-agent { color: var(--accent); font-weight: 600; margin-right: 4px; }
+  .log-text { color: var(--text-muted); }
+  .log-text.error { color: var(--red); }
+  .log-text.success { color: var(--green); }
+
+  /* ─── Setup Phase ─── */
+  .setup-list {
+    list-style: none;
+  }
+  .setup-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .setup-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .setup-check.pending { border: 2px solid var(--text-dim); }
+  .setup-check.done { background: var(--green); color: #000; }
+  .setup-check.active { border: 2px solid var(--yellow); animation: pulse 1s infinite; }
+
+  /* Section headers */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+</style>
+</head>
+<body>
+<script>
+(function() {
+  'use strict';
+
+  // ─── State ──────────────────────────────────────────────────────────────────
+
+  var PHASES = ['PLAN', 'SETUP', 'DEVELOP', 'REVIEW', 'TESTGEN', 'TESTRUN', 'FIX', 'REGRESSION', 'DONE'];
+  var PHASE_LABELS = {
+    PLAN: 'Plan', SETUP: 'Setup', DEVELOP: 'Develop', REVIEW: 'Review',
+    TESTGEN: 'Test Gen', TESTRUN: 'Test Run', FIX: 'Fix', REGRESSION: 'Regression', DONE: 'Done'
+  };
+
+  var state = {
+    phase: 'PLAN',
+    phaseHistory: [],   // completed phases
+    projectDir: '',
+    selectedInstanceId: '',
+    chatInstances: [],  // [{id, name, cwd}]
+    plan: '',
+    agents: {
+      architect:  { id: null, name: 'Architect',   busy: false, status: 'idle', msgCount: 0, queue: [] },
+      dev1:       { id: null, name: 'Developer 1',  busy: false, status: 'idle', msgCount: 0, queue: [] },
+      dev2:       { id: null, name: 'Developer 2',  busy: false, status: 'idle', msgCount: 0, queue: [] },
+      reviewer:   { id: null, name: 'Reviewer',     busy: false, status: 'idle', msgCount: 0, queue: [] },
+      tester:     { id: null, name: 'Tester',       busy: false, status: 'idle', msgCount: 0, queue: [] },
+    },
+    tasks: [],          // { num, text, status, assignee }
+    errors: [],         // { file, line, severity, message, fix, assignee }
+    tests: [],          // { num, name, status, expected, actual }
+    reviewRounds: 0,
+    fixRounds: 0,
+    regressionRuns: 0,
+    progress: 0,
+    logs: [],
+  };
+
+  // ─── Logging ────────────────────────────────────────────────────────────────
+
+  function log(agent, text, type) {
+    var now = new Date();
+    var time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    state.logs.push({ time: time, agent: agent, text: text, type: type || '' });
+    if (state.logs.length > 500) state.logs = state.logs.slice(-400);
+    renderLog();
+  }
+
+  // ─── SDK Helpers ────────────────────────────────────────────────────────────
+
+  function waitForSDK() {
+    return new Promise(function(resolve) {
+      if (window.ClaudeGUI && window.ClaudeGUI.instanceId) { resolve(); return; }
+      var check = setInterval(function() {
+        if (window.ClaudeGUI && window.ClaudeGUI.instanceId) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 50);
+    });
+  }
+
+  // Send a message to an agent and return a promise that resolves when the response comes
+  var pendingResponses = {};  // instanceId -> { resolve, text, pollDelayTimer, pollIntervalId, maxWaitTimer }
+  var POLL_START_DELAY = 30000;  // Start polling 30s after send if no event-driven response
+  var POLL_INTERVAL = 15000;     // Poll chat history every 15s
+  var MAX_AGENT_WAIT = 600000;   // 10 min max wait per agent response
+
+  function sendToAgent(agentKey, message) {
+    var agent = state.agents[agentKey];
+    if (!agent || !agent.id) {
+      log(agentKey, 'Agent not created yet!', 'error');
+      return Promise.resolve(null);
+    }
+    return new Promise(function(resolve) {
+      agent.queue.push({ message: message, resolve: resolve });
+      processQueue(agentKey);
+    });
+  }
+
+  function processQueue(agentKey) {
+    var agent = state.agents[agentKey];
+    if (agent.busy || agent.queue.length === 0) return;
+
+    var item = agent.queue.shift();
+    agent.busy = true;
+    agent.status = 'busy';
+    agent.msgCount++;
+    renderSidebar();
+
+    pendingResponses[agent.id] = { resolve: item.resolve, text: '', pollDelayTimer: null, pollIntervalId: null, maxWaitTimer: null };
+    log(agentKey, 'Sending message (' + item.message.length + ' chars)', '');
+
+    // Maximum wait timer — after 10 min, resolve with whatever text we have
+    var agentId = agent.id;
+    pendingResponses[agentId].maxWaitTimer = setTimeout(function() {
+      if (!pendingResponses[agentId]) return;
+      log(agentKey, 'Max wait reached — resolving with available text', 'error');
+      // Try one final history poll before giving up
+      ClaudeGUI.chat.getHistory(agentId, 100).then(function(history) {
+        if (!pendingResponses[agentId]) return;
+        if (history && history.length > 0) {
+          var lastMsg = history[history.length - 1];
+          if (lastMsg.role === 'assistant' && lastMsg.text) {
+            pendingResponses[agentId].text = lastMsg.text;
+          }
+        }
+        resolveAgentResponse(agentId);
+      }).catch(function() {
+        resolveAgentResponse(agentId);
+      });
+    }, MAX_AGENT_WAIT);
+
+    ClaudeGUI.chat.send(agent.id, item.message).then(function() {
+      // Send succeeded — start polling fallback after delay in case events don't arrive
+      if (!pendingResponses[agentId]) return;
+      pendingResponses[agentId].pollDelayTimer = setTimeout(function() {
+        if (!pendingResponses[agentId]) return;
+        log(agentKey, 'Starting response polling fallback...', '');
+        startPollingFallback(agentKey, agentId);
+      }, POLL_START_DELAY);
+    }).catch(function(err) {
+      log(agentKey, 'Send failed: ' + err + ' — waiting via polling', 'error');
+      // Don't resolve null immediately — start polling to pick up any response
+      startPollingFallback(agentKey, agentId);
+    });
+  }
+
+  // Polling fallback: periodically check chat history for a new assistant response
+  function startPollingFallback(agentKey, agentId) {
+    var pending = pendingResponses[agentId];
+    if (!pending || pending.pollIntervalId) return; // already polling
+
+    var lastPolledText = '';
+    var stableCount = 0;
+
+    pending.pollIntervalId = setInterval(function() {
+      if (!pendingResponses[agentId]) {
+        clearInterval(pending.pollIntervalId);
+        return;
+      }
+
+      ClaudeGUI.chat.getHistory(agentId, 100).then(function(history) {
+        if (!history || history.length === 0 || !pendingResponses[agentId]) return;
+
+        var lastMsg = history[history.length - 1];
+        if (lastMsg.role === 'assistant' && lastMsg.text) {
+          // Update pending text from poll
+          pendingResponses[agentId].text = lastMsg.text;
+
+          if (lastMsg.text === lastPolledText && lastMsg.text.length > 0) {
+            stableCount++;
+            if (stableCount >= 2) {
+              // Text unchanged for 2 consecutive polls — agent is idle
+              log(agentKey, 'Agent idle (polling fallback) — response: ' + lastMsg.text.length + ' chars', 'success');
+              resolveAgentResponse(agentId);
+            }
+          } else {
+            stableCount = 0;
+            lastPolledText = lastMsg.text;
+          }
+        }
+      }).catch(function() {});
+    }, POLL_INTERVAL);
+  }
+
+  // Clean up all timers associated with a pending response
+  function cleanupPendingTimers(agentId) {
+    var pending = pendingResponses[agentId];
+    if (!pending) return;
+    if (pending.pollDelayTimer) { clearTimeout(pending.pollDelayTimer); pending.pollDelayTimer = null; }
+    if (pending.pollIntervalId) { clearInterval(pending.pollIntervalId); pending.pollIntervalId = null; }
+    if (pending.maxWaitTimer) { clearTimeout(pending.maxWaitTimer); pending.maxWaitTimer = null; }
+  }
+
+  // Resolve a pending agent response (called when the agent is truly idle)
+  function resolveAgentResponse(fromId) {
+    var agentKey = null;
+    for (var key in state.agents) {
+      if (state.agents[key].id === fromId) { agentKey = key; break; }
+    }
+    if (!agentKey) return;
+
+    var agent = state.agents[agentKey];
+    var pending = pendingResponses[fromId];
+    if (!pending) return;
+
+    cleanupPendingTimers(fromId);
+
+    agent.busy = false;
+    agent.status = 'done';
+    renderSidebar();
+    pending.resolve(pending.text);
+    delete pendingResponses[fromId];
+    // Process next in queue
+    processQueue(agentKey);
+  }
+
+  function handleChatResponse(data) {
+    var fromId = data.instanceId || data.sourceId;
+    if (!fromId) return;
+
+    // Find which agent this belongs to
+    var agentKey = null;
+    for (var key in state.agents) {
+      if (state.agents[key].id === fromId) { agentKey = key; break; }
+    }
+    if (!agentKey) return;
+
+    var agent = state.agents[agentKey];
+    var responseText = data.text || data.message || '';
+
+    // Check for auto-response (question detection)
+    if (responseText && isQuestion(responseText)) {
+      log(agentKey, 'Auto-responding to question', '');
+      setTimeout(function() {
+        ClaudeGUI.chat.send(agent.id, 'Continue with the recommended/standard approach. Do not ask for confirmation.').catch(function() {});
+      }, 500);
+      return;
+    }
+
+    // Replace text (streamBridge sends full text each time, not incremental)
+    var pending = pendingResponses[fromId];
+    if (pending && responseText) {
+      pending.text = responseText;
+    }
+  }
+
+  // Called when the CLI finishes a full turn (all tool calls done, agent is idle)
+  function handleChatResult(data) {
+    var fromId = data.instanceId || data.sourceId;
+    if (!fromId) return;
+    resolveAgentResponse(fromId);
+  }
+
+  function isQuestion(text) {
+    var lastLines = text.trim().split('\n').slice(-5).join(' ');
+    return /\?\s*$/.test(lastLines.trim()) &&
+      /would you like|should i|do you want|which option|please confirm|can you clarify|let me know|what.+prefer|shall i|could you|want me to/i.test(lastLines);
+  }
+
+  // ─── Phase Machine ─────────────────────────────────────────────────────────
+
+  function setPhase(newPhase) {
+    if (state.phase !== newPhase) {
+      if (state.phase !== 'PLAN') state.phaseHistory.push(state.phase);
+      state.phase = newPhase;
+      log('system', 'Phase: ' + PHASE_LABELS[newPhase], 'success');
+      render();
+    }
+  }
+
+  function updateProgress(pct) {
+    state.progress = Math.min(100, Math.max(0, pct));
+    renderProgress();
+  }
+
+  // ─── PHASE: PLAN ───────────────────────────────────────────────────────────
+
+  function loadChatInstances() {
+    ClaudeGUI.instances.list().then(function(list) {
+      state.chatInstances = list.filter(function(inst) {
+        return inst.type === 'chat' || inst.type === 'llm';
+      });
+      renderContent();
+    });
+  }
+
+  function onInstanceSelect() {
+    var sel = document.getElementById('plan-instance');
+    if (!sel) return;
+    state.selectedInstanceId = sel.value;
+    var inst = state.chatInstances.find(function(i) { return i.id === sel.value; });
+    state.projectDir = inst ? (inst.cwd || '.') : '';
+    renderContent();
+  }
+
+  function savePlan() {
+    var textarea = document.getElementById('plan-text');
+    if (!textarea) return;
+
+    state.plan = textarea.value.trim();
+
+    if (!state.plan) { log('system', 'Please enter a plan first', 'error'); return; }
+    if (!state.projectDir) { log('system', 'Please select a chat instance first', 'error'); return; }
+
+    var planPath = state.projectDir + '/devstudio-plan.md';
+    ClaudeGUI.fs.writeFile(planPath, state.plan).then(function() {
+      log('system', 'Plan saved to ' + planPath, 'success');
+    }).catch(function(err) {
+      log('system', 'Save failed (will continue): ' + err, 'error');
+    });
+  }
+
+  function startFromPlan() {
+    var textarea = document.getElementById('plan-text');
+    if (!textarea) return;
+
+    state.plan = textarea.value.trim();
+
+    if (!state.plan) { log('system', 'Please enter a plan first', 'error'); return; }
+    if (!state.selectedInstanceId) { log('system', 'Please select a chat instance', 'error'); return; }
+    if (!state.projectDir) { log('system', 'Selected instance has no project directory', 'error'); return; }
+
+    savePlan();
+    setPhase('SETUP');
+    runSetup();
+  }
+
+  // ─── PHASE: SETUP ──────────────────────────────────────────────────────────
+
+  var setupSteps = [];
+
+  async function runSetup() {
+    updateProgress(5);
+    setupSteps = [];
+    var agentKeys = ['architect', 'dev1', 'dev2', 'reviewer', 'tester'];
+    var autoPromptSuffix = '\n\nIMPORTANT: Never ask questions. Always go with the recommended/standard option. Do not ask for confirmation. Do not wait for approval. Just do the work.';
+
+    var systemPrompts = {
+      architect: 'You are an expert software architect. You may be working on a brand new project OR an existing codebase. First, examine the project directory to understand what already exists. If there is existing code, analyze it before designing changes. When given a plan, design the architecture considering existing code: file tree, tech stack, component structure, data models, and API design. Then break the implementation into numbered tasks that developers can work on sequentially. Each task should specify the files to create/modify and what to implement. For existing projects, focus on what needs to change — do not rewrite files that already work correctly.' + autoPromptSuffix,
+      dev1: 'You are a senior software developer (Developer 1). You implement tasks given to you based on an architecture plan. You may be working on a new project or modifying an existing codebase. Read existing files before modifying them. Write complete, production-quality code. Follow the architecture exactly. When done with a task, summarize what you created or changed.' + autoPromptSuffix,
+      dev2: 'You are a senior software developer (Developer 2). You implement tasks given to you based on an architecture plan. You may be working on a new project or modifying an existing codebase. Read existing files before modifying them. Write complete, production-quality code. Follow the architecture exactly. When done with a task, summarize what you created or changed.' + autoPromptSuffix,
+      reviewer: 'You are a senior code reviewer. Review all code in the project for bugs, logic errors, missing imports, type errors, security issues, and any problems that would prevent the app from working correctly. Output a numbered list of errors with format:\n[N] FILE: path/to/file | LINE: number | SEVERITY: critical/warning/info | ISSUE: description | FIX: how to fix it\nIf there are no errors, respond with exactly: NO_ERRORS_FOUND' + autoPromptSuffix,
+      tester: 'You are a QA engineer and tester. You generate exhaustive test cases and execute visual tests using desktop-control tools (take screenshots, click, type, verify). For test generation, output numbered test cases with: name, steps, expected result. For test execution, perform each action and verify the result.' + autoPromptSuffix,
+    };
+
+    // Write MCP config for the tester (desktop-control)
+    var mcpConfig = JSON.stringify({
+      mcpServers: {
+        "desktop-control": {
+          command: "npx",
+          args: ["-y", "@anthropic-ai/desktop-control-mcp"]
+        }
+      }
+    }, null, 2);
+    var mcpPath = state.projectDir + '/.devstudio-mcp.json';
+    try {
+      await ClaudeGUI.fs.writeFile(mcpPath, mcpConfig);
+      log('system', 'MCP config written', 'success');
+    } catch (e) {
+      log('system', 'MCP config write failed: ' + e, 'error');
+    }
+
+    for (var i = 0; i < agentKeys.length; i++) {
+      var key = agentKeys[i];
+      var agent = state.agents[key];
+      var step = { name: agent.name, status: 'pending' };
+      setupSteps.push(step);
+      renderContent();
+
+      step.status = 'active';
+      renderContent();
+
+      try {
+        var config = {
+          name: 'DS:' + agent.name,
+          cwd: state.projectDir,
+          systemPrompt: systemPrompts[key],
+        };
+        if (key === 'tester') {
+          config.mcpConfigPath = mcpPath;
+        }
+        var result = await ClaudeGUI.instances.create(config);
+        agent.id = result.instanceId;
+        step.status = 'done';
+        log(key, 'Agent created: ' + agent.id, 'success');
+      } catch (err) {
+        step.status = 'error';
+        log(key, 'Creation failed: ' + err, 'error');
+      }
+      renderContent();
+      updateProgress(5 + (i + 1) * 5);
+    }
+
+    log('system', 'All agents created', 'success');
+    updateProgress(30);
+
+    // Small delay then move to develop
+    setTimeout(function() {
+      setPhase('DEVELOP');
+      runDevelop();
+    }, 1000);
+  }
+
+  // ─── PHASE: DEVELOP ────────────────────────────────────────────────────────
+
+  async function runDevelop() {
+    updateProgress(30);
+    log('architect', 'Sending plan for architecture design...', '');
+
+    // Step 1: Send plan to Architect
+    var archPrompt = 'Here is the project plan. Design the architecture and create a numbered task list for implementation.\n\n---\n\n' + state.plan;
+    var archResponse = await sendToAgent('architect', archPrompt);
+    if (!archResponse) {
+      log('architect', 'No response from architect!', 'error');
+      return;
+    }
+
+    log('architect', 'Architecture received (' + archResponse.length + ' chars)', 'success');
+    updateProgress(35);
+
+    // Parse tasks from architect response
+    state.tasks = parseTasks(archResponse);
+    log('system', 'Parsed ' + state.tasks.length + ' tasks', 'success');
+    renderContent();
+
+    if (state.tasks.length === 0) {
+      // If no numbered tasks found, treat the whole response as a single task
+      state.tasks = [{ num: 1, text: 'Implement the full application as designed by the architect', status: 'pending', assignee: 'dev1' }];
+    }
+
+    // Step 2: Assign tasks to developers (round-robin)
+    var totalTasks = state.tasks.length;
+    for (var i = 0; i < totalTasks; i++) {
+      var task = state.tasks[i];
+      var devKey = (i % 2 === 0) ? 'dev1' : 'dev2';
+      task.assignee = devKey;
+      task.status = 'active';
+      renderContent();
+
+      log(devKey, 'Working on Task #' + task.num + ': ' + task.text.substring(0, 60) + '...', '');
+
+      var taskPrompt = 'ARCHITECTURE CONTEXT:\n' + archResponse + '\n\n---\n\nIMPLEMENT TASK #' + task.num + ':\n' + task.text + '\n\nCreate all necessary files and write complete code. Do not skip any part.';
+      var devResponse = await sendToAgent(devKey, taskPrompt);
+
+      if (devResponse) {
+        task.status = 'done';
+        log(devKey, 'Task #' + task.num + ' completed', 'success');
+      } else {
+        task.status = 'failed';
+        log(devKey, 'Task #' + task.num + ' failed', 'error');
+      }
+      renderContent();
+      updateProgress(35 + ((i + 1) / totalTasks) * 25);
+    }
+
+    log('system', 'All development tasks completed', 'success');
+    updateProgress(60);
+
+    // Save architecture for review phase
+    state._archResponse = archResponse;
+
+    setTimeout(function() {
+      setPhase('REVIEW');
+      runReview();
+    }, 1000);
+  }
+
+  function parseTasks(text) {
+    var tasks = [];
+    // Match numbered items: 1. ..., 1) ..., Task 1: ..., #1 ...
+    var lines = text.split('\n');
+    var currentTask = null;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      var match = line.match(/^(?:(?:Task\s+)?#?(\d+)[.):]\s*|-\s+\*?\*?(?:Task\s+)?(\d+)[.):*]\s*)(.+)/i);
+      if (match) {
+        if (currentTask) tasks.push(currentTask);
+        var num = parseInt(match[1] || match[2]);
+        currentTask = { num: num, text: match[3].trim(), status: 'pending', assignee: null };
+      } else if (currentTask && line && !line.match(/^#{1,3}\s/)) {
+        // Continuation of current task
+        currentTask.text += ' ' + line;
+      } else if (line.match(/^#{1,3}\s/) && currentTask) {
+        tasks.push(currentTask);
+        currentTask = null;
+      }
+    }
+    if (currentTask) tasks.push(currentTask);
+    return tasks;
+  }
+
+  // ─── PHASE: REVIEW ─────────────────────────────────────────────────────────
+
+  async function runReview() {
+    state.reviewRounds++;
+    log('reviewer', 'Starting review round ' + state.reviewRounds, '');
+
+    var reviewPrompt = 'Review ALL code in this project. The plan was:\n\n' + state.plan +
+      '\n\n---\n\nArchitecture:\n\n' + (state._archResponse || '(see project files)') +
+      '\n\n---\n\nReview every file for bugs, logic errors, missing pieces, and anything that would prevent the app from working. Output errors in format:\n[N] FILE: path | LINE: number | SEVERITY: critical/warning/info | ISSUE: description | FIX: how to fix';
+
+    var reviewResponse = await sendToAgent('reviewer', reviewPrompt);
+    if (!reviewResponse) {
+      log('reviewer', 'No response from reviewer!', 'error');
+      return;
+    }
+
+    if (reviewResponse.indexOf('NO_ERRORS_FOUND') !== -1) {
+      log('reviewer', 'No errors found!', 'success');
+      state.errors = [];
+      renderContent();
+      updateProgress(70);
+      setTimeout(function() {
+        setPhase('TESTGEN');
+        runTestGen();
+      }, 1000);
+      return;
+    }
+
+    // Parse errors
+    state.errors = parseErrors(reviewResponse);
+    log('reviewer', 'Found ' + state.errors.length + ' issues', state.errors.length > 0 ? 'error' : 'success');
+    renderContent();
+
+    if (state.errors.length === 0) {
+      updateProgress(70);
+      setTimeout(function() {
+        setPhase('TESTGEN');
+        runTestGen();
+      }, 1000);
+      return;
+    }
+
+    // Send fixes to developers
+    await sendFixes();
+
+    // Re-review after fixes
+    if (state.reviewRounds < 5) {
+      log('system', 'Re-reviewing after fixes...', '');
+      await runReview();
+    } else {
+      log('system', 'Max review rounds reached, proceeding', 'error');
+      updateProgress(70);
+      setTimeout(function() {
+        setPhase('TESTGEN');
+        runTestGen();
+      }, 1000);
+    }
+  }
+
+  function parseErrors(text) {
+    var errors = [];
+    var lines = text.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      var match = line.match(/\[(\d+)\]\s*FILE:\s*(.+?)\s*\|\s*LINE:\s*(\d+)\s*\|\s*SEVERITY:\s*(\w+)\s*\|\s*ISSUE:\s*(.+?)\s*\|\s*FIX:\s*(.+)/i);
+      if (match) {
+        errors.push({
+          num: parseInt(match[1]),
+          file: match[2].trim(),
+          line: parseInt(match[3]),
+          severity: match[4].toLowerCase(),
+          message: match[5].trim(),
+          fix: match[6].trim(),
+        });
+      }
+    }
+    return errors;
+  }
+
+  async function sendFixes() {
+    if (state.errors.length === 0) return;
+
+    // Group errors and send to dev1 (could split between dev1/dev2 but simpler this way)
+    var fixPrompt = 'The reviewer found the following errors. Fix ALL of them without breaking anything else:\n\n';
+    for (var i = 0; i < state.errors.length; i++) {
+      var e = state.errors[i];
+      fixPrompt += '[' + e.num + '] ' + e.file + ':' + e.line + ' (' + e.severity + '): ' + e.message + '\n    FIX: ' + e.fix + '\n\n';
+    }
+    fixPrompt += 'Fix each issue. Do not introduce new bugs.';
+
+    log('dev1', 'Fixing ' + state.errors.length + ' issues...', '');
+    var fixResponse = await sendToAgent('dev1', fixPrompt);
+    if (fixResponse) {
+      log('dev1', 'Fixes applied', 'success');
+    }
+  }
+
+  // ─── PHASE: TESTGEN ────────────────────────────────────────────────────────
+
+  async function runTestGen() {
+    updateProgress(70);
+    log('tester', 'Generating test cases...', '');
+
+    var testPrompt = 'Generate exhaustive test cases for this application.\n\nPlan:\n' + state.plan +
+      '\n\nGenerate comprehensive tests covering:\n- Every button click\n- Every input field (empty, valid, long text, special characters, extreme values)\n- Every draggable/scrollable element\n- Every visual state and transition\n- Every function and feature\n- Edge cases and error conditions\n\nOutput format for each test:\nTEST #N: Test Name\nSTEPS: step-by-step actions\nEXPECTED: expected result\n\nGenerate as many tests as needed for complete coverage.';
+
+    var testResponse = await sendToAgent('tester', testPrompt);
+    if (!testResponse) {
+      log('tester', 'No response!', 'error');
+      return;
+    }
+
+    state.tests = parseTests(testResponse);
+    log('tester', 'Generated ' + state.tests.length + ' test cases', 'success');
+    renderContent();
+
+    // Save tests
+    var testsPath = state.projectDir + '/devstudio-tests.md';
+    ClaudeGUI.fs.writeFile(testsPath, testResponse).catch(function() {});
+
+    updateProgress(75);
+    setTimeout(function() {
+      setPhase('TESTRUN');
+      runTests();
+    }, 1000);
+  }
+
+  function parseTests(text) {
+    var tests = [];
+    var blocks = text.split(/TEST\s*#?\d+/i);
+    for (var i = 1; i < blocks.length; i++) {
+      var block = blocks[i];
+      var nameMatch = block.match(/^[:\s]*(.+?)(?:\n|$)/);
+      tests.push({
+        num: i,
+        name: nameMatch ? nameMatch[1].trim().replace(/^[:\s]+/, '') : 'Test ' + i,
+        status: 'pending',
+        expected: '',
+        actual: '',
+      });
+    }
+    return tests;
+  }
+
+  // ─── PHASE: TESTRUN ────────────────────────────────────────────────────────
+
+  async function runTests() {
+    updateProgress(75);
+    var total = state.tests.length;
+
+    for (var i = 0; i < total; i++) {
+      var test = state.tests[i];
+      test.status = 'running';
+      renderContent();
+
+      log('tester', 'Running test #' + test.num + ': ' + test.name, '');
+
+      var runPrompt = 'Execute visual test:\nTest #' + test.num + ': ' + test.name +
+        '\n\nUse the desktop-control MCP tools to:\n1. Take a screenshot to see current state\n2. Perform the test actions (click buttons, type text, etc.)\n3. Take another screenshot to verify\n4. Report: PASS if the expected behavior occurred, FAIL with details if not\n\nStart by taking a screenshot.';
+
+      var result = await sendToAgent('tester', runPrompt);
+      if (!result) {
+        test.status = 'fail';
+        test.actual = 'No response from tester';
+        log('tester', 'Test #' + test.num + ': NO RESPONSE', 'error');
+      } else if (result.toUpperCase().indexOf('PASS') !== -1 && result.toUpperCase().indexOf('FAIL') === -1) {
+        test.status = 'pass';
+        test.actual = 'Passed';
+        log('tester', 'Test #' + test.num + ': PASS', 'success');
+      } else if (result.toUpperCase().indexOf('FAIL') !== -1) {
+        test.status = 'fail';
+        test.actual = result.substring(0, 200);
+        log('tester', 'Test #' + test.num + ': FAIL', 'error');
+
+        // Retry once
+        log('tester', 'Retrying test #' + test.num + '...', '');
+        var retry = await sendToAgent('tester', 'The previous test failed. Please retry test #' + test.num + ': ' + test.name + '\nTake a fresh screenshot and try again.');
+        if (retry && retry.toUpperCase().indexOf('PASS') !== -1 && retry.toUpperCase().indexOf('FAIL') === -1) {
+          test.status = 'pass';
+          test.actual = 'Passed on retry';
+          log('tester', 'Test #' + test.num + ': PASS on retry', 'success');
+        } else {
+          // Send fix to responsible developer
+          await fixTestFailure(test, result);
+        }
+      } else {
+        test.status = 'pass';
+        test.actual = 'Completed';
+        log('tester', 'Test #' + test.num + ': PASS (implicit)', 'success');
+      }
+
+      renderContent();
+      updateProgress(75 + ((i + 1) / total) * 15);
+    }
+
+    // Check for any remaining failures
+    var failures = state.tests.filter(function(t) { return t.status === 'fail'; });
+    if (failures.length > 0) {
+      setPhase('FIX');
+      await runFixLoop(failures);
+    } else {
+      setPhase('REGRESSION');
+      await runRegression();
+    }
+  }
+
+  async function fixTestFailure(test, failDetails) {
+    state.fixRounds++;
+    log('dev1', 'Fixing test failure: ' + test.name, '');
+
+    var fixPrompt = 'Test "' + test.name + '" failed with:\n' + failDetails +
+      '\n\nFix the code so this test passes. Do not break other functionality.';
+
+    await sendToAgent('dev1', fixPrompt);
+    log('dev1', 'Fix applied for: ' + test.name, 'success');
+
+    // Re-run the specific test
+    log('tester', 'Re-running: ' + test.name, '');
+    var retest = await sendToAgent('tester', 'Re-run test: ' + test.name + '. Take screenshot and verify.');
+    if (retest && retest.toUpperCase().indexOf('PASS') !== -1) {
+      test.status = 'pass';
+      test.actual = 'Passed after fix';
+      log('tester', test.name + ': PASS after fix', 'success');
+    }
+    renderContent();
+  }
+
+  // ─── PHASE: FIX ─────────────────────────────────────────────────────────────
+
+  async function runFixLoop(failures) {
+    for (var i = 0; i < failures.length; i++) {
+      var test = failures[i];
+      if (test.status === 'pass') continue;
+      await fixTestFailure(test, test.actual);
+    }
+    renderContent();
+
+    // After fixes, go to regression
+    setPhase('REGRESSION');
+    await runRegression();
+  }
+
+  // ─── PHASE: REGRESSION ──────────────────────────────────────────────────────
+
+  async function runRegression() {
+    state.regressionRuns++;
+    updateProgress(90);
+    log('system', 'Regression run #' + state.regressionRuns, 'success');
+
+    // Re-run all tests
+    var total = state.tests.length;
+    var failures = [];
+
+    for (var i = 0; i < total; i++) {
+      var test = state.tests[i];
+      test.status = 'running';
+      renderContent();
+
+      log('tester', 'Regression test #' + test.num + ': ' + test.name, '');
+      var result = await sendToAgent('tester', 'Regression test: ' + test.name + '. Take screenshot, perform actions, verify result. Report PASS or FAIL.');
+
+      if (result && result.toUpperCase().indexOf('FAIL') !== -1) {
+        test.status = 'fail';
+        test.actual = result.substring(0, 200);
+        failures.push(test);
+        log('tester', 'REGRESSION FAIL: ' + test.name, 'error');
+      } else {
+        test.status = 'pass';
+        test.actual = 'Regression passed';
+        log('tester', 'Regression PASS: ' + test.name, 'success');
+      }
+      renderContent();
+      updateProgress(90 + ((i + 1) / total) * 8);
+    }
+
+    if (failures.length > 0 && state.regressionRuns < 3) {
+      log('system', failures.length + ' regression failures, entering fix loop', 'error');
+      setPhase('FIX');
+      await runFixLoop(failures);
+    } else {
+      if (failures.length > 0) {
+        log('system', 'Remaining failures after ' + state.regressionRuns + ' regression runs', 'error');
+      }
+      updateProgress(100);
+      setPhase('DONE');
+    }
+  }
+
+  // ─── Cleanup ────────────────────────────────────────────────────────────────
+
+  function cleanup() {
+    log('system', 'Cleaning up agents...', '');
+    var keys = Object.keys(state.agents);
+    var promises = [];
+    for (var i = 0; i < keys.length; i++) {
+      var agent = state.agents[keys[i]];
+      if (agent.id) {
+        promises.push(ClaudeGUI.instances.remove(agent.id).catch(function() {}));
+        agent.id = null;
+      }
+    }
+    return Promise.all(promises);
+  }
+
+  // ─── Rendering ──────────────────────────────────────────────────────────────
+
+  function render() {
+    renderHeader();
+    renderSidebar();
+    renderContent();
+    renderProgress();
+    renderLog();
+  }
+
+  function renderHeader() {
+    var el = document.getElementById('header');
+    var phaseIdx = PHASES.indexOf(state.phase);
+    var html = '<span class="header-title">DevStudio</span>';
+    for (var i = 0; i < PHASES.length; i++) {
+      var cls = 'phase-tab';
+      if (i === phaseIdx) cls += ' active';
+      else if (state.phaseHistory.indexOf(PHASES[i]) !== -1) cls += ' done';
+      else if (i > phaseIdx) cls += ' future';
+      html += '<button class="' + cls + '">' + PHASE_LABELS[PHASES[i]] + '</button>';
+    }
+    html += '<span class="header-spacer"></span>';
+    html += '<span class="header-status">' + (state.phase === 'DONE' ? 'Complete' : 'Running...') + '</span>';
+    el.innerHTML = html;
+  }
+
+  function renderSidebar() {
+    var el = document.getElementById('sidebar-agents');
+    var html = '';
+    var keys = Object.keys(state.agents);
+    for (var i = 0; i < keys.length; i++) {
+      var agent = state.agents[keys[i]];
+      var dotCls = 'agent-dot ' + agent.status;
+      html += '<div class="agent-item">';
+      html += '<span class="' + dotCls + '"></span>';
+      html += '<span class="agent-name">' + agent.name + '</span>';
+      html += '<span class="agent-msgs">' + agent.msgCount + '</span>';
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  function renderProgress() {
+    var fill = document.getElementById('progress-fill');
+    var text = document.getElementById('progress-text');
+    if (fill) fill.style.width = state.progress + '%';
+    if (text) text.textContent = Math.round(state.progress) + '%';
+  }
+
+  function renderLog() {
+    var el = document.getElementById('log-content');
+    if (!el) return;
+    var html = '';
+    var start = Math.max(0, state.logs.length - 100);
+    for (var i = start; i < state.logs.length; i++) {
+      var entry = state.logs[i];
+      html += '<div class="log-entry">';
+      html += '<span class="log-time">' + entry.time + '</span>';
+      if (entry.agent !== 'system') {
+        html += '<span class="log-agent">[' + entry.agent + ']</span>';
+      }
+      html += '<span class="log-text ' + (entry.type || '') + '">' + escapeHtml(entry.text) + '</span>';
+      html += '</div>';
+    }
+    el.innerHTML = html;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderContent() {
+    var el = document.getElementById('content-area');
+    if (!el) return;
+
+    switch (state.phase) {
+      case 'PLAN':
+        el.innerHTML = renderPlanPhase();
+        break;
+      case 'SETUP':
+        el.innerHTML = renderSetupPhase();
+        break;
+      case 'DEVELOP':
+        el.innerHTML = renderDevelopPhase();
+        break;
+      case 'REVIEW':
+        el.innerHTML = renderReviewPhase();
+        break;
+      case 'TESTGEN':
+        el.innerHTML = renderTestGenPhase();
+        break;
+      case 'TESTRUN':
+      case 'FIX':
+      case 'REGRESSION':
+        el.innerHTML = renderTestRunPhase();
+        break;
+      case 'DONE':
+        el.innerHTML = renderDonePhase();
+        break;
+    }
+  }
+
+  function renderPlanPhase() {
+    var options = '<option value="">-- Select a Chat Instance --</option>';
+    for (var i = 0; i < state.chatInstances.length; i++) {
+      var inst = state.chatInstances[i];
+      var label = inst.name + (inst.cwd ? ' (' + inst.cwd + ')' : '');
+      var selected = inst.id === state.selectedInstanceId ? ' selected' : '';
+      options += '<option value="' + escapeAttr(inst.id) + '"' + selected + '>' + escapeHtml(label) + '</option>';
+    }
+
+    return '<div class="plan-area">' +
+      '<div class="plan-cwd">' +
+        '<label>Instance</label>' +
+        '<select id="plan-instance" onchange="window._ds.onInstanceSelect()">' + options + '</select>' +
+        '<button class="btn" onclick="window._ds.loadChatInstances()" style="padding:5px 10px;font-size:11px;" title="Refresh instance list">\u21BB</button>' +
+      '</div>' +
+      (state.projectDir ? '<div style="font-size:11px; color: var(--text-muted); margin-bottom:8px; padding-left:70px;">Project: <span style="color: var(--accent); font-family:monospace;">' + escapeHtml(state.projectDir) + '</span></div>' : '') +
+      '<textarea id="plan-text" placeholder="Describe the application you want to build in detail...\n\nInclude:\n- What the app does\n- Tech stack preferences\n- Key features\n- UI/UX requirements\n- Any specific libraries or frameworks">' + escapeHtml(state.plan) + '</textarea>' +
+      '<div class="plan-actions">' +
+        '<button class="btn" onclick="window._ds.savePlan()">Save Plan</button>' +
+        '<button class="btn btn-primary" onclick="window._ds.startFromPlan()"' + (!state.selectedInstanceId ? ' disabled' : '') + '>Start Development</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderSetupPhase() {
+    var html = '<div class="section-title">Creating Agents</div><ul class="setup-list">';
+    for (var i = 0; i < setupSteps.length; i++) {
+      var step = setupSteps[i];
+      var checkCls = 'setup-check ' + step.status;
+      var icon = step.status === 'done' ? '\u2713' : step.status === 'active' ? '\u25CB' : '';
+      html += '<li class="setup-item"><span class="' + checkCls + '">' + icon + '</span><span>' + step.name + '</span></li>';
+    }
+    html += '</ul>';
+    return html;
+  }
+
+  function renderDevelopPhase() {
+    var html = '<div class="section-title">Development Tasks</div>';
+    for (var i = 0; i < state.tasks.length; i++) {
+      var task = state.tasks[i];
+      html += '<div class="task-item">';
+      html += '<span class="task-num">#' + task.num + '</span>';
+      html += '<span class="task-text">' + escapeHtml(task.text.substring(0, 120)) + '</span>';
+      html += '<span class="task-status ' + task.status + '">' + task.status + '</span>';
+      html += '</div>';
+    }
+    if (state.tasks.length === 0) {
+      html += '<div style="color: var(--text-muted); font-size: 12px; padding: 20px 0;">Waiting for architect...</div>';
+    }
+    return html;
+  }
+
+  function renderReviewPhase() {
+    var html = '<div class="section-title">Code Review (Round ' + state.reviewRounds + ')</div>';
+    if (state.errors.length === 0 && state.reviewRounds > 0) {
+      html += '<div style="color: var(--green); font-size: 13px; padding: 20px 0;">No errors found. Code is clean!</div>';
+    }
+    for (var i = 0; i < state.errors.length; i++) {
+      var e = state.errors[i];
+      var cls = 'error-item';
+      if (e.severity === 'warning') cls += ' warning';
+      if (e.severity === 'info') cls += ' info';
+      html += '<div class="' + cls + '">';
+      html += '<div class="error-header">[' + e.num + '] ' + escapeHtml(e.file) + ':' + e.line + ' (' + e.severity + ')</div>';
+      html += '<div>' + escapeHtml(e.message) + '</div>';
+      html += '<div class="error-fix">Fix: ' + escapeHtml(e.fix) + '</div>';
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function renderTestGenPhase() {
+    return '<div class="section-title">Generating Test Cases</div>' +
+      '<div style="color: var(--text-muted); font-size: 12px; padding: 20px 0;">Tester agent is generating comprehensive test cases...</div>' +
+      '<div style="font-size: 12px; color: var(--accent);">' + state.tests.length + ' tests generated so far</div>';
+  }
+
+  function renderTestRunPhase() {
+    var html = '<div class="section-title">' +
+      (state.phase === 'REGRESSION' ? 'Regression Testing (Run ' + state.regressionRuns + ')' :
+       state.phase === 'FIX' ? 'Fix Loop (Round ' + state.fixRounds + ')' :
+       'Test Execution') + '</div>';
+
+    if (state.tests.length === 0) {
+      html += '<div style="color: var(--text-muted); font-size: 12px;">No tests to display.</div>';
+      return html;
+    }
+
+    html += '<table class="test-table"><thead><tr><th>#</th><th>Test</th><th>Status</th><th>Result</th></tr></thead><tbody>';
+    for (var i = 0; i < state.tests.length; i++) {
+      var t = state.tests[i];
+      var statusCls = t.status === 'pass' ? 'test-pass' : t.status === 'fail' ? 'test-fail' : '';
+      var statusLabel = t.status === 'running' ? '\u23F3' : t.status === 'pass' ? '\u2713 PASS' : t.status === 'fail' ? '\u2717 FAIL' : '\u2500';
+      html += '<tr>';
+      html += '<td>' + t.num + '</td>';
+      html += '<td>' + escapeHtml(t.name.substring(0, 60)) + '</td>';
+      html += '<td class="' + statusCls + '">' + statusLabel + '</td>';
+      html += '<td style="font-size:11px; color: var(--text-muted);">' + escapeHtml((t.actual || '').substring(0, 80)) + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function renderDonePhase() {
+    var passed = state.tests.filter(function(t) { return t.status === 'pass'; }).length;
+    var failed = state.tests.filter(function(t) { return t.status === 'fail'; }).length;
+    var totalMsgs = 0;
+    var keys = Object.keys(state.agents);
+    for (var i = 0; i < keys.length; i++) totalMsgs += state.agents[keys[i]].msgCount;
+
+    return '<div class="summary-card"><h3>Development Complete</h3>' +
+      '<div class="summary-stat"><span class="label">Tasks</span><span class="value">' + state.tasks.length + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Review Rounds</span><span class="value">' + state.reviewRounds + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Test Cases</span><span class="value">' + state.tests.length + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Tests Passed</span><span class="value" style="color: var(--green);">' + passed + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Tests Failed</span><span class="value" style="color:' + (failed > 0 ? 'var(--red)' : 'var(--green)') + ';">' + failed + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Regression Runs</span><span class="value">' + state.regressionRuns + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Fix Rounds</span><span class="value">' + state.fixRounds + '</span></div>' +
+      '<div class="summary-stat"><span class="label">Total Messages</span><span class="value">' + totalMsgs + '</span></div>' +
+      '</div>' +
+      '<div class="summary-card"><h3>Saved Files</h3>' +
+      '<div style="font-size: 12px; line-height: 1.8; color: var(--text-muted);">' +
+      state.projectDir + '/devstudio-plan.md<br>' +
+      state.projectDir + '/devstudio-tests.md<br>' +
+      state.projectDir + '/devstudio-errors.md' +
+      '</div></div>';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escapeAttr(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // ─── Build DOM ──────────────────────────────────────────────────────────────
+
+  document.body.innerHTML =
+    '<div class="header" id="header"></div>' +
+    '<div class="main">' +
+      '<div class="sidebar">' +
+        '<div class="sidebar-title">Agents</div>' +
+        '<div id="sidebar-agents"></div>' +
+        '<div class="progress-section">' +
+          '<div class="progress-label">Progress</div>' +
+          '<div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>' +
+          '<div class="progress-text" id="progress-text">0%</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="content">' +
+        '<div class="content-area" id="content-area"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="log-panel-header">Activity Log</div>' +
+    '<div class="log-panel" id="log-content"></div>';
+
+  // Expose functions for onclick handlers
+  window._ds = {
+    savePlan: savePlan,
+    startFromPlan: startFromPlan,
+    loadChatInstances: loadChatInstances,
+    onInstanceSelect: onInstanceSelect,
+  };
+
+  // ─── Init ───────────────────────────────────────────────────────────────────
+
+  waitForSDK().then(function() {
+    log('system', 'DevStudio initialized', 'success');
+    render();
+
+    // Theme support
+    if (ClaudeGUI.theme && ClaudeGUI.theme.current) {
+      if (!ClaudeGUI.theme.current.isDark) {
+        document.body.classList.add('light');
+      }
+    }
+    ClaudeGUI.theme.onChange(function(theme) {
+      if (theme.isDark) document.body.classList.remove('light');
+      else document.body.classList.add('light');
+    });
+
+    // Listen for chat responses from our agents (accumulates text)
+    ClaudeGUI.chat.onResponse(function(data) {
+      handleChatResponse(data);
+    });
+
+    // Listen for chat result (turn complete — agent finished all tool calls and is idle)
+    ClaudeGUI.chat.onResult(function(data) {
+      handleChatResult(data);
+    });
+
+    // Cleanup on destroy
+    ClaudeGUI.onDestroy(function() {
+      return cleanup();
+    });
+
+    // Set title and icon
+    ClaudeGUI.ui.setTitle('DevStudio');
+    ClaudeGUI.ui.setAccentColor('#f97316');
+
+    // Load chat instances for the dropdown
+    loadChatInstances();
+
+    // Refresh instance list when instances change
+    ClaudeGUI.instances.onChanged(function() {
+      loadChatInstances();
+    });
+  });
+
+})();
+</script>
+</body>
+</html>

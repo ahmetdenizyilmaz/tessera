@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timer</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --bg-surface: #313244;
+    --text: #cdd6f4;
+    --text-muted: #6c7086;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --border: #45475a;
+    --danger: #f38ba8;
+    --success: #a6e3a1;
+  }
+  .light {
+    --bg: #ffffff;
+    --bg-surface: #f0f0f0;
+    --text: #1e1e2e;
+    --text-muted: #888;
+    --border: #ddd;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Mode tabs */
+  .mode-tabs {
+    display: flex;
+    gap: 0;
+    margin-top: 20px;
+    background: var(--bg-surface);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .mode-tab {
+    padding: 6px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .mode-tab.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* Clock display */
+  .clock {
+    margin-top: 40px;
+    font-size: 72px;
+    font-weight: 200;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    font-family: 'Consolas', 'Monaco', 'SF Mono', monospace;
+    user-select: none;
+  }
+  .clock-ms {
+    font-size: 28px;
+    color: var(--text-muted);
+    margin-left: 4px;
+  }
+
+  /* Presets */
+  .presets {
+    display: flex;
+    gap: 8px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 320px;
+  }
+  .preset-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .preset-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Custom input */
+  .custom-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .custom-input input {
+    width: 50px;
+    padding: 5px 8px;
+    font-size: 13px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+  }
+  .custom-input input:focus { border-color: var(--accent); }
+  .custom-input label {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 18px;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 32px;
+  }
+  .ctrl-btn {
+    padding: 10px 28px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .ctrl-btn.primary { background: var(--accent); color: #fff; }
+  .ctrl-btn.primary:hover { background: var(--accent-hover); }
+  .ctrl-btn.secondary { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); }
+  .ctrl-btn.secondary:hover { border-color: var(--text-muted); }
+  .ctrl-btn.danger { background: var(--danger); color: #1e1e2e; }
+  .ctrl-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* Laps */
+  .laps {
+    margin-top: 24px;
+    width: 280px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .lap-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  .lap-item span:first-child { color: var(--text-muted); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="mode-tabs">
+  <button class="mode-tab active" data-mode="countdown">Countdown</button>
+  <button class="mode-tab" data-mode="stopwatch">Stopwatch</button>
+</div>
+
+<div class="clock" id="clock">00:00</div>
+
+<!-- Countdown presets -->
+<div class="presets" id="presets">
+  <button class="preset-btn" data-seconds="300">5 min</button>
+  <button class="preset-btn" data-seconds="900">15 min</button>
+  <button class="preset-btn active" data-seconds="1500">25 min</button>
+  <button class="preset-btn" data-seconds="0">Custom</button>
+</div>
+
+<div class="custom-input" id="customInput" style="display:none;">
+  <input type="number" id="customMin" min="0" max="99" value="10" />
+  <label>m</label>
+  <input type="number" id="customSec" min="0" max="59" value="0" />
+  <label>s</label>
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn primary" id="btnStart">Start</button>
+  <button class="ctrl-btn secondary" id="btnLap" style="display:none;">Lap</button>
+  <button class="ctrl-btn secondary" id="btnReset">Reset</button>
+</div>
+
+<div class="laps" id="laps"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  var mode = 'countdown'; // 'countdown' | 'stopwatch'
+  var state = 'idle';     // 'idle' | 'running' | 'paused'
+  var countdownTotal = 1500; // seconds (default 25 min)
+  var remaining = 1500;
+  var stopwatchElapsed = 0; // ms
+  var intervalId = null;
+  var lastTick = 0;
+  var laps = [];
+
+  // DOM
+  var clockEl = document.getElementById('clock');
+  var presetsEl = document.getElementById('presets');
+  var customInputEl = document.getElementById('customInput');
+  var customMin = document.getElementById('customMin');
+  var customSec = document.getElementById('customSec');
+  var btnStart = document.getElementById('btnStart');
+  var btnLap = document.getElementById('btnLap');
+  var btnReset = document.getElementById('btnReset');
+  var lapsEl = document.getElementById('laps');
+  var modeTabs = document.querySelectorAll('.mode-tab');
+  var presetBtns = document.querySelectorAll('.preset-btn');
+
+  // ── Formatting ──
+  function fmtCountdown(secs) {
+    var m = Math.floor(secs / 60);
+    var s = secs % 60;
+    return pad(m) + ':' + pad(s);
+  }
+
+  function fmtStopwatch(ms) {
+    var totalSec = Math.floor(ms / 1000);
+    var m = Math.floor(totalSec / 60);
+    var s = totalSec % 60;
+    var cs = Math.floor((ms % 1000) / 10);
+    return pad(m) + ':' + pad(s) + '<span class="clock-ms">.' + pad(cs) + '</span>';
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // ── Render ──
+  function render() {
+    // Mode tabs
+    modeTabs.forEach(function(tab) {
+      tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+
+    // Show/hide presets & custom input
+    presetsEl.style.display = mode === 'countdown' ? 'flex' : 'none';
+    customInputEl.style.display = (mode === 'countdown' && countdownTotal === 0) ? 'flex' : 'none';
+    btnLap.style.display = mode === 'stopwatch' ? 'inline-block' : 'none';
+
+    // Clock
+    if (mode === 'countdown') {
+      clockEl.innerHTML = fmtCountdown(remaining);
+    } else {
+      clockEl.innerHTML = fmtStopwatch(stopwatchElapsed);
+    }
+
+    // Button labels
+    if (state === 'idle') {
+      btnStart.textContent = 'Start';
+      btnStart.className = 'ctrl-btn primary';
+    } else if (state === 'running') {
+      btnStart.textContent = 'Pause';
+      btnStart.className = 'ctrl-btn danger';
+    } else {
+      btnStart.textContent = 'Resume';
+      btnStart.className = 'ctrl-btn primary';
+    }
+
+    // Laps
+    lapsEl.innerHTML = '';
+    laps.forEach(function(lap, i) {
+      var div = document.createElement('div');
+      div.className = 'lap-item';
+      div.innerHTML = '<span>Lap ' + (laps.length - i) + '</span><span>' + fmtLap(lap) + '</span>';
+      lapsEl.appendChild(div);
+    });
+
+    // Badge
+    updateBadge();
+  }
+
+  function fmtLap(ms) {
+    var totalSec = Math.floor(ms / 1000);
+    var m = Math.floor(totalSec / 60);
+    var s = totalSec % 60;
+    var cs = Math.floor((ms % 1000) / 10);
+    return pad(m) + ':' + pad(s) + '.' + pad(cs);
+  }
+
+  // ── Timer Logic ──
+  function startTimer() {
+    if (mode === 'countdown') {
+      if (state === 'idle') {
+        if (countdownTotal === 0) {
+          // Custom: read inputs
+          var m = parseInt(customMin.value) || 0;
+          var s = parseInt(customSec.value) || 0;
+          remaining = m * 60 + s;
+          if (remaining <= 0) return;
+        } else {
+          remaining = countdownTotal;
+        }
+      }
+      state = 'running';
+      lastTick = Date.now();
+      intervalId = setInterval(tickCountdown, 100);
+    } else {
+      state = 'running';
+      lastTick = Date.now();
+      intervalId = setInterval(tickStopwatch, 33);
+    }
+    render();
+  }
+
+  function pauseTimer() {
+    state = 'paused';
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    render();
+  }
+
+  function resetTimer() {
+    state = 'idle';
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    if (mode === 'countdown') {
+      remaining = countdownTotal;
+    } else {
+      stopwatchElapsed = 0;
+      laps = [];
+    }
+    render();
+  }
+
+  function tickCountdown() {
+    var now = Date.now();
+    var delta = Math.floor((now - lastTick) / 1000);
+    if (delta >= 1) {
+      remaining = Math.max(0, remaining - delta);
+      lastTick = now;
+      render();
+      if (remaining <= 0) {
+        completeCountdown();
+      }
+    }
+  }
+
+  function tickStopwatch() {
+    var now = Date.now();
+    stopwatchElapsed += (now - lastTick);
+    lastTick = now;
+    render();
+  }
+
+  function completeCountdown() {
+    pauseTimer();
+    state = 'idle';
+    playBeep();
+    if (window.ClaudeGUI) {
+      window.ClaudeGUI.ui.showNotification('Timer complete!');
+      window.ClaudeGUI.ui.setBadge(null);
+    }
+    render();
+  }
+
+  // ── Audio ──
+  function playBeep() {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Play 3 short beeps
+      [0, 0.3, 0.6].forEach(function(offset) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.value = 0.3;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + offset);
+        osc.stop(ctx.currentTime + offset + 0.15);
+      });
+    } catch(e) { /* audio not available */ }
+  }
+
+  // ── Badge ──
+  function updateBadge() {
+    if (!window.ClaudeGUI) return;
+    if (mode === 'countdown' && state === 'running') {
+      var mins = Math.ceil(remaining / 60);
+      window.ClaudeGUI.ui.setBadge(mins > 0 ? mins : null);
+    } else if (mode === 'stopwatch' && state === 'running') {
+      var mins = Math.floor(stopwatchElapsed / 60000);
+      window.ClaudeGUI.ui.setBadge(mins > 0 ? mins : null);
+    } else {
+      window.ClaudeGUI.ui.setBadge(null);
+    }
+  }
+
+  // ── Events ──
+  modeTabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      if (state !== 'idle') resetTimer();
+      mode = tab.dataset.mode;
+      render();
+    });
+  });
+
+  presetBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (state !== 'idle') resetTimer();
+      presetBtns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      countdownTotal = parseInt(btn.dataset.seconds);
+      remaining = countdownTotal;
+      render();
+    });
+  });
+
+  btnStart.addEventListener('click', function() {
+    if (state === 'idle' || state === 'paused') {
+      startTimer();
+    } else {
+      pauseTimer();
+    }
+  });
+
+  btnLap.addEventListener('click', function() {
+    if (mode === 'stopwatch' && state === 'running') {
+      laps.unshift(stopwatchElapsed);
+      render();
+    }
+  });
+
+  btnReset.addEventListener('click', resetTimer);
+
+  // ── SDK ──
+  function initSdk() {
+    if (!window.ClaudeGUI) {
+      setTimeout(initSdk, 100);
+      return;
+    }
+
+    window.ClaudeGUI.on('init', function(data) {
+      if (data.theme) applyTheme(data.theme);
+    });
+
+    window.ClaudeGUI.theme.onChange(function(theme) {
+      applyTheme(theme);
+    });
+
+    window.ClaudeGUI.onDestroy(function() {
+      if (intervalId) clearInterval(intervalId);
+    });
+  }
+
+  function applyTheme(theme) {
+    if (theme && !theme.isDark) {
+      document.body.classList.add('light');
+    } else {
+      document.body.classList.remove('light');
+    }
+  }
+
+  // ── Init ──
+  remaining = countdownTotal;
+  render();
+  initSdk();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notepad</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --bg-sidebar: #181825;
+    --bg-input: #313244;
+    --text: #cdd6f4;
+    --text-muted: #6c7086;
+    --accent: #f59e0b;
+    --border: #45475a;
+    --hover: #313244;
+    --danger: #f38ba8;
+  }
+  .light {
+    --bg: #ffffff;
+    --bg-sidebar: #f5f5f5;
+    --bg-input: #e8e8e8;
+    --text: #1e1e2e;
+    --text-muted: #888;
+    --border: #ddd;
+    --hover: #eee;
+    --danger: #e74c3c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  .container { display: flex; height: 100%; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 200px;
+    min-width: 200px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sidebar-header span {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+  .btn-new {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-new:hover { opacity: 0.85; }
+  .note-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .note-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    border-left: 3px solid transparent;
+    transition: background 0.1s;
+  }
+  .note-item:hover { background: var(--hover); }
+  .note-item.active {
+    background: var(--hover);
+    border-left-color: var(--accent);
+  }
+  .note-item-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .note-item-date {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+  .btn-delete {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .note-item:hover .btn-delete { opacity: 1; }
+  .btn-delete:hover { color: var(--danger); }
+
+  /* Editor */
+  .editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .editor-title {
+    padding: 12px 16px 8px;
+  }
+  .editor-title input {
+    width: 100%;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .editor-title input::placeholder { color: var(--text-muted); }
+  .editor-content {
+    flex: 1;
+    padding: 0 16px 16px;
+  }
+  .editor-content textarea {
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    font-family: 'Consolas', 'Monaco', monospace;
+    resize: none;
+  }
+  .editor-content textarea::placeholder { color: var(--text-muted); }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    gap: 8px;
+  }
+  .empty-state svg { opacity: 0.3; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Notes</span>
+      <button class="btn-new" id="btnNew">+ New</button>
+    </div>
+    <div class="note-list" id="noteList"></div>
+  </div>
+  <div class="editor" id="editorPane">
+    <div class="empty-state" id="emptyState">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span>Select a note or create a new one</span>
+    </div>
+    <div id="editorActive" style="display:none;flex-direction:column;flex:1;">
+      <div class="editor-title">
+        <input type="text" id="titleInput" placeholder="Note title..." />
+      </div>
+      <div class="editor-content">
+        <textarea id="contentArea" placeholder="Start typing..."></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var instanceId = null;
+  var notes = [];
+  var activeId = null;
+  var saveTimer = null;
+  var STORAGE_PREFIX = 'plugin-notepad-';
+
+  // ── DOM refs ──
+  var noteList = document.getElementById('noteList');
+  var btnNew = document.getElementById('btnNew');
+  var emptyState = document.getElementById('emptyState');
+  var editorActive = document.getElementById('editorActive');
+  var titleInput = document.getElementById('titleInput');
+  var contentArea = document.getElementById('contentArea');
+
+  // ── Storage ──
+  function storageKey() {
+    return STORAGE_PREFIX + (instanceId || 'default');
+  }
+
+  function loadNotes() {
+    try {
+      var raw = localStorage.getItem(storageKey());
+      if (raw) notes = JSON.parse(raw);
+    } catch(e) { notes = []; }
+    if (!notes.length) {
+      // Create a welcome note
+      notes = [{
+        id: 'note-' + Date.now(),
+        title: 'Welcome',
+        content: 'Welcome to Notepad!\n\nCreate notes using the "+ New" button.\nYour notes are auto-saved.',
+        updatedAt: Date.now()
+      }];
+      saveNotes();
+    }
+  }
+
+  function saveNotes() {
+    try {
+      localStorage.setItem(storageKey(), JSON.stringify(notes));
+    } catch(e) { /* quota exceeded */ }
+  }
+
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNotes, 500);
+  }
+
+  // ── Render ──
+  function render() {
+    // Sort by updatedAt descending
+    notes.sort(function(a, b) { return b.updatedAt - a.updatedAt; });
+
+    noteList.innerHTML = '';
+    notes.forEach(function(note) {
+      var div = document.createElement('div');
+      div.className = 'note-item' + (note.id === activeId ? ' active' : '');
+      var date = new Date(note.updatedAt);
+      var dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      div.innerHTML =
+        '<span class="note-item-title">' + escapeHtml(note.title || 'Untitled') + '</span>' +
+        '<span class="note-item-date">' + dateStr + '</span>' +
+        '<button class="btn-delete" title="Delete note">&times;</button>';
+
+      div.addEventListener('click', function(e) {
+        if (e.target.classList.contains('btn-delete')) return;
+        selectNote(note.id);
+      });
+      div.querySelector('.btn-delete').addEventListener('click', function(e) {
+        e.stopPropagation();
+        deleteNote(note.id);
+      });
+      noteList.appendChild(div);
+    });
+
+    // Editor state
+    if (activeId) {
+      var note = notes.find(function(n) { return n.id === activeId; });
+      if (note) {
+        emptyState.style.display = 'none';
+        editorActive.style.display = 'flex';
+        titleInput.value = note.title;
+        contentArea.value = note.content;
+        updateSdkTitle(note.title);
+      } else {
+        activeId = null;
+        render();
+      }
+    } else {
+      emptyState.style.display = 'flex';
+      editorActive.style.display = 'none';
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function selectNote(id) {
+    activeId = id;
+    render();
+    contentArea.focus();
+  }
+
+  function createNote() {
+    var note = {
+      id: 'note-' + Date.now(),
+      title: '',
+      content: '',
+      updatedAt: Date.now()
+    };
+    notes.unshift(note);
+    activeId = note.id;
+    saveNotes();
+    render();
+    titleInput.focus();
+  }
+
+  function deleteNote(id) {
+    notes = notes.filter(function(n) { return n.id !== id; });
+    if (activeId === id) {
+      activeId = notes.length ? notes[0].id : null;
+    }
+    saveNotes();
+    render();
+  }
+
+  function updateActiveNote(field, value) {
+    if (!activeId) return;
+    var note = notes.find(function(n) { return n.id === activeId; });
+    if (!note) return;
+    note[field] = value;
+    note.updatedAt = Date.now();
+    scheduleSave();
+    // Re-render sidebar to update title/date
+    if (field === 'title') {
+      render();
+      updateSdkTitle(value);
+    }
+  }
+
+  function updateSdkTitle(title) {
+    if (window.ClaudeGUI) {
+      window.ClaudeGUI.ui.setTitle(title || 'Notepad');
+    }
+  }
+
+  // ── Events ──
+  btnNew.addEventListener('click', createNote);
+
+  titleInput.addEventListener('input', function() {
+    updateActiveNote('title', titleInput.value);
+  });
+
+  contentArea.addEventListener('input', function() {
+    updateActiveNote('content', contentArea.value);
+  });
+
+  // ── SDK Integration ──
+  function initSdk() {
+    if (!window.ClaudeGUI) {
+      // SDK not loaded yet, try again shortly
+      setTimeout(initSdk, 100);
+      return;
+    }
+
+    window.ClaudeGUI.on('init', function(data) {
+      instanceId = data.instanceId;
+      loadNotes();
+      // Auto-select first note
+      if (notes.length && !activeId) {
+        activeId = notes[0].id;
+      }
+      render();
+
+      // Apply theme
+      if (data.theme) applyTheme(data.theme);
+    });
+
+    window.ClaudeGUI.theme.onChange(function(theme) {
+      applyTheme(theme);
+    });
+
+    window.ClaudeGUI.onDestroy(function() {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveNotes();
+    });
+  }
+
+  function applyTheme(theme) {
+    if (theme && !theme.isDark) {
+      document.body.classList.add('light');
+    } else {
+      document.body.classList.remove('light');
+    }
+  }
+
+  // ── Startup ──
+  // Load notes with default key first (in case SDK init is slow)
+  loadNotes();
+  if (notes.length) {
+    activeId = notes[0].id;
+  }
+  render();
+  initSdk();
+})();
+</script>
+</body>
+</html>
