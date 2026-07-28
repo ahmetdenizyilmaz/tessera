@@ -3,8 +3,10 @@ import { listen } from '@tauri-apps/api/event';
 import { useAuthStore } from '../store/authStore';
 
 export function useRelayEvents() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const offlineMode = useAuthStore((s) => s.offlineMode);
+
   useEffect(() => {
-    const { isAuthenticated, offlineMode } = useAuthStore.getState();
     if (!isAuthenticated || offlineMode) return;
 
     let unlisten: (() => void) | null = null;
@@ -27,5 +29,5 @@ export function useRelayEvents() {
       isMounted = false;
       if (unlisten) unlisten();
     };
-  }, []);
+  }, [isAuthenticated, offlineMode]);
 }

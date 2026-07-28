@@ -21,5 +21,21 @@ export default defineConfig({
   build: {
     target: 'esnext',
     minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          pixi: ['pixi.js'],
+          recharts: ['recharts'],
+          highlight: ['react-syntax-highlighter', 'highlight.js'],
+          xterm: [
+            '@xterm/xterm',
+            '@xterm/addon-fit',
+            '@xterm/addon-search',
+            '@xterm/addon-serialize',
+            '@xterm/addon-web-links',
+          ],
+        },
+      },
+    },
   },
 });

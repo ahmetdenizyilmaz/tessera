@@ -4,7 +4,9 @@ import { ProjectBrowser } from '../projects/ProjectBrowser';
 import { ClaudeMdEditor } from '../projects/ClaudeMdEditor';
 import AgentList from '../agents/AgentList';
 import { McpManager } from '../mcp/McpManager';
-import UsageDashboard from '../analytics/UsageDashboard';
+import { lazy, Suspense } from 'react';
+// Lazy: UsageDashboard drags in recharts — keep it out of the startup chunk
+const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import { useLayoutStore, sidebarDragState, detectSnapZone } from '../../store/layoutStore';
 import type { ProjectInfo } from '../../store/projectStore';
@@ -159,7 +161,7 @@ export function Sidebar() {
       case 'mcp':
         return <McpManager />;
       case 'analytics':
-        return <UsageDashboard />;
+        return <Suspense fallback={null}><UsageDashboard /></Suspense>;
       case 'timeline':
         return focusedId
           ? <CheckpointTimeline instanceId={focusedId} />

@@ -1,11 +1,14 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { homeDir } from '@tauri-apps/api/path';
 import { useSystemMonitor } from './hooks/useSystemMonitor';
 import { useUsagePolling } from './hooks/useUsagePolling';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useWorkerActivity } from './hooks/useWorkerActivity';
 import { MenuBar } from './components/menubar/MenuBar';
-import { OfficeView } from './components/office/OfficeView';
+// Lazy: OfficeView drags in pixi.js (~500KB) — keep it out of the startup chunk
+const OfficeView = lazy(() =>
+  import('./components/office/OfficeView').then((m) => ({ default: m.OfficeView })),
+);
 import { TabBar } from './components/tabs/TabBar';
 import { MosaicLayout } from './components/layout/MosaicLayout';
 import { Sidebar } from './components/layout/Sidebar';
@@ -203,7 +206,9 @@ export default function App() {
             </div>
           </>
         ) : (
-          <OfficeView onBack={() => setViewMode('panels')} />
+          <Suspense fallback={null}>
+            <OfficeView onBack={() => setViewMode('panels')} />
+          </Suspense>
         )}
 
         <StatusBar

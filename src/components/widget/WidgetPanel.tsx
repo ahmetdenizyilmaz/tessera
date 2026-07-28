@@ -3,7 +3,8 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import AgentList from '../agents/AgentList';
 import { McpManager } from '../mcp/McpManager';
-import UsageDashboard from '../analytics/UsageDashboard';
+import { lazy, Suspense } from 'react';
+const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
@@ -34,7 +35,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
       case 'mcp':
         return <McpManager />;
       case 'analytics':
-        return <UsageDashboard />;
+        return <Suspense fallback={null}><UsageDashboard /></Suspense>;
       case 'timeline': {
         // Show timeline for the focused non-widget panel, or first available
         const layoutState = useLayoutStore.getState();

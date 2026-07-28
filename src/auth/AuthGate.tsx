@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useAuthStore } from '../store/authStore';
 import { useRelaySync } from '../hooks/useRelaySync';
 import { useRelayEvents } from '../hooks/useRelayEvents';
@@ -9,7 +10,10 @@ interface AuthGateProps {
   children: React.ReactNode;
 }
 
-// Wrapper that activates relay hooks when authenticated
+// Relay hooks are always mounted and no-op internally while unauthenticated —
+// keeping the element tree shape stable so <App> never unmounts/remounts on an
+// auth transition (a remount would duplicate restored instances and destroy
+// every terminal).
 const OnlineApp: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useRelaySync();
   useRelayEvents();
@@ -18,7 +22,7 @@ const OnlineApp: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [checking, setChecking] = useState(true);
-  const { isAuthenticated, offlineMode, setAuth, goOffline } = useAuthStore();
+  const { setAuth, goOffline } = useAuthStore();
 
   useEffect(() => {
     let mounted = true;
@@ -29,8 +33,11 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
         if (!mounted) return;
 
         if (user) {
-          const token = await invoke<string | null>('get_access_token');
-          const serverUrl = await invoke<string | null>('get_server_url');
+          // Both hit the (slow on Windows) OS keyring — run them in parallel
+          const [token, serverUrl] = await Promise.all([
+            invoke<string | null>('get_access_token'),
+            invoke<string | null>('get_server_url'),
+          ]);
 
           if (token && serverUrl) {
             setAuth(user, token, serverUrl);
@@ -54,6 +61,18 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     return () => { mounted = false; };
   }, [setAuth, goOffline]);
 
+  // The window starts hidden (tauri.conf.json visible:false) so the user
+  // never sees an unpainted white surface. Reveal once React has painted.
+  useEffect(() => {
+    if (checking) return;
+    let raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => {
+        getCurrentWindow().show().catch(() => {});
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [checking]);
+
   if (checking) {
     return (
       <div style={{
@@ -71,19 +90,9 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     );
   }
 
-  // Authenticated: wrap with relay hooks
-  if (isAuthenticated && !offlineMode) {
-    return (
-      <ErrorBoundary>
-        <OnlineApp>{children}</OnlineApp>
-      </ErrorBoundary>
-    );
-  }
-
-  // Offline mode: render app directly
   return (
     <ErrorBoundary>
-      {children}
+      <OnlineApp>{children}</OnlineApp>
     </ErrorBoundary>
   );
 };

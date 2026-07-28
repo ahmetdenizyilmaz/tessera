@@ -24,6 +24,21 @@ pub fn run() {
     let database = Database::new().expect("Failed to initialize database");
 
     tauri::Builder::default()
+        .setup(|app| {
+            // Failsafe: the main window starts hidden and the frontend shows
+            // it once painted. If the frontend crashes before that, reveal
+            // the window anyway so the app isn't invisibly stuck.
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if !window.is_visible().unwrap_or(true) {
+                        let _ = window.show();
+                    }
+                });
+            }
+            Ok(())
+        })
         .manage(PtyManager::new())
         .manage(RelayClient::new())
         .manage(StreamJsonManager::new())
