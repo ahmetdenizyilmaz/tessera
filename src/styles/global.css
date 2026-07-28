@@ -110,8 +110,9 @@ body,
   user-select: none;
   -webkit-user-select: none;
   padding: 0 4px;
-  /* Tabs must never paint outside the bar (over panel toolbars below) */
-  overflow: hidden;
+  /* NOTE: no overflow:hidden here — the + and ⌄ dropdown menus open from
+     inside the bar and must be able to extend below it. Tab bleed is
+     contained by .tab-bar-tabs (overflow-y: hidden). */
 }
 
 .tab-bar-tabs {
