@@ -283,6 +283,9 @@
 }
 
 .view-layer.hidden {
+  /* visibility (not just opacity) stops paint/hit-testing for hidden xterm
+     canvases while keeping layout so FitAddon still measures correctly */
+  visibility: hidden;
   opacity: 0;
   pointer-events: none;
   z-index: 0;

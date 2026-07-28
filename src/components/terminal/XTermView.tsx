@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { usePty, isPtySpawned } from '../../hooks/usePty';
@@ -21,15 +22,35 @@ const bgPtyBuffers: Map<string, { chunks: string[]; cancel: () => void }> =
   (globalThis as Record<string, unknown>).__bgPtyBuffers as Map<string, { chunks: string[]; cancel: () => void }> ??
   ((globalThis as Record<string, unknown>).__bgPtyBuffers = new Map());
 
+/** Cap for output buffered while a panel is unmounted — Claude's TUI redraws
+ *  can produce KB/s per instance and an hour in another view must not hold
+ *  hundreds of MB of strings. On overflow the oldest chunks are dropped and a
+ *  trim marker is prepended on replay. */
+const BG_BUFFER_MAX_BYTES = 1024 * 1024;
+const BG_TRIM_MARKER = '\r\n\x1b[2m[… output trimmed while panel was hidden …]\x1b[0m\r\n';
+
 function startBackgroundBuffering(instanceId: string) {
   if (bgPtyBuffers.has(instanceId)) return;
 
   const chunks: string[] = [];
+  let totalBytes = 0;
+  let trimmed = false;
   let unlistenFn: (() => void) | null = null;
   let cancelled = false;
 
   listen<string>(`pty-data-${instanceId}`, (event) => {
-    if (!cancelled) chunks.push(event.payload);
+    if (cancelled) return;
+    chunks.push(event.payload);
+    totalBytes += event.payload.length;
+    while (totalBytes > BG_BUFFER_MAX_BYTES && chunks.length > 1) {
+      totalBytes -= chunks[0].length;
+      chunks.shift();
+      trimmed = true;
+    }
+    if (trimmed && chunks[0] !== BG_TRIM_MARKER) {
+      chunks.unshift(BG_TRIM_MARKER);
+      totalBytes += BG_TRIM_MARKER.length;
+    }
   }).then((fn) => {
     if (cancelled) { fn(); return; }
     unlistenFn = fn;
@@ -150,10 +171,12 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
     const webLinksAddon = new WebLinksAddon();
+    const serializeAddon = new SerializeAddon();
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(webLinksAddon);
+    terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
     termRef.current = terminal;
@@ -288,19 +311,28 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       });
     }
 
-    // ResizeObserver -> fit + pty_resize
+    // ResizeObserver -> fit immediately (visual feel), but debounce the
+    // pty_resize IPC 100ms trailing — a gutter drag fires the observer every
+    // pointer-move frame, and each ConPTY resize makes the CLI redraw its
+    // whole TUI, feeding back into the output event storm.
+    let resizeDebounce: number | null = null;
     const resizeObserver = new ResizeObserver(() => {
       if (!isMountedRef.current) return;
       try {
         fitAddon.fit();
+      } catch {
+        // Ignore fit errors
+      }
+      if (resizeDebounce !== null) clearTimeout(resizeDebounce);
+      resizeDebounce = window.setTimeout(() => {
+        resizeDebounce = null;
+        if (!isMountedRef.current) return;
         const c = terminal.cols;
         const r = terminal.rows;
         if (c > 0 && r > 0) {
           resize(c, r);
         }
-      } catch {
-        // Ignore resize errors
-      }
+      }, 100);
     });
     resizeObserver.observe(container);
 
@@ -311,18 +343,22 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         clearInterval(retryIntervalRef.current);
         retryIntervalRef.current = null;
       }
+      if (resizeDebounce !== null) {
+        clearTimeout(resizeDebounce);
+        resizeDebounce = null;
+      }
       resizeObserver.disconnect();
 
-      // Save terminal buffer content before disposing
-      const buf = terminal.buffer;
-      const lines: string[] = [];
-      for (let i = 0; i < buf.active.length; i++) {
-        const line = buf.active.getLine(i);
-        if (line) lines.push(line.translateToString(true));
-      }
-      const serialized = lines.join('\r\n');
-      if (serialized.trim()) {
-        terminalBuffers.set(instanceId, serialized);
+      // Save terminal buffer content before disposing. SerializeAddon
+      // preserves colors/attributes and avoids the O(scrollback) manual
+      // line-by-line extraction.
+      try {
+        const serialized = serializeAddon.serialize();
+        if (serialized.trim()) {
+          terminalBuffers.set(instanceId, serialized);
+        }
+      } catch {
+        // Serialization is best-effort — worse case the remount starts blank
       }
 
       // Start background PTY buffering if PTY is still alive

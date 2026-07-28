@@ -234,12 +234,48 @@ pub async fn pty_spawn(
         instances.insert(id.clone(), instance);
     }
 
+    // Emitter thread: coalesces decoded chunks (5ms window / 64KB cap) into
+    // pty-data events. A Claude TUI redraw storm produces hundreds of small
+    // reads per second — one Tauri event per read floods the WebView2 IPC.
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    {
+        let emitter_id = id.clone();
+        let emitter_app = app.clone();
+        let emitter_suppress = suppress_events.clone();
+        std::thread::spawn(move || {
+            const COALESCE_MS: u64 = 5;
+            const BATCH_MAX_BYTES: usize = 64 * 1024;
+            loop {
+                let first = match rx.recv() {
+                    Ok(t) => t,
+                    Err(_) => break,
+                };
+                let mut batch = first;
+                let deadline = std::time::Instant::now()
+                    + std::time::Duration::from_millis(COALESCE_MS);
+                while batch.len() < BATCH_MAX_BYTES {
+                    let now = std::time::Instant::now();
+                    if now >= deadline {
+                        break;
+                    }
+                    match rx.recv_timeout(deadline - now) {
+                        Ok(t) => batch.push_str(&t),
+                        Err(_) => break,
+                    }
+                }
+                if !emitter_suppress.load(Ordering::Relaxed) {
+                    let _ = emitter_app.emit(&format!("pty-data-{}", emitter_id), &batch);
+                }
+            }
+            // Channel closed → reader finished → signal exit
+            let _ = emitter_app.emit(&format!("pty-exit-{}", emitter_id), ());
+        });
+    }
+
     // Reader thread - MUST be std::thread, NOT tokio::spawn (portable-pty uses blocking I/O)
     let reader_id = id.clone();
     let reader_buffer = output_buffer.clone();
     let reader_kill = kill_flag.clone();
-    let reader_suppress = suppress_events.clone();
-    let reader_app = app.clone();
 
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
@@ -298,10 +334,9 @@ pub async fn pty_spawn(
                         }
                     }
 
-                    // Emit event unless suppressed
-                    if !reader_suppress.load(Ordering::Relaxed) {
-                        let event_name = format!("pty-data-{}", reader_id);
-                        let _ = reader_app.emit(&event_name, &text);
+                    // Hand off to the coalescing emitter thread
+                    if tx.send(text).is_err() {
+                        break;
                     }
                 }
                 Err(_) => break,
@@ -315,16 +350,12 @@ pub async fn pty_spawn(
                 if let Ok(mut buffer) = reader_buffer.lock() {
                     buffer.extend_from_slice(text.as_bytes());
                 }
-                if !reader_suppress.load(Ordering::Relaxed) {
-                    let event_name = format!("pty-data-{}", reader_id);
-                    let _ = reader_app.emit(&event_name, &text);
-                }
+                let _ = tx.send(text);
             }
         }
 
-        // Emit exit event
-        let exit_event = format!("pty-exit-{}", reader_id);
-        let _ = reader_app.emit(&exit_event, ());
+        // Dropping tx ends the emitter thread, which emits pty-exit
+        let _ = reader_id;
     });
 
     Ok(())

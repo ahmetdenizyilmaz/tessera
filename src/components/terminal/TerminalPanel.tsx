@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { cleanupPty } from '../../hooks/usePty';
+import { cleanupPty, isPtySpawned } from '../../hooks/usePty';
 import { destroyTerminal } from '../../hooks/useTerminal';
 import { invoke } from '@tauri-apps/api/core';
 import { XTermView, clearTerminalState } from './XTermView';
@@ -55,6 +55,10 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   const setColor = useInstanceStore((s) => s.setColor);
 
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
+  // Lazy PTY: the interactive claude terminal only spawns once the Terminal
+  // tab is first opened (N chat-only panels must not mean N idle claude.exe).
+  // Initializer checks isPtySpawned so a group-move remount keeps the terminal.
+  const [termMounted, setTermMounted] = useState(() => isPtySpawned(instanceId));
   const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto');
   const setModel = useInstanceStore((s) => s.setModel);
@@ -273,7 +277,10 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
             </button>
             <button
               className={viewMode === 'terminal' ? 'active' : ''}
-              onClick={() => setViewMode('terminal')}
+              onClick={() => {
+                setTermMounted(true);
+                setViewMode('terminal');
+              }}
             >
               Terminal
             </button>
@@ -311,10 +318,13 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
             <ChatView instanceId={instanceId} isVisible={viewMode === 'chat'} />
           </div>
 
-          {/* Terminal (xterm.js) -- always mounted to keep PTY alive */}
-          <div className={`view-layer ${viewMode === 'terminal' ? 'visible' : 'hidden'}`}>
-            <XTermView instanceId={instanceId} isVisible={viewMode === 'terminal'} />
-          </div>
+          {/* Terminal (xterm.js) — mounted on first Terminal-tab activation,
+              then kept mounted so the PTY stays alive across tab switches */}
+          {termMounted && (
+            <div className={`view-layer ${viewMode === 'terminal' ? 'visible' : 'hidden'}`}>
+              <XTermView instanceId={instanceId} isVisible={viewMode === 'terminal'} />
+            </div>
+          )}
         </div>
 
         {/* Checkpoint sidebar panel */}

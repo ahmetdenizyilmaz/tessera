@@ -10,6 +10,11 @@ const spawnedPtys = new Map<string, PtyState>();
 // Track exit listener cleanup functions
 const exitListeners = new Map<string, () => void>();
 
+// Per-instance write chains: Tauri dispatches async commands onto a
+// multi-threaded runtime, so independent invokes have no ordering guarantee —
+// chaining serializes keystrokes.
+const writeChains = new Map<string, Promise<void>>();
+
 function registerExitListener(id: string) {
   // Avoid duplicate listeners
   if (exitListeners.has(id)) return;
@@ -89,11 +94,14 @@ export function usePty(instanceId: string) {
   };
 
   const write = async (data: string) => {
-    try {
-      await invoke('pty_write', { id: instanceId, data });
-    } catch (err) {
-      console.error(`Failed to write to PTY ${instanceId}:`, err);
-    }
+    const prev = writeChains.get(instanceId) ?? Promise.resolve();
+    const next = prev.then(() =>
+      invoke<void>('pty_write', { id: instanceId, data }).catch((err) => {
+        console.error(`Failed to write to PTY ${instanceId}:`, err);
+      }),
+    );
+    writeChains.set(instanceId, next);
+    await next;
   };
 
   const resize = async (cols: number, rows: number) => {
@@ -132,6 +140,7 @@ export function usePty(instanceId: string) {
 // Export for external cleanup — also attempts pty_kill as safety net
 export function cleanupPty(id: string) {
   spawnedPtys.delete(id);
+  writeChains.delete(id);
   // Clean up exit listener
   const cleanup = exitListeners.get(id);
   if (cleanup) {
