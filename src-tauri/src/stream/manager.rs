@@ -200,6 +200,9 @@ fn ensure_process(
     cmd.arg("--verbose");
     cmd.arg("--input-format").arg("stream-json");
     cmd.arg("--output-format").arg("stream-json");
+    // Token-level streaming — deltas arrive wrapped as
+    // {"type":"stream_event","event":{...}} and are unwrapped in the frontend
+    cmd.arg("--include-partial-messages");
 
     if let Some(ref sid) = resume_sid {
         cmd.arg("--resume").arg(sid);
@@ -523,12 +526,55 @@ pub async fn stream_configure(
     Ok(())
 }
 
+/// Build the user-message content: plain string, or a content-block array
+/// when images are attached (base64-embedded, as the API expects).
+fn build_user_content(message: &str, images: Option<Vec<String>>) -> serde_json::Value {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let paths = match images {
+        Some(p) if !p.is_empty() => p,
+        _ => return serde_json::Value::String(message.to_string()),
+    };
+
+    let mut blocks: Vec<serde_json::Value> = Vec::new();
+    if !message.trim().is_empty() {
+        blocks.push(serde_json::json!({ "type": "text", "text": message }));
+    }
+    for path in paths {
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                let ext = std::path::Path::new(&path)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_lowercase());
+                let media_type = match ext.as_deref() {
+                    Some("jpg") | Some("jpeg") => "image/jpeg",
+                    Some("gif") => "image/gif",
+                    Some("webp") => "image/webp",
+                    _ => "image/png",
+                };
+                blocks.push(serde_json::json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": STANDARD.encode(&bytes)
+                    }
+                }));
+            }
+            Err(e) => eprintln!("[stream] failed to read image {}: {}", path, e),
+        }
+    }
+    serde_json::Value::Array(blocks)
+}
+
 /// Send a user turn. Spawns the persistent process lazily on first use and
 /// respawns (resuming the session) if the previous process died.
 #[tauri::command]
 pub async fn stream_send_message(
     id: String,
     message: String,
+    images: Option<Vec<String>>,
     app: AppHandle,
     state: tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
@@ -536,7 +582,7 @@ pub async fn stream_send_message(
 
     let payload = serde_json::json!({
         "type": "user",
-        "message": { "role": "user", "content": message }
+        "message": { "role": "user", "content": build_user_content(&message, images) }
     });
 
     let stdin = get_stdin(&state, &id)?;

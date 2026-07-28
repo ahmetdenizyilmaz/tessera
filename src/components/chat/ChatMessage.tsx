@@ -37,6 +37,15 @@ const UserMessage: React.FC<{ message: AccumulatedUserMessage }> = ({ message })
       </div>
       <div className="msg-body msg-body--user">
         <p className="msg-user-text">{message.text}</p>
+        {message.images && message.images.length > 0 && (
+          <div className="msg-user-images">
+            {message.images.map((path) => (
+              <span key={path} className="msg-user-image-chip" title={path}>
+                {'📷'} {path.split(/[\\/]/).pop()}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

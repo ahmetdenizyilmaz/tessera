@@ -13,16 +13,6 @@ import { isUserMessage } from '../../types/stream';
 import { ClaudeIcon } from '../icons/ProviderIcons';
 import type { SessionInfo } from '../../types/session';
 
-// All built-in Claude Code slash commands are interactive-only.
-// In -p (print) mode the CLI treats /cmd as a skill lookup and returns
-// "Unknown skill: cmd" for every built-in. Only user/project .md skills work.
-const TERMINAL_ONLY_COMMANDS = new Set([
-  '/help', '/compact', '/config', '/cost', '/usage',
-  '/model', '/status', '/review', '/init', '/memory',
-  '/permissions', '/doctor', '/bug', '/pr_comments',
-  '/release-notes', '/vim', '/terminal-setup', '/login', '/logout',
-]);
-
 // ---- Constants ----
 const SESSION_SCAN_DELAY_MS = 2500;
 const SESSION_SCAN_RETRY_MS = 3000;
@@ -255,9 +245,9 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
 
   // ---- Send message ----
   const handleSend = useCallback(
-    (messageText: string) => {
+    (messageText: string, images?: string[]) => {
       const trimmed = messageText.trim();
-      if (!trimmed) return;
+      if (!trimmed && (!images || images.length === 0)) return;
 
       // /clear — real clear: end the CLI process (its context dies with it),
       // wipe the transcript, and forget the session id. The next send starts
@@ -270,25 +260,10 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
         return;
       }
 
-      // Commands that only work in interactive (terminal) mode
-      const cmd = trimmed.split(/\s/)[0].toLowerCase();
-      if (TERMINAL_ONLY_COMMANDS.has(cmd)) {
-        useChatStore.getState().processEvent(instanceId, {
-          type: 'assistant',
-          message: {
-            id: `local-${Date.now()}`,
-            role: 'assistant',
-            model: '',
-            content: [{
-              type: 'text',
-              text: `\`${cmd}\` only works in interactive mode. Switch to the **Terminal** tab to use it.`,
-            }],
-          },
-        } as any);
-        return;
-      }
-
-      send(trimmed);
+      // All other input — including slash commands — goes to the CLI. The
+      // user's message always appears in the transcript, and the CLI's own
+      // reply/error renders via the result path.
+      send(trimmed, images);
     },
     [send, instanceId],
   );

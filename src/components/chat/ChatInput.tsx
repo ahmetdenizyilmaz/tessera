@@ -20,26 +20,26 @@ const draftStore = new Map<string, string>();
 const MAX_SLASH_CACHE_SIZE = 20;
 const slashCommandCacheMap = new Map<string, Array<{ name: string; description: string; scope: string }>>();
 const FALLBACK_SLASH_COMMANDS = [
-  { name: '/help', description: 'Show help and available commands [terminal]', scope: 'builtin' },
+  { name: '/help', description: 'Show help and available commands', scope: 'builtin' },
   { name: '/clear', description: 'Clear conversation history and free context', scope: 'builtin' },
-  { name: '/compact', description: 'Compact conversation to save context [terminal]', scope: 'builtin' },
-  { name: '/config', description: 'View or modify Claude Code configuration [terminal]', scope: 'builtin' },
-  { name: '/cost', description: 'Show token usage and cost for this session [terminal]', scope: 'builtin' },
-  { name: '/usage', description: 'View token usage for the current billing month [terminal]', scope: 'builtin' },
-  { name: '/model', description: 'Set or switch the AI model [terminal]', scope: 'builtin' },
-  { name: '/status', description: 'Show account and system status [terminal]', scope: 'builtin' },
-  { name: '/review', description: 'Ask Claude to do a code review [terminal]', scope: 'builtin' },
-  { name: '/init', description: 'Initialize project by creating CLAUDE.md [terminal]', scope: 'builtin' },
-  { name: '/memory', description: 'Edit CLAUDE.md memory files [terminal]', scope: 'builtin' },
-  { name: '/permissions', description: 'View or update tool permissions [terminal]', scope: 'builtin' },
-  { name: '/doctor', description: 'Check Claude Code installation health [terminal]', scope: 'builtin' },
-  { name: '/bug', description: 'Report a bug to Anthropic [terminal]', scope: 'builtin' },
-  { name: '/pr_comments', description: 'Get comments on the current pull request [terminal]', scope: 'builtin' },
-  { name: '/release-notes', description: 'View latest Claude Code release notes [terminal]', scope: 'builtin' },
-  { name: '/vim', description: 'Toggle vim keybindings mode [terminal]', scope: 'builtin' },
-  { name: '/terminal-setup', description: 'Install Shift+Enter key binding for newlines [terminal]', scope: 'builtin' },
-  { name: '/login', description: 'Switch Anthropic accounts [terminal]', scope: 'builtin' },
-  { name: '/logout', description: 'Logout from your Anthropic account [terminal]', scope: 'builtin' },
+  { name: '/compact', description: 'Compact conversation to save context', scope: 'builtin' },
+  { name: '/config', description: 'View or modify Claude Code configuration', scope: 'builtin' },
+  { name: '/cost', description: 'Show token usage and cost for this session', scope: 'builtin' },
+  { name: '/usage', description: 'View token usage for the current billing month', scope: 'builtin' },
+  { name: '/model', description: 'Set or switch the AI model', scope: 'builtin' },
+  { name: '/status', description: 'Show account and system status', scope: 'builtin' },
+  { name: '/review', description: 'Ask Claude to do a code review', scope: 'builtin' },
+  { name: '/init', description: 'Initialize project by creating CLAUDE.md', scope: 'builtin' },
+  { name: '/memory', description: 'Edit CLAUDE.md memory files', scope: 'builtin' },
+  { name: '/permissions', description: 'View or update tool permissions', scope: 'builtin' },
+  { name: '/doctor', description: 'Check Claude Code installation health', scope: 'builtin' },
+  { name: '/bug', description: 'Report a bug to Anthropic', scope: 'builtin' },
+  { name: '/pr_comments', description: 'Get comments on the current pull request', scope: 'builtin' },
+  { name: '/release-notes', description: 'View latest Claude Code release notes', scope: 'builtin' },
+  { name: '/vim', description: 'Toggle vim keybindings mode', scope: 'builtin' },
+  { name: '/terminal-setup', description: 'Install Shift+Enter key binding for newlines', scope: 'builtin' },
+  { name: '/login', description: 'Switch Anthropic accounts', scope: 'builtin' },
+  { name: '/logout', description: 'Logout from your Anthropic account', scope: 'builtin' },
 ];
 
 /** Call when an instance is permanently closed to free the draft memory. */
@@ -56,12 +56,13 @@ interface PendingImage {
 interface QueuedMessage {
   id: string;
   text: string;
+  images?: string[];
   timestamp: number;
 }
 
 interface ChatInputProps {
   instanceId: string;
-  onSend: (text: string) => void;
+  onSend: (text: string, images?: string[]) => void;
   isReady: boolean;
   isStreaming?: boolean;
 }
@@ -116,7 +117,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
     if (!isStreaming && messageQueue.length > 0) {
       const [next, ...rest] = messageQueue;
       setMessageQueue(rest);
-      onSend(next.text);
+      onSend(next.text, next.images);
     }
   }, [isStreaming, messageQueue, onSend]);
 
@@ -159,16 +160,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
       message = `${mentions}\n${message}`;
     }
 
-    if (images.length > 0) {
-      const paths = images.map((img) => img.path).join(', ');
-      message += `\n\n[Images: ${paths}]`;
-    }
+    // Images travel as real content blocks (base64) via the Rust side —
+    // never as a literal "[Images: path]" text tag.
+    const imagePaths = images.length > 0 ? images.map((img) => img.path) : undefined;
 
     if (isStreaming) {
       // Queue message
-      setMessageQueue(prev => [...prev, { id: crypto.randomUUID(), text: message, timestamp: Date.now() }]);
+      setMessageQueue(prev => [...prev, { id: crypto.randomUUID(), text: message, images: imagePaths, timestamp: Date.now() }]);
     } else {
-      onSend(message);
+      onSend(message, imagePaths);
     }
     setValue('');
     draftStore.delete(instanceId);
@@ -201,16 +201,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
       clearFiles();
     }
 
-    // Check for / slash command trigger (only at start of line)
-    if (newValue.startsWith('/')) {
-      const query = newValue.slice(1).split(/\s/)[0] ?? '';
-      if (!newValue.includes(' ')) {
-        setSlashState({ active: true, query, selectedIndex: 0 });
-        setMentionState(s => ({ ...s, active: false }));
-        return;
-      }
+    // Check for / slash command trigger (only while typing the command name —
+    // close the popup as soon as a space is typed)
+    if (newValue.startsWith('/') && !newValue.includes(' ')) {
+      const query = newValue.slice(1);
+      setSlashState({ active: true, query, selectedIndex: 0 });
+      setMentionState(s => ({ ...s, active: false }));
+      return;
     }
-    if (slashState.active && !newValue.startsWith('/')) {
+    if (slashState.active) {
       setSlashState(s => ({ ...s, active: false }));
     }
   }, [instanceId, mentionState.active, slashState.active, searchFiles, clearFiles]);
@@ -268,7 +267,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
         }
       }
 
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // isComposing guard: on Turkish dead-key (â, î, û) and CJK IME
+      // composition, Enter commits the composed character — it must not send.
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSend();
       }

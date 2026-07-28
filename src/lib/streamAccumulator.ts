@@ -28,6 +28,9 @@ export class StreamAccumulator {
   private currentBlocks: Map<number, AccumulatedBlock> = new Map();
   /** tool_use id → location in allMessages, for linking tool_result events */
   private toolUseLoc: Map<string, { msg: number; block: number }> = new Map();
+  /** Message ids that arrived via the partial-streaming path — their complete
+   *  `assistant` events only contribute usage/stop_reason, not content */
+  private streamedIds: Set<string> = new Set();
   private localCounter = 0;
 
   /** Write a fresh snapshot of the working message into allMessages */
@@ -51,6 +54,7 @@ export class StreamAccumulator {
           blocks: [],
           isStreaming: true,
         };
+        this.streamedIds.add(event.message.id);
         this.currentBlocks.clear();
         this.allMessages = [...this.allMessages, this.current];
         this.currentIdx = this.allMessages.length - 1;
@@ -180,6 +184,28 @@ export class StreamAccumulator {
    */
   addCompleteMessage(event: StreamAssistantMessage): void {
     const { message } = event;
+
+    // Already rendered token-by-token via the streaming path — the complete
+    // event would duplicate the content. Merge usage/stop_reason only.
+    if (this.streamedIds.has(message.id)) {
+      for (let i = this.allMessages.length - 1; i >= 0; i--) {
+        const m = this.allMessages[i];
+        if ('blocks' in m && m.id === message.id) {
+          const merged: AccumulatedMessage = {
+            ...m,
+            isStreaming: false,
+            stopReason: message.stop_reason ?? m.stopReason,
+            usage: message.usage ?? m.usage,
+          };
+          const next = [...this.allMessages];
+          next[i] = merged;
+          this.allMessages = next;
+          break;
+        }
+      }
+      return;
+    }
+
     const newBlocks: AccumulatedBlock[] = message.content.map((c) => {
       if (c.type === 'tool_use') {
         return {
@@ -304,5 +330,6 @@ export class StreamAccumulator {
     this.currentIdx = null;
     this.currentBlocks.clear();
     this.toolUseLoc.clear();
+    this.streamedIds.clear();
   }
 }

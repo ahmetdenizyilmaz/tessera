@@ -25,7 +25,12 @@ declare global {
 
 export function initStreamBridge() {
   window.__streamPush = (instanceId: string, line: string) => {
-    const parsed = parseLine(line);
+    let parsed = parseLine(line);
+    // --include-partial-messages wraps deltas: {"type":"stream_event","event":{...}}
+    if (parsed && (parsed as { type: string }).type === 'stream_event') {
+      const inner = (parsed as unknown as { event?: { type?: string } }).event;
+      parsed = inner && typeof inner.type === 'string' ? (inner as typeof parsed) : null;
+    }
     if (parsed) {
       useChatStore.getState().processEvent(instanceId, parsed);
 

@@ -33,7 +33,7 @@ interface ChatState {
   sessions: Map<string, ChatSession>;
   initSession: (instanceId: string) => void;
   processEvent: (instanceId: string, event: StreamEvent) => void;
-  addUserMessage: (instanceId: string, text: string) => void;
+  addUserMessage: (instanceId: string, text: string, images?: string[]) => void;
   clearError: (instanceId: string) => void;
   pushCliWarning: (instanceId: string, warning: string) => void;
   clearPermission: (instanceId: string) => void;
@@ -208,7 +208,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  addUserMessage: (instanceId, text) => {
+  addUserMessage: (instanceId, text, images) => {
     set((state) => {
       const next = new Map(state.sessions);
       const session = ensureSession(next, instanceId);
@@ -218,6 +218,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: 'user',
         text,
         timestamp: Date.now(),
+        ...(images && images.length > 0 ? { images } : {}),
       };
 
       session.accumulator.addUserMessage(userMsg);

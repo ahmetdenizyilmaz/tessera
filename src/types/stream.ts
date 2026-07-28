@@ -235,6 +235,8 @@ export interface AccumulatedUserMessage {
   role: 'user';
   text: string;
   timestamp: number;
+  /** Paths of images attached to this message */
+  images?: string[];
 }
 
 // System note rendered inline in the transcript (turn failures, notices)

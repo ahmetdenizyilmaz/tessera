@@ -31,7 +31,7 @@ interface UseStreamJsonReturn {
   /** Register/refresh the instance config on the Rust side (idempotent —
    *  the process itself spawns lazily on the first send). */
   spawn: (cwd: string, options?: SpawnOptions) => Promise<void>;
-  send: (message: string) => Promise<void>;
+  send: (message: string, images?: string[]) => Promise<void>;
   /** Answer a pending control request (permission / AskUserQuestion / plan) */
   respondControl: (requestId: string, response: ControlResponsePayload) => Promise<void>;
   /** Abort the current turn — the process survives and stays resumable */
@@ -75,17 +75,21 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
     });
   }, [instanceId, initSession]);
 
-  const send = useCallback(async (message: string) => {
+  const send = useCallback(async (message: string, images?: string[]) => {
     if (sendingRef.current) {
       console.warn(`[useStreamJson:${instanceId}] send already in progress, ignoring`);
       return;
     }
     sendingRef.current = true;
-    addUserMessage(instanceId, message);
+    addUserMessage(instanceId, message, images);
     setStreaming(instanceId, true);
     clearError(instanceId);
     try {
-      await invoke('stream_send_message', { id: instanceId, message });
+      await invoke('stream_send_message', {
+        id: instanceId,
+        message,
+        images: images && images.length > 0 ? images : null,
+      });
     } catch (err) {
       console.error(`[useStreamJson:${instanceId}] send failed:`, err);
       useChatStore.setState((state) => {
