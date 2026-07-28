@@ -13,6 +13,9 @@ interface SpawnOptions {
   systemPrompt?: string;
   sessionId?: string;
   mcpConfigPath?: string;
+  permissionMode?: string;
+  allowedTools?: string[];
+  dangerouslySkipPermissions?: boolean;
 }
 
 interface UseStreamJsonReturn {
@@ -40,6 +43,7 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
   const initSession = useChatStore((s) => s.initSession);
   const addUserMessage = useChatStore((s) => s.addUserMessage);
   const clearPermission = useChatStore((s) => s.clearPermission);
+  const clearError = useChatStore((s) => s.clearError);
   const setStreaming = useChatStore((s) => s.setStreaming);
   const sendingRef = useRef(false);
 
@@ -53,6 +57,9 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
       systemPrompt: options?.systemPrompt || null,
       sessionId: options?.sessionId || null,
       mcpConfigPath: options?.mcpConfigPath || null,
+      permissionMode: options?.permissionMode || null,
+      allowedTools: options?.allowedTools && options.allowedTools.length > 0 ? options.allowedTools : null,
+      dangerouslySkipPermissions: options?.dangerouslySkipPermissions ?? false,
     });
   }, [instanceId, initSession]);
 
@@ -65,6 +72,7 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
     addUserMessage(instanceId, message);
     setStreaming(instanceId, true);
     clearPermission(instanceId);
+    clearError(instanceId);
     try {
       await invoke('stream_send_message', { id: instanceId, message });
     } catch (err) {
@@ -80,7 +88,7 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
     } finally {
       sendingRef.current = false;
     }
-  }, [instanceId, addUserMessage, setStreaming, clearPermission]);
+  }, [instanceId, addUserMessage, setStreaming, clearPermission, clearError]);
 
   const respondPermission = useCallback(async (allow: boolean) => {
     clearPermission(instanceId);

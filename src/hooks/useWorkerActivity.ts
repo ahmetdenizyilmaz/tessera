@@ -32,7 +32,7 @@ function deriveFromStreamEvent(event: StreamEvent): WorkerActivity | null {
       return 'error';
     case 'result': {
       const result = event as any;
-      if (result.subtype === 'error') return 'error';
+      if (result.is_error || (result.subtype && result.subtype !== 'success')) return 'error';
       return 'idle';
     }
     case 'message_stop':

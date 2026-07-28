@@ -78,20 +78,25 @@ export function initStreamBridge() {
   };
 
   window.__streamError = (instanceId: string, error: string) => {
-    console.error(`[stream-error:${instanceId}]`, error);
-    // Set error in store so the user sees it, and reset streaming state
-    const store = useChatStore.getState();
-    const session = store.sessions.get(instanceId);
-    if (session) {
-      useChatStore.setState((state) => {
-        const next = new Map(state.sessions);
-        const s = next.get(instanceId);
-        if (s) {
-          next.set(instanceId, { ...s, error: error, isStreaming: false });
-        }
-        return { sessions: next };
-      });
+    // The CLI writes non-fatal diagnostics to stderr (MCP startup notices,
+    // node deprecation warnings, --verbose chatter). Only treat clearly
+    // fatal-looking lines as session errors; everything else is a warning.
+    const fatal = /^\s*(error|fatal|panic)\b[:\s]/i.test(error)
+      || /no conversation found/i.test(error);
+    if (!fatal) {
+      console.warn(`[stream-warn:${instanceId}]`, error);
+      useChatStore.getState().pushCliWarning(instanceId, error);
+      return;
     }
+    console.error(`[stream-error:${instanceId}]`, error);
+    useChatStore.setState((state) => {
+      const next = new Map(state.sessions);
+      const s = next.get(instanceId);
+      if (s) {
+        next.set(instanceId, { ...s, error: error, isStreaming: false });
+      }
+      return { sessions: next };
+    });
   };
 
   // ─── Event Bus: plugins can send messages to chat instances ──────────────

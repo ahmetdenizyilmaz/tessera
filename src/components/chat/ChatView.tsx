@@ -116,6 +116,9 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
       model: model || undefined,
       systemPrompt: systemPrompt || undefined,
       sessionId: claudeSessionId || undefined,
+      permissionMode: instance?.config?.permissionMode || undefined,
+      allowedTools: instance?.config?.allowedTools,
+      dangerouslySkipPermissions: instance?.config?.dangerouslySkipPermissions ?? false,
     })
       .then(() => setIsReady(true))
       .catch((err) => {
@@ -369,11 +372,18 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
           </div>
         )}
 
-        {/* Error display */}
+        {/* Error display \u2014 dismissible; also auto-cleared on the next send */}
         {error && (
           <div className="chat-error-banner">
             <span className="chat-error-icon">{'\u26A0'}</span>
             <span>{error}</span>
+            <button
+              className="chat-error-dismiss"
+              title="Dismiss"
+              onClick={() => useChatStore.getState().clearError(instanceId)}
+            >
+              {'\u00D7'}
+            </button>
           </div>
         )}
 

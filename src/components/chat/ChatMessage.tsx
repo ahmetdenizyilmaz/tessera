@@ -3,9 +3,10 @@ import type {
   ChatMessage as ChatMessageType,
   AccumulatedMessage,
   AccumulatedUserMessage,
+  AccumulatedSystemNote,
   AccumulatedBlock,
 } from '../../types/stream';
-import { isUserMessage } from '../../types/stream';
+import { isUserMessage, isSystemNote } from '../../types/stream';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { getToolWidget } from '../tools/ToolWidgetRegistry';
 import { ProviderIcon } from '../icons/ProviderIcons';
@@ -40,6 +41,21 @@ const UserMessage: React.FC<{ message: AccumulatedUserMessage }> = ({ message })
     </div>
   );
 };
+
+// --- System Note (turn failures, notices) ---
+
+const SYSTEM_NOTE_ICONS: Record<AccumulatedSystemNote['kind'], string> = {
+  error: '⚠',
+  warning: '⚠',
+  info: 'ℹ',
+};
+
+const SystemNote: React.FC<{ note: AccumulatedSystemNote }> = ({ note }) => (
+  <div className={`msg msg--system-note msg--system-note-${note.kind}`}>
+    <span className="msg-system-note-icon">{SYSTEM_NOTE_ICONS[note.kind]}</span>
+    <span className="msg-system-note-text">{note.text}</span>
+  </div>
+);
 
 // --- Thinking Block ---
 
@@ -91,7 +107,7 @@ const BlockRenderer: React.FC<{
     const Widget = getToolWidget(block.name);
     return (
       <div className="stream-block stream-block--tool">
-        <Widget name={block.name} input={block.input} result={block.result} />
+        <Widget name={block.name} input={block.input} result={block.result} isError={block.isError} />
       </div>
     );
   }
@@ -175,6 +191,9 @@ const AssistantMessage: React.FC<{
 // --- Main ChatMessage Component ---
 
 const ChatMessageImpl: React.FC<ChatMessageProps> = ({ message, isLast, provider, isContinuation, isGroupEnd }) => {
+  if (isSystemNote(message)) {
+    return <SystemNote note={message} />;
+  }
   if (isUserMessage(message)) {
     return <UserMessage message={message} />;
   }
@@ -189,15 +208,13 @@ const ChatMessageImpl: React.FC<ChatMessageProps> = ({ message, isLast, provider
   );
 };
 
+// The accumulator is copy-on-write: any content change produces a new message
+// object, so identity comparison is both sufficient and exact.
 export const ChatMessage = React.memo(ChatMessageImpl, (prev, next) => {
-  if (prev.message.id !== next.message.id) return false;
-  if (prev.provider !== next.provider) return false;
-  if (prev.isContinuation !== next.isContinuation) return false;
-  if (prev.isGroupEnd !== next.isGroupEnd) return false;
-  // Always re-render streaming messages
-  if ('isStreaming' in prev.message && prev.message.isStreaming) return false;
-  if ('isStreaming' in next.message && next.message.isStreaming) return false;
-  return true;
+  return prev.message === next.message
+    && prev.provider === next.provider
+    && prev.isContinuation === next.isContinuation
+    && prev.isGroupEnd === next.isGroupEnd;
 });
 
 export default ChatMessage;

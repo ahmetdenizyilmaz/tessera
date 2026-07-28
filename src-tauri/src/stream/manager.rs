@@ -18,6 +18,9 @@ pub struct StreamInstance {
     /// Used with `--resume` for subsequent messages in the same conversation.
     session_id: Option<String>,
     mcp_config_path: Option<String>,
+    permission_mode: Option<String>,
+    allowed_tools: Option<Vec<String>>,
+    dangerously_skip_permissions: bool,
     thinking_budget_tokens: Option<u32>,
     child: Option<Child>,
     kill_flag: Arc<Mutex<bool>>,
@@ -73,6 +76,9 @@ pub async fn stream_spawn(
     system_prompt: Option<String>,
     session_id: Option<String>,
     mcp_config_path: Option<String>,
+    permission_mode: Option<String>,
+    allowed_tools: Option<Vec<String>>,
+    dangerously_skip_permissions: Option<bool>,
     state: tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
     let work_dir = if cwd.is_empty() || cwd == "." {
@@ -90,6 +96,9 @@ pub async fn stream_spawn(
         system_prompt,
         session_id,
         mcp_config_path,
+        permission_mode,
+        allowed_tools,
+        dangerously_skip_permissions: dangerously_skip_permissions.unwrap_or(false),
         thinking_budget_tokens: None,
         child: None,
         kill_flag: Arc::new(Mutex::new(false)),
@@ -126,7 +135,7 @@ pub async fn stream_send_message(
         .ok_or_else(|| "Could not find claude executable".to_string())?;
 
     // Extract config and kill any running process
-    let (cwd, model, system_prompt, session_id, mcp_config_path, _thinking_budget_tokens, message_count) = {
+    let (cwd, model, system_prompt, session_id, mcp_config_path, permission_mode, allowed_tools, dangerously_skip_permissions, message_count) = {
         let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
         let instance = instances.get_mut(&id)
             .ok_or_else(|| format!("Stream instance '{}' not found. Call stream_spawn first.", id))?;
@@ -147,7 +156,9 @@ pub async fn stream_send_message(
             instance.system_prompt.clone(),
             instance.session_id.clone(),
             instance.mcp_config_path.clone(),
-            instance.thinking_budget_tokens,
+            instance.permission_mode.clone(),
+            instance.allowed_tools.clone(),
+            instance.dangerously_skip_permissions,
             instance.message_count,
         );
         instance.message_count += 1;
@@ -200,8 +211,24 @@ pub async fn stream_send_message(
     // value is applied via the control protocol (set_max_thinking_tokens) once
     // the persistent-process pipeline lands.
 
-    // Skip permissions (like opcode) — no stdin to respond with
-    cmd.arg("--dangerously-skip-permissions");
+    // Permission settings from the instance config
+    let effective_mode = permission_mode.as_deref().unwrap_or("default");
+    if effective_mode != "default" {
+        cmd.arg("--permission-mode").arg(effective_mode);
+    }
+    if let Some(ref tools) = allowed_tools {
+        for tool in tools {
+            if !tool.is_empty() {
+                cmd.arg("--allowedTools").arg(tool);
+            }
+        }
+    }
+    // TODO(persistent-process): in one-shot -p mode there is no stdin channel
+    // to answer permission prompts, so unallowed tools would silently fail.
+    // Until the control protocol lands, `default` mode still bypasses.
+    if dangerously_skip_permissions || effective_mode == "default" {
+        cmd.arg("--dangerously-skip-permissions");
+    }
 
     cmd.current_dir(&cwd);
 

@@ -19,6 +19,8 @@ interface ChatSession {
   systemInfo: StreamSystemEvent | null;
   result: StreamResult | null;
   error: string | null;
+  /** Non-fatal CLI stderr chatter (MCP notices, deprecation warnings, …) */
+  cliWarnings: string[];
   accumulator: StreamAccumulator;
 }
 
@@ -27,6 +29,8 @@ interface ChatState {
   initSession: (instanceId: string) => void;
   processEvent: (instanceId: string, event: StreamEvent) => void;
   addUserMessage: (instanceId: string, text: string) => void;
+  clearError: (instanceId: string) => void;
+  pushCliWarning: (instanceId: string, warning: string) => void;
   clearPermission: (instanceId: string) => void;
   setStreaming: (instanceId: string, streaming: boolean) => void;
   reset: (instanceId: string) => void;
@@ -42,6 +46,7 @@ function createSession(): ChatSession {
     systemInfo: null,
     result: null,
     error: null,
+    cliWarnings: [],
     accumulator: new StreamAccumulator(),
   };
 }
@@ -93,30 +98,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
           session.permissionRequest = event;
           break;
 
-        case 'result':
+        case 'result': {
           session.result = event;
           session.isStreaming = false;
-          // Show result text as an assistant message when the CLI returns output
-          // without streaming a regular assistant message (e.g. /usage, /cost, /compact).
-          // Only add if the last message is still the user message (no assistant reply yet).
-          if (event.result && event.result.trim()) {
-            const lastMsg = session.messages[session.messages.length - 1];
-            if (lastMsg && 'text' in lastMsg && lastMsg.role === 'user') {
-              const newMessages = [
-                ...session.messages,
-                {
-                  id: `result-${Date.now()}`,
-                  role: 'assistant' as const,
-                  blocks: [{ type: 'text' as const, text: event.result }],
-                  isStreaming: false,
-                },
-              ];
-              session.messages = newMessages.length > MAX_MESSAGES
-                ? newMessages.slice(newMessages.length - MAX_MESSAGES)
-                : newMessages;
+          const failed = event.is_error || event.subtype !== 'success';
+          if (failed) {
+            // Surface failed turns visibly (API errors, max turns, budget…)
+            const label =
+              event.subtype === 'error_max_turns' ? 'Turn aborted: maximum turns reached'
+              : event.subtype === 'error_during_execution' ? 'Turn failed during execution'
+              : 'Turn failed';
+            const detail = event.result && event.result.trim() ? `\n${event.result.trim()}` : '';
+            session.accumulator.addSystemNote('error', `${label}${detail}`);
+          } else if (event.result && event.result.trim()) {
+            // Commands like /compact reply only via the result event. Skip when
+            // the turn already streamed an assistant reply — result then just
+            // repeats the final text.
+            const all = session.accumulator.getAllMessages();
+            const lastMsg = all[all.length - 1];
+            if (!lastMsg || !('blocks' in lastMsg)) {
+              session.accumulator.addLocalAssistantMessage(event.result);
             }
           }
+          session.messages = rebuildMessages(session);
           break;
+        }
+
+        case 'user': {
+          // Tool results arrive as user-role events carrying tool_result blocks.
+          // Events with a parent_tool_use_id belong to subagents — skip those.
+          if (event.parent_tool_use_id) break;
+          const content = event.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'tool_result' && block.tool_use_id) {
+                session.accumulator.setToolResult(
+                  block.tool_use_id,
+                  normalizeToolResultContent(block.content),
+                  block.is_error,
+                );
+              }
+            }
+            session.messages = rebuildMessages(session);
+          }
+          break;
+        }
 
         case 'error':
           session.error = event.error.message;
@@ -178,6 +204,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  clearError: (instanceId) => {
+    set((state) => {
+      const next = new Map(state.sessions);
+      const session = next.get(instanceId);
+      if (session) {
+        next.set(instanceId, { ...session, error: null });
+      }
+      return { sessions: next };
+    });
+  },
+
+  pushCliWarning: (instanceId, warning) => {
+    set((state) => {
+      const next = new Map(state.sessions);
+      const session = ensureSession(next, instanceId);
+      const warnings = [...session.cliWarnings, warning].slice(-20);
+      next.set(instanceId, { ...session, cliWarnings: warnings });
+      return { sessions: next };
+    });
+  },
+
   clearPermission: (instanceId) => {
     set((state) => {
       const next = new Map(state.sessions);
@@ -235,4 +282,18 @@ function rebuildMessages(session: ChatSession): ChatMessage[] {
     return messages.slice(messages.length - MAX_MESSAGES);
   }
   return messages;
+}
+
+/** Tool result content can be a plain string or an array of content blocks */
+function normalizeToolResultContent(
+  content: string | Array<{ type: string; text?: string }> | undefined,
+): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((c) => (c.type === 'text' ? (c.text ?? '') : ''))
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
 }

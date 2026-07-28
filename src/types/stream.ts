@@ -61,9 +61,29 @@ export interface StreamMessageStop {
   type: 'message_stop';
 }
 
+/** Tool results arrive as user-role events carrying tool_result blocks */
+export interface StreamUserEvent {
+  type: 'user';
+  message: {
+    role: 'user';
+    content:
+      | string
+      | Array<{
+          type: string;
+          tool_use_id?: string;
+          content?: string | Array<{ type: string; text?: string }>;
+          is_error?: boolean;
+          text?: string;
+        }>;
+  };
+  /** Non-null when this event belongs to a subagent (Task tool) — skip those */
+  parent_tool_use_id?: string | null;
+  session_id?: string;
+}
+
 export interface StreamResult {
   type: 'result';
-  subtype: 'success' | 'error';
+  subtype: 'success' | 'error' | 'error_max_turns' | 'error_during_execution';
   result?: string;
   cost_usd?: number;
   duration_ms?: number;
@@ -126,7 +146,8 @@ export type StreamEvent =
   | StreamResult
   | StreamPermissionRequest
   | StreamError
-  | StreamAssistantMessage;
+  | StreamAssistantMessage
+  | StreamUserEvent;
 
 // Accumulated content block (after deltas are merged)
 export interface AccumulatedTextBlock {
@@ -140,6 +161,7 @@ export interface AccumulatedToolUseBlock {
   name: string;
   input: Record<string, unknown>;
   result?: string;
+  isError?: boolean;
 }
 
 export interface AccumulatedThinkingBlock {
@@ -169,14 +191,27 @@ export interface AccumulatedUserMessage {
   timestamp: number;
 }
 
+// System note rendered inline in the transcript (turn failures, notices)
+export interface AccumulatedSystemNote {
+  id: string;
+  role: 'system';
+  kind: 'error' | 'warning' | 'info';
+  text: string;
+  timestamp: number;
+}
+
 // Union type for the chat message list
-export type ChatMessage = AccumulatedMessage | AccumulatedUserMessage;
+export type ChatMessage = AccumulatedMessage | AccumulatedUserMessage | AccumulatedSystemNote;
 
 // Type guard helpers
 export function isUserMessage(msg: ChatMessage): msg is AccumulatedUserMessage {
-  return 'text' in msg && !('blocks' in msg);
+  return msg.role === 'user' && 'text' in msg && !('blocks' in msg);
 }
 
 export function isAssistantMessage(msg: ChatMessage): msg is AccumulatedMessage {
   return 'blocks' in msg;
+}
+
+export function isSystemNote(msg: ChatMessage): msg is AccumulatedSystemNote {
+  return msg.role === 'system';
 }

@@ -6,36 +6,61 @@ import type {
   AccumulatedTextBlock,
   AccumulatedToolUseBlock,
   AccumulatedThinkingBlock,
+  AccumulatedSystemNote,
   ChatMessage,
   AccumulatedUserMessage,
 } from '../types/stream';
 
+/**
+ * Accumulates stream-json events into a renderable message list.
+ *
+ * Copy-on-write contract: every mutation replaces `allMessages` with a NEW
+ * array and replaces the mutated message with a NEW object. Untouched
+ * messages keep their identity, so React.memo children skip by reference
+ * compare and effects keyed on the array re-run exactly when content changed.
+ */
 export class StreamAccumulator {
-  private messages: AccumulatedMessage[] = [];
-  /** Interleaved list of assistant + user messages in order */
   private allMessages: ChatMessage[] = [];
-  private currentMessage: AccumulatedMessage | null = null;
+  /** Mutable working copy of the currently-streaming assistant message */
+  private current: AccumulatedMessage | null = null;
+  /** Index of the streaming message inside allMessages */
+  private currentIdx: number | null = null;
   private currentBlocks: Map<number, AccumulatedBlock> = new Map();
-  /** Map of tool_use block IDs to their blocks, for linking results */
-  private toolUseBlocksById: Map<string, AccumulatedToolUseBlock> = new Map();
+  /** tool_use id → location in allMessages, for linking tool_result events */
+  private toolUseLoc: Map<string, { msg: number; block: number }> = new Map();
+  private localCounter = 0;
+
+  /** Write a fresh snapshot of the working message into allMessages */
+  private syncCurrent(): void {
+    if (this.current === null || this.currentIdx === null) return;
+    const snapshot: AccumulatedMessage = {
+      ...this.current,
+      blocks: this.current.blocks.map((b) => ({ ...b })),
+    };
+    const next = [...this.allMessages];
+    next[this.currentIdx] = snapshot;
+    this.allMessages = next;
+  }
 
   processEvent(event: StreamEvent): void {
     switch (event.type) {
       case 'message_start': {
-        this.currentMessage = {
+        this.current = {
           id: event.message.id,
           role: event.message.role,
           blocks: [],
           isStreaming: true,
         };
         this.currentBlocks.clear();
-        this.messages.push(this.currentMessage);
-        this.allMessages.push(this.currentMessage);
+        this.allMessages = [...this.allMessages, this.current];
+        this.currentIdx = this.allMessages.length - 1;
+        // Immediately decouple the stored entry from the working copy
+        this.syncCurrent();
         break;
       }
 
       case 'content_block_start': {
-        if (!this.currentMessage) break;
+        if (!this.current || this.currentIdx === null) break;
         const { index, content_block } = event;
         let block: AccumulatedBlock;
 
@@ -53,21 +78,21 @@ export class StreamAccumulator {
         }
 
         this.currentBlocks.set(index, block);
-        // Track tool_use blocks by ID for result linking
         if (block.type === 'tool_use' && block.id) {
-          this.toolUseBlocksById.set(block.id, block);
+          this.toolUseLoc.set(block.id, { msg: this.currentIdx, block: index });
         }
         // Keep blocks array in sync — extend if needed
-        while (this.currentMessage.blocks.length <= index) {
-          const existing = this.currentBlocks.get(this.currentMessage.blocks.length);
-          this.currentMessage.blocks.push(existing ?? { type: 'text', text: '' } as AccumulatedTextBlock);
+        while (this.current.blocks.length <= index) {
+          const existing = this.currentBlocks.get(this.current.blocks.length);
+          this.current.blocks.push(existing ?? ({ type: 'text', text: '' } as AccumulatedTextBlock));
         }
-        this.currentMessage.blocks[index] = block;
+        this.current.blocks[index] = block;
+        this.syncCurrent();
         break;
       }
 
       case 'content_block_delta': {
-        if (!this.currentMessage) break;
+        if (!this.current) break;
         const block = this.currentBlocks.get(event.index);
         if (!block) break;
 
@@ -81,11 +106,12 @@ export class StreamAccumulator {
         } else if (event.delta.type === 'thinking_delta' && block.type === 'thinking') {
           block.thinking += event.delta.thinking ?? '';
         }
+        this.syncCurrent();
         break;
       }
 
       case 'content_block_stop': {
-        if (!this.currentMessage) break;
+        if (!this.current) break;
         const block = this.currentBlocks.get(event.index);
         if (!block) break;
 
@@ -100,23 +126,27 @@ export class StreamAccumulator {
             }
             delete (block as AccumulatedToolUseBlock & { _rawJson?: string })._rawJson;
           }
+          this.syncCurrent();
         }
         break;
       }
 
       case 'message_delta': {
-        if (!this.currentMessage) break;
-        this.currentMessage.stopReason = event.delta.stop_reason;
+        if (!this.current) break;
+        this.current.stopReason = event.delta.stop_reason;
         if (event.usage) {
-          this.currentMessage.usage = event.usage;
+          this.current.usage = event.usage;
         }
+        this.syncCurrent();
         break;
       }
 
       case 'message_stop': {
-        if (!this.currentMessage) break;
-        this.currentMessage.isStreaming = false;
-        this.currentMessage = null;
+        if (!this.current) break;
+        this.current.isStreaming = false;
+        this.syncCurrent();
+        this.current = null;
+        this.currentIdx = null;
         this.currentBlocks.clear();
         break;
       }
@@ -127,37 +157,37 @@ export class StreamAccumulator {
     }
   }
 
-  getMessages(): AccumulatedMessage[] {
-    return this.messages;
-  }
-
-  /** Get the interleaved list of all messages (assistant + user) in order */
+  /** The interleaved list of all messages (user + assistant + system notes) */
   getAllMessages(): ChatMessage[] {
     return this.allMessages;
   }
 
   getCurrentMessage(): AccumulatedMessage | null {
-    return this.currentMessage;
+    return this.current;
   }
 
   /** Insert a user message into the interleaved list */
   addUserMessage(msg: AccumulatedUserMessage): void {
-    this.allMessages.push(msg);
+    this.allMessages = [...this.allMessages, msg];
   }
 
-  /** Add a complete assistant message (from Claude CLI's stream-json format) */
+  /**
+   * Add a complete assistant message (from Claude CLI's stream-json format).
+   * The CLI emits one `assistant` event per content block within a turn, all
+   * sharing the same message.id — consecutive events with the same id are
+   * merged into one message so React keys stay unique and one API message
+   * renders as one bubble.
+   */
   addCompleteMessage(event: StreamAssistantMessage): void {
     const { message } = event;
-    const blocks: AccumulatedBlock[] = message.content.map((c) => {
+    const newBlocks: AccumulatedBlock[] = message.content.map((c) => {
       if (c.type === 'tool_use') {
-        const block: AccumulatedToolUseBlock = {
+        return {
           type: 'tool_use',
           id: c.id ?? '',
           name: c.name ?? '',
           input: c.input ?? {},
-        };
-        if (block.id) this.toolUseBlocksById.set(block.id, block);
-        return block;
+        } as AccumulatedToolUseBlock;
       }
       if (c.type === 'thinking') {
         return { type: 'thinking', thinking: c.thinking ?? '' } as AccumulatedThinkingBlock;
@@ -165,32 +195,114 @@ export class StreamAccumulator {
       return { type: 'text', text: c.text ?? '' } as AccumulatedTextBlock;
     });
 
+    const lastIdx = this.allMessages.length - 1;
+    const last = lastIdx >= 0 ? this.allMessages[lastIdx] : undefined;
+
+    if (
+      last &&
+      'blocks' in last &&
+      last.role === 'assistant' &&
+      last.id === message.id
+    ) {
+      // Merge into the existing message for this turn
+      const merged: AccumulatedMessage = {
+        ...last,
+        blocks: [...last.blocks, ...newBlocks],
+        isStreaming: false,
+        stopReason: message.stop_reason ?? last.stopReason,
+        usage: message.usage ?? last.usage,
+      };
+      const next = [...this.allMessages];
+      next[lastIdx] = merged;
+      this.allMessages = next;
+      newBlocks.forEach((b, i) => {
+        if (b.type === 'tool_use' && b.id) {
+          this.toolUseLoc.set(b.id, { msg: lastIdx, block: last.blocks.length + i });
+        }
+      });
+      return;
+    }
+
     const accMsg: AccumulatedMessage = {
       id: message.id,
       role: 'assistant',
-      blocks,
+      blocks: newBlocks,
       isStreaming: false,
       stopReason: message.stop_reason ?? undefined,
       usage: message.usage,
     };
 
-    this.messages.push(accMsg);
-    this.allMessages.push(accMsg);
+    this.allMessages = [...this.allMessages, accMsg];
+    const msgIdx = this.allMessages.length - 1;
+    newBlocks.forEach((b, i) => {
+      if (b.type === 'tool_use' && b.id) {
+        this.toolUseLoc.set(b.id, { msg: msgIdx, block: i });
+      }
+    });
   }
 
   /** Link a tool result to a previously seen tool_use block by its ID */
-  setToolResult(toolUseId: string, result: string): void {
-    const block = this.toolUseBlocksById.get(toolUseId);
-    if (block) {
-      block.result = result;
+  setToolResult(toolUseId: string, result: string, isError?: boolean): void {
+    const loc = this.toolUseLoc.get(toolUseId);
+    if (!loc) return;
+
+    // Streaming message: mutate the working copy, then snapshot
+    if (this.currentIdx === loc.msg && this.current) {
+      const b = this.current.blocks[loc.block];
+      if (b?.type === 'tool_use') {
+        b.result = result;
+        if (isError !== undefined) b.isError = isError;
+        this.syncCurrent();
+      }
+      return;
     }
+
+    const msg = this.allMessages[loc.msg];
+    if (!msg || !('blocks' in msg)) return;
+    const b = msg.blocks[loc.block];
+    if (b?.type !== 'tool_use') return;
+
+    const newBlock: AccumulatedToolUseBlock = { ...b, result };
+    if (isError !== undefined) newBlock.isError = isError;
+    const blocks = [...msg.blocks];
+    blocks[loc.block] = newBlock;
+    const clone: AccumulatedMessage = { ...msg, blocks };
+    const next = [...this.allMessages];
+    next[loc.msg] = clone;
+    this.allMessages = next;
+  }
+
+  /**
+   * Append an assistant-styled message produced locally (e.g. the `result`
+   * event's text for commands that reply without streaming a message).
+   */
+  addLocalAssistantMessage(text: string): void {
+    const msg: AccumulatedMessage = {
+      id: `local-${++this.localCounter}-${Date.now()}`,
+      role: 'assistant',
+      blocks: [{ type: 'text', text }],
+      isStreaming: false,
+    };
+    this.allMessages = [...this.allMessages, msg];
+  }
+
+  /** Append a system note row (errors, turn failures, notices) */
+  addSystemNote(kind: AccumulatedSystemNote['kind'], text: string): void {
+    const note: AccumulatedSystemNote = {
+      id: `note-${++this.localCounter}-${Date.now()}`,
+      role: 'system',
+      kind,
+      text,
+      timestamp: Date.now(),
+    };
+    this.allMessages = [...this.allMessages, note];
   }
 
   reset(): void {
-    this.messages = [];
     this.allMessages = [];
-    this.currentMessage = null;
+    this.current = null;
+    this.currentIdx = null;
     this.currentBlocks.clear();
-    this.toolUseBlocksById.clear();
+    this.toolUseLoc.clear();
   }
 }

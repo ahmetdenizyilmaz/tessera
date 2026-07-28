@@ -18,6 +18,8 @@ export interface ToolWidgetProps {
   name: string;
   input: Record<string, unknown>;
   result?: string;
+  /** True when the linked tool_result carried is_error */
+  isError?: boolean;
 }
 
 const registry: Record<string, React.ComponentType<ToolWidgetProps>> = {
