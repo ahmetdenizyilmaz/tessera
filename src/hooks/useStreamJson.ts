@@ -6,6 +6,8 @@ import type {
   StreamPermissionRequest,
   StreamResult,
   StreamSystemEvent,
+  PendingControlRequest,
+  ControlResponsePayload,
 } from '../types/stream';
 
 interface SpawnOptions {
@@ -22,35 +24,45 @@ interface UseStreamJsonReturn {
   messages: ChatMessage[];
   isStreaming: boolean;
   permissionRequest: StreamPermissionRequest | null;
+  controlRequests: PendingControlRequest[];
   systemInfo: StreamSystemEvent | null;
   result: StreamResult | null;
   error: string | null;
+  /** Register/refresh the instance config on the Rust side (idempotent —
+   *  the process itself spawns lazily on the first send). */
   spawn: (cwd: string, options?: SpawnOptions) => Promise<void>;
   send: (message: string) => Promise<void>;
-  respondPermission: (allow: boolean) => Promise<void>;
+  /** Answer a pending control request (permission / AskUserQuestion / plan) */
+  respondControl: (requestId: string, response: ControlResponsePayload) => Promise<void>;
+  /** Abort the current turn — the process survives and stays resumable */
+  interrupt: () => Promise<void>;
+  /** Stop button: alias for interrupt */
   cancel: () => Promise<void>;
 }
 
 /**
- * Hook for the stream-JSON chat pipeline.
+ * Hook for the persistent stream-JSON chat pipeline.
  *
- * Data delivery: Rust pushes NDJSON lines into the webview via eval(),
- * calling window.__streamPush() which is registered by streamBridge.ts.
- * No Tauri listen() needed — the bridge writes directly into chatStore.
+ * Data delivery: Rust pushes NDJSON line batches into the webview via eval(),
+ * calling window.__streamPushBatch() which is registered by streamBridge.ts.
  */
 export function useStreamJson(instanceId: string): UseStreamJsonReturn {
   const session = useChatStore((s) => s.sessions.get(instanceId));
   const initSession = useChatStore((s) => s.initSession);
   const addUserMessage = useChatStore((s) => s.addUserMessage);
-  const clearPermission = useChatStore((s) => s.clearPermission);
   const clearError = useChatStore((s) => s.clearError);
+  const removeControlRequest = useChatStore((s) => s.removeControlRequest);
   const setStreaming = useChatStore((s) => s.setStreaming);
   const sendingRef = useRef(false);
 
   const spawn = useCallback(async (cwd: string, options?: SpawnOptions) => {
-    initSession(instanceId);
+    // Only initialize the UI session if none exists — stream_configure is
+    // called on every mount and must not wipe an existing transcript.
+    if (!useChatStore.getState().sessions.get(instanceId)) {
+      initSession(instanceId);
+    }
 
-    await invoke('stream_spawn', {
+    await invoke('stream_configure', {
       id: instanceId,
       cwd,
       model: options?.model || null,
@@ -71,7 +83,6 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
     sendingRef.current = true;
     addUserMessage(instanceId, message);
     setStreaming(instanceId, true);
-    clearPermission(instanceId);
     clearError(instanceId);
     try {
       await invoke('stream_send_message', { id: instanceId, message });
@@ -88,28 +99,43 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
     } finally {
       sendingRef.current = false;
     }
-  }, [instanceId, addUserMessage, setStreaming, clearPermission, clearError]);
+  }, [instanceId, addUserMessage, setStreaming, clearError]);
 
-  const respondPermission = useCallback(async (allow: boolean) => {
-    clearPermission(instanceId);
-    await invoke('stream_respond_permission', { id: instanceId, allowed: allow });
-  }, [instanceId, clearPermission]);
+  const respondControl = useCallback(async (requestId: string, response: ControlResponsePayload) => {
+    removeControlRequest(instanceId, requestId);
+    await invoke('stream_control_response', {
+      id: instanceId,
+      requestId,
+      response,
+    });
+  }, [instanceId, removeControlRequest]);
 
-  const cancel = useCallback(async () => {
-    setStreaming(instanceId, false);
-    await invoke('stream_kill', { id: instanceId });
+  const interrupt = useCallback(async () => {
+    try {
+      await invoke('stream_control_request', {
+        id: instanceId,
+        subtype: 'interrupt',
+        payload: null,
+      });
+    } catch (err) {
+      console.warn(`[useStreamJson:${instanceId}] interrupt failed:`, err);
+      // Process may already be gone — clear the spinner either way
+      setStreaming(instanceId, false);
+    }
   }, [instanceId, setStreaming]);
 
   return {
     messages: session?.messages ?? [],
     isStreaming: session?.isStreaming ?? false,
     permissionRequest: session?.permissionRequest ?? null,
+    controlRequests: session?.controlRequests ?? [],
     systemInfo: session?.systemInfo ?? null,
     result: session?.result ?? null,
     error: session?.error ?? null,
     spawn,
     send,
-    respondPermission,
-    cancel,
+    respondControl,
+    interrupt,
+    cancel: interrupt,
   };
 }

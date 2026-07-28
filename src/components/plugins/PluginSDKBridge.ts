@@ -81,13 +81,16 @@ export function createBridge(
           }, config.name);
           useLayoutStore.getState().addPanel(newId);
           useChatStore.getState().initSession(newId);
-          invoke('stream_spawn', {
+          invoke('stream_configure', {
             id: newId,
             cwd: config.cwd || '.',
             model: config.model || settings.defaultModel || null,
             systemPrompt: config.systemPrompt || null,
             sessionId: null,
             mcpConfigPath: config.mcpConfigPath || null,
+            permissionMode: settings.defaultPermissionMode || null,
+            allowedTools: null,
+            dangerouslySkipPermissions: settings.defaultSkipPermissions ?? false,
           }).then(() => {
             postToPlugin(createResponse(requestId, { instanceId: newId }));
           }).catch((err) => {

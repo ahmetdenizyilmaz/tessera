@@ -5,7 +5,7 @@ import { cleanupPty } from '../../hooks/usePty';
 import { destroyTerminal } from '../../hooks/useTerminal';
 import { invoke } from '@tauri-apps/api/core';
 import { XTermView, clearTerminalState } from './XTermView';
-import ChatView, { clearChatSpawnState } from '../chat/ChatView';
+import ChatView from '../chat/ChatView';
 import { ColorPickerPopover } from '../dialogs/ColorPickerPopover';
 import { History } from 'lucide-react';
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
@@ -84,7 +84,6 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   }, [instance, instanceId, removePanel]);
 
   const handleClose = useCallback(async () => {
-    clearChatSpawnState(instanceId);
     clearTerminalState(instanceId);
     cleanupPty(instanceId);
     destroyTerminal(instanceId);

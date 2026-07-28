@@ -7,7 +7,6 @@ import { useInstanceStore } from '../store/instanceStore';
 import { cleanupPty } from '../hooks/usePty';
 import { destroyTerminal } from '../hooks/useTerminal';
 import { clearTerminalState } from '../components/terminal/XTermView';
-import { clearChatSpawnState } from '../components/chat/ChatView';
 import { invoke } from '@tauri-apps/api/core';
 
 /**
@@ -33,7 +32,6 @@ export async function closePanel(id: string): Promise<void> {
     useLlmChatStore.getState().removeConversation(id);
   } else {
     // terminal / computer / default
-    clearChatSpawnState(id);
     clearTerminalState(id);
     cleanupPty(id);
     destroyTerminal(id);

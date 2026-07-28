@@ -82,13 +82,14 @@ pub fn run() {
             computer::computer_mouse_click,
             computer::computer_key_type,
             // Stream-JSON commands
-            stream::manager::stream_spawn,
+            stream::manager::stream_configure,
             stream::manager::stream_send_message,
-            stream::manager::stream_respond_permission,
+            stream::manager::stream_control_response,
+            stream::manager::stream_control_request,
+            stream::manager::stream_clear,
             stream::manager::stream_kill,
             stream::manager::stream_set_model,
             stream::manager::stream_set_thinking,
-            stream::manager::stream_test_event,
             // MCP commands
             mcp::config::mcp_list_servers,
             mcp::config::mcp_add_server,

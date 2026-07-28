@@ -17,7 +17,8 @@ import { useEventBusStore } from '../store/eventBusStore';
 declare global {
   interface Window {
     __streamPush?: (instanceId: string, line: string) => void;
-    __streamExit?: (instanceId: string) => void;
+    __streamPushBatch?: (instanceId: string, lines: string[]) => void;
+    __streamExit?: (instanceId: string, exitCode?: number | null) => void;
     __streamError?: (instanceId: string, error: string) => void;
   }
 }
@@ -73,8 +74,35 @@ export function initStreamBridge() {
     }
   };
 
-  window.__streamExit = (instanceId: string) => {
-    useChatStore.getState().setStreaming(instanceId, false);
+  // Batched delivery from the persistent-process pipeline
+  window.__streamPushBatch = (instanceId: string, lines: string[]) => {
+    for (const line of lines) {
+      window.__streamPush?.(instanceId, line);
+    }
+  };
+
+  window.__streamExit = (instanceId: string, exitCode?: number | null) => {
+    const store = useChatStore.getState();
+    // Was a turn still in flight when the process died? (A clean /clear or
+    // tab close ends the process after the turn completed.)
+    const wasStreaming = store.sessions.get(instanceId)?.isStreaming ?? false;
+    // The process is gone — any pending control requests can never be answered
+    store.clearControlRequests(instanceId);
+    store.setStreaming(instanceId, false);
+    if (wasStreaming && typeof exitCode === 'number' && exitCode !== 0) {
+      useChatStore.setState((state) => {
+        const next = new Map(state.sessions);
+        const s = next.get(instanceId);
+        if (s) {
+          next.set(instanceId, {
+            ...s,
+            error: `claude exited unexpectedly (code ${exitCode})`,
+            isStreaming: false,
+          });
+        }
+        return { sessions: next };
+      });
+    }
   };
 
   window.__streamError = (instanceId: string, error: string) => {

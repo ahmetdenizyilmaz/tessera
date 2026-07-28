@@ -8,6 +8,8 @@ import type {
   StreamResult,
   ChatMessage,
   AccumulatedUserMessage,
+  ControlRequestPayload,
+  PendingControlRequest,
 } from '../types/stream';
 
 const MAX_MESSAGES = 10000;
@@ -21,6 +23,9 @@ interface ChatSession {
   error: string | null;
   /** Non-fatal CLI stderr chatter (MCP notices, deprecation warnings, …) */
   cliWarnings: string[];
+  /** Control requests from the CLI awaiting a user answer (permissions,
+   *  AskUserQuestion, plan approval) — oldest first */
+  controlRequests: PendingControlRequest[];
   accumulator: StreamAccumulator;
 }
 
@@ -32,6 +37,8 @@ interface ChatState {
   clearError: (instanceId: string) => void;
   pushCliWarning: (instanceId: string, warning: string) => void;
   clearPermission: (instanceId: string) => void;
+  removeControlRequest: (instanceId: string, requestId: string) => void;
+  clearControlRequests: (instanceId: string) => void;
   setStreaming: (instanceId: string, streaming: boolean) => void;
   reset: (instanceId: string) => void;
   destroySession: (instanceId: string) => void;
@@ -47,6 +54,7 @@ function createSession(): ChatSession {
     result: null,
     error: null,
     cliWarnings: [],
+    controlRequests: [],
     accumulator: new StreamAccumulator(),
   };
 }
@@ -88,14 +96,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       switch (event.type) {
         case 'system':
-          session.systemInfo = event;
-          if (event.subtype === 'error' && event.error) {
+          // Only init/error matter for state; the CLI also streams
+          // hook_started / thinking_tokens / … which would churn re-renders.
+          if (event.subtype === 'init') {
+            session.systemInfo = event;
+          } else if (event.subtype === 'error' && event.error) {
+            session.systemInfo = event;
             session.error = event.error;
           }
           break;
 
         case 'permission':
           session.permissionRequest = event;
+          break;
+
+        case 'control_request':
+          session.controlRequests = [
+            ...session.controlRequests,
+            { requestId: event.request_id, request: event.request, receivedAt: Date.now() },
+          ];
+          break;
+
+        case 'control_cancel_request':
+          session.controlRequests = session.controlRequests.filter(
+            (r) => r.requestId !== event.request_id,
+          );
           break;
 
         case 'result': {
@@ -150,13 +175,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           break;
 
         case 'assistant':
-          // Claude CLI sends complete assistant messages (not granular streaming events)
+          // Claude CLI sends complete assistant messages (not granular
+          // streaming events). With a persistent process the `result` event
+          // is the authoritative turn terminator, so streaming stays on here.
           session.accumulator.addCompleteMessage(event as StreamAssistantMessage);
           session.messages = rebuildMessages(session);
-          // Clear streaming when we get a complete assistant message with end_turn
-          if ((event as StreamAssistantMessage).message?.stop_reason === 'end_turn') {
-            session.isStreaming = false;
-          }
           break;
 
         case 'message_start':
@@ -221,6 +244,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const session = ensureSession(next, instanceId);
       const warnings = [...session.cliWarnings, warning].slice(-20);
       next.set(instanceId, { ...session, cliWarnings: warnings });
+      return { sessions: next };
+    });
+  },
+
+  removeControlRequest: (instanceId, requestId) => {
+    set((state) => {
+      const next = new Map(state.sessions);
+      const session = next.get(instanceId);
+      if (session) {
+        next.set(instanceId, {
+          ...session,
+          controlRequests: session.controlRequests.filter((r) => r.requestId !== requestId),
+        });
+      }
+      return { sessions: next };
+    });
+  },
+
+  clearControlRequests: (instanceId) => {
+    set((state) => {
+      const next = new Map(state.sessions);
+      const session = next.get(instanceId);
+      if (session && session.controlRequests.length > 0) {
+        next.set(instanceId, { ...session, controlRequests: [] });
+      }
       return { sessions: next };
     });
   },

@@ -2,12 +2,16 @@
 
 export interface StreamSystemEvent {
   type: 'system';
-  subtype: 'init' | 'error';
+  /** 'init' and 'error' are handled; the CLI also emits hook_started,
+   *  hook_response, thinking_tokens, compact_boundary, … */
+  subtype: 'init' | 'error' | (string & {});
   session_id?: string;
   tools?: string[];
-  mcp_servers?: string[];
+  mcp_servers?: unknown[];
   model?: string;
   error?: string;
+  slash_commands?: string[];
+  permissionMode?: string;
 }
 
 export interface StreamMessageStart {
@@ -107,6 +111,46 @@ export interface StreamPermissionRequest {
   description?: string;
 }
 
+/** SDK control protocol: a request from the CLI that the app must answer */
+export interface ControlRequestPayload {
+  subtype: string; // 'can_use_tool' | ...
+  tool_name?: string;
+  display_name?: string;
+  input?: Record<string, unknown>;
+  tool_use_id?: string;
+  description?: string;
+  permission_suggestions?: unknown[];
+  blocked_path?: string;
+  requires_user_interaction?: boolean;
+  [key: string]: unknown;
+}
+
+export interface StreamControlRequest {
+  type: 'control_request';
+  request_id: string;
+  request: ControlRequestPayload;
+}
+
+export interface StreamControlCancelRequest {
+  type: 'control_cancel_request';
+  request_id: string;
+}
+
+/** A control request awaiting a user answer, kept in session state */
+export interface PendingControlRequest {
+  requestId: string;
+  request: ControlRequestPayload;
+  receivedAt: number;
+}
+
+/** Inner payload of a control response ({"behavior":"allow"|"deny",...}) */
+export interface ControlResponsePayload {
+  behavior: 'allow' | 'deny';
+  updatedInput?: Record<string, unknown>;
+  updatedPermissions?: unknown[];
+  message?: string;
+}
+
 export interface StreamError {
   type: 'error';
   error: {
@@ -147,7 +191,9 @@ export type StreamEvent =
   | StreamPermissionRequest
   | StreamError
   | StreamAssistantMessage
-  | StreamUserEvent;
+  | StreamUserEvent
+  | StreamControlRequest
+  | StreamControlCancelRequest;
 
 // Accumulated content block (after deltas are merged)
 export interface AccumulatedTextBlock {

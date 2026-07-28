@@ -12,19 +12,6 @@ import { isUserMessage } from '../../types/stream';
 import { ClaudeIcon } from '../icons/ProviderIcons';
 import type { SessionInfo } from '../../types/session';
 
-// ─── Module-level spawn tracking (survives unmount/remount for group moves) ──
-// Prevents re-spawning (and re-initializing the session which clears messages)
-// when a panel is moved to/from a group.
-
-const spawnedStreams: Set<string> =
-  (globalThis as Record<string, unknown>).__chatSpawnedStreams as Set<string> ??
-  ((globalThis as Record<string, unknown>).__chatSpawnedStreams = new Set<string>());
-
-/** Call on explicit panel close to allow re-spawn if instance is recreated */
-export function clearChatSpawnState(instanceId: string) {
-  spawnedStreams.delete(instanceId);
-}
-
 // All built-in Claude Code slash commands are interactive-only.
 // In -p (print) mode the CLI treats /cmd as a skill lookup and returns
 // "Unknown skill: cmd" for every built-in. Only user/project .md skills work.
@@ -63,12 +50,10 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
   const {
     messages,
     isStreaming,
-    permissionRequest,
     systemInfo,
     error,
     spawn,
     send,
-    respondPermission,
     cancel,
   } = useStreamJson(instanceId);
 
@@ -82,23 +67,19 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
+  // After /clear, block the session rescan from resurrecting the old session
+  const clearedRef = useRef(false);
   const autoCheckpointRef = useRef(autoCheckpoint);
   const prevStreamingRef = useRef(false);
   autoCheckpointRef.current = autoCheckpoint;
 
   const SCROLL_THRESHOLD = 150;
 
-  // ---- Auto-spawn stream process ----
+  // ---- Register config with the persistent-process pipeline ----
+  // stream_configure is idempotent and never touches a running process, so a
+  // remount (e.g. group move) is safe — the transcript and process survive.
   useEffect(() => {
     if (spawnAttempted) return;
-
-    // If already spawned (remount after group move), skip re-spawn to preserve
-    // chat messages and the running CLI process
-    if (spawnedStreams.has(instanceId)) {
-      setSpawnAttempted(true);
-      setIsReady(true);
-      return;
-    }
 
     // If no project dir, mark ready immediately so user can still see the input
     if (!projectDir) {
@@ -107,7 +88,6 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     }
 
     setSpawnAttempted(true);
-    spawnedStreams.add(instanceId);
 
     const model = instance?.config?.model;
     const systemPrompt = instance?.config?.systemPrompt;
@@ -122,18 +102,26 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     })
       .then(() => setIsReady(true))
       .catch((err) => {
-        console.error(`[ChatView ${instanceId}] spawn failed:`, err);
-        spawnedStreams.delete(instanceId); // Allow retry on failure
-        setIsReady(true); // Still allow input even on spawn failure
+        console.error(`[ChatView ${instanceId}] configure failed:`, err);
+        setIsReady(true); // Still allow input even on failure
       });
   }, [instanceId, projectDir, claudeSessionId, instance, spawn, spawnAttempted]);
 
-  // ---- Mark ready when system init event arrives ----
+  // ---- Capture the session id from every init event ----
   useEffect(() => {
     if (systemInfo?.subtype === 'init') {
       setIsReady(true);
+      const sid = systemInfo.session_id;
+      if (sid) {
+        const cur = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;
+        if (cur !== sid) {
+          useInstanceStore.getState().setClaudeSessionId(instanceId, sid);
+        }
+        // A fresh init means any prior /clear is complete
+        clearedRef.current = false;
+      }
     }
-  }, [systemInfo]);
+  }, [systemInfo, instanceId]);
 
 
   // ---- Auto-checkpoint after response completion ----
@@ -164,6 +152,8 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
 
     const tryScan = () => {
       if (!mounted) return;
+      // Never resurrect a session the user just cleared
+      if (clearedRef.current) return;
       const inst = useInstanceStore.getState().instances.get(instanceId);
       if (!inst) return;
       // Only capture a session id when this instance has NONE — never
@@ -266,11 +256,14 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
       const trimmed = messageText.trim();
       if (!trimmed) return;
 
-      // /clear — handled client-side: wipe messages and start a fresh session
+      // /clear — real clear: end the CLI process (its context dies with it),
+      // wipe the transcript, and forget the session id. The next send starts
+      // a brand-new conversation via the lazy spawn.
       if (trimmed === '/clear') {
-        useChatStore.getState().initSession(instanceId);
+        clearedRef.current = true;
+        invoke('stream_clear', { id: instanceId }).catch(() => {});
+        useChatStore.getState().reset(instanceId);
         useInstanceStore.getState().setClaudeSessionId(instanceId, '');
-        setSpawnAttempted(false); // triggers useEffect to re-spawn with clean state
         return;
       }
 
@@ -434,40 +427,6 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
               isGroupEnd={groupFlags[i]?.isGroupEnd}
             />
           ))
-        )}
-
-        {/* Permission request banner */}
-        {permissionRequest && (
-          <div className="chat-permission-banner">
-            <div className="permission-card">
-              <div className="permission-card-title">
-                <span className="permission-card-icon">{'\u{1F510}'}</span>
-                <span>Permission: {permissionRequest.tool_name}</span>
-              </div>
-              {permissionRequest.description && (
-                <div className="permission-card-lines">
-                  <div className="permission-card-line">{permissionRequest.description}</div>
-                </div>
-              )}
-              <pre className="permission-card-input">
-                {JSON.stringify(permissionRequest.tool_input, null, 2)}
-              </pre>
-              <div className="permission-card-actions">
-                <button
-                  className="permission-btn permission-btn--allow"
-                  onClick={() => respondPermission(true)}
-                >
-                  Allow
-                </button>
-                <button
-                  className="permission-btn permission-btn--deny"
-                  onClick={() => respondPermission(false)}
-                >
-                  Deny
-                </button>
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Thinking/streaming indicator */}
