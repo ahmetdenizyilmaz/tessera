@@ -1,10 +1,17 @@
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use sysinfo::System;
 use tauri::{AppHandle, Emitter};
 
-static MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
+// Generation counter: every start bumps it and spawns a loop bound to the new
+// generation; every stop bumps it without spawning. A loop exits as soon as
+// the global generation no longer matches its own, so stop+start can never
+// leave two loops running (unlike the old boolean flag, which raced against
+// the loop's sleep).
+static MONITOR_GEN: AtomicU64 = AtomicU64::new(0);
+
+const DEFAULT_INTERVAL_MS: u64 = 3000;
+const MIN_INTERVAL_MS: u64 = 250;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,20 +23,12 @@ pub struct SystemUpdatePayload {
 }
 
 #[tauri::command]
-pub async fn system_monitor_start(app: AppHandle) -> Result<(), String> {
-    // Atomically swap MONITOR_RUNNING to true and check the previous value.
-    // If it was already true, another caller started the monitor first — the
-    // `swap` guarantees exactly one caller sees `false` (the winner), so
-    // concurrent calls are safe: the first caller proceeds, all others return
-    // immediately. No additional locking is needed.
-    if MONITOR_RUNNING.swap(true, Ordering::SeqCst) {
-        return Ok(()); // already running
-    }
+pub async fn system_monitor_start(app: AppHandle, interval_ms: Option<u64>) -> Result<(), String> {
+    // Claim a fresh generation; any previously running loop sees a stale
+    // generation on its next check and exits.
+    let my_gen = MONITOR_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    let interval = interval_ms.unwrap_or(DEFAULT_INTERVAL_MS).max(MIN_INTERVAL_MS);
 
-    let running = Arc::new(AtomicBool::new(true));
-    let running_clone = running.clone();
-
-    // Store the running flag so we can stop it
     // Use a tokio task since sysinfo is Send + we use sleep
     tokio::spawn(async move {
         let mut sys = System::new_all();
@@ -38,7 +37,7 @@ pub async fn system_monitor_start(app: AppHandle) -> Result<(), String> {
         sys.refresh_cpu_all();
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        while MONITOR_RUNNING.load(Ordering::SeqCst) {
+        while MONITOR_GEN.load(Ordering::SeqCst) == my_gen {
             sys.refresh_cpu_all();
             sys.refresh_memory();
 
@@ -61,10 +60,8 @@ pub async fn system_monitor_start(app: AppHandle) -> Result<(), String> {
 
             let _ = app.emit("system-update", &payload);
 
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(interval)).await;
         }
-
-        drop(running_clone);
     });
 
     Ok(())
@@ -72,6 +69,7 @@ pub async fn system_monitor_start(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn system_monitor_stop() -> Result<(), String> {
-    MONITOR_RUNNING.store(false, Ordering::SeqCst);
+    // Invalidate the current generation so the running loop exits
+    MONITOR_GEN.fetch_add(1, Ordering::SeqCst);
     Ok(())
 }

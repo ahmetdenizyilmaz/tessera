@@ -6,9 +6,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { UsageInfo } from '../types/ipc';
 
 export function useUsagePolling() {
-  useEffect(() => {
-    const interval = useSettingsStore.getState().settings.usagePollingInterval;
+  // Reactive: restart the poller whenever the interval setting changes
+  const interval = useSettingsStore((s) => s.settings.usagePollingInterval);
 
+  useEffect(() => {
     const pollUsage = async () => {
       const instances = useInstanceStore.getState().instances;
 
@@ -39,5 +40,5 @@ export function useUsagePolling() {
       clearTimeout(initialTimeout);
       clearInterval(timer);
     };
-  }, []);
+  }, [interval]);
 }

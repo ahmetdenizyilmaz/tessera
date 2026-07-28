@@ -548,38 +548,9 @@ export function deriveStealFraction(
   return Math.max(0.05, Math.min(0.9, newFraction));
 }
 
-// ─── Layout Persistence ─────────────────────────────────────────────────────
-
-const LAYOUT_KEY = 'claude-gui-layout';
-
-function saveLayout(state: {
-  tabOrder: string[];
-  activeTabId: string | null;
-  focusedId: string | null;
-  layoutConfig: LayoutConfig | null;
-  panelRects: Map<string, PanelRect>;
-  stealFraction: number;
-  panelTypes: Record<string, PanelType>;
-  widgetKinds: Record<string, string>;
-}) {
-  try {
-    const data = {
-      tabOrder: state.tabOrder,
-      activeTabId: state.activeTabId,
-      focusedId: state.focusedId,
-      layoutConfig: state.layoutConfig,
-      panelRects: Object.fromEntries(state.panelRects),
-      stealFraction: state.stealFraction,
-      panelTypes: state.panelTypes,
-      widgetKinds: state.widgetKinds,
-    };
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(data));
-  } catch {
-    // Silently fail on localStorage errors
-  }
-}
-
 // ─── Layout Store ───────────────────────────────────────────────────────────
+// Layout persistence is owned by lib/workspaceSerializer.ts (the single
+// source of truth for the whole workspace).
 
 interface LayoutState {
   layout: string | null;
@@ -673,9 +644,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       panelRects,
       panelTypes: newTypes,
     };
-    set(newState);
-    saveLayout({ ...get() });
-  },
+    set(newState);  },
 
   addWidgetPanel: (kind: string, zone?: SnapZone) => {
     const state = get();
@@ -718,9 +687,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       panelTypes: newTypes,
       widgetKinds: newWidgetKinds,
     };
-    set(newState);
-    saveLayout({ ...get() });
-    return id;
+    set(newState);    return id;
   },
 
   removePanel: (id: string) => {
@@ -752,7 +719,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         widgetKinds: newWidgetKinds,
       };
       set(newState);
-      saveLayout({ ...get() });
       return;
     }
 
@@ -773,9 +739,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       panelTypes: newTypes,
       widgetKinds: newWidgetKinds,
     };
-    set(newState);
-    saveLayout({ ...get() });
-  },
+    set(newState);  },
 
   restoreLayout: (tabOrder, activeTabId, focusedId, layoutConfig, panelRects, stealFraction, panelTypes, widgetKinds) => {
     set({
@@ -788,9 +752,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       stealFraction,
       panelTypes: panelTypes ?? {},
       widgetKinds: widgetKinds ?? {},
-    });
-    saveLayout({ ...get() });
-  },
+    });  },
 
   setActiveTab: (id: string | null) => {
     set({ activeTabId: id });
@@ -814,9 +776,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     }
 
     const rects = computeRects(config, id, state.stealFraction);
-    set({ focusedId: id, layoutConfig: config, panelRects: rects });
-    saveLayout({ ...get() });
-  },
+    set({ focusedId: id, layoutConfig: config, panelRects: rects });  },
 
   moveTab: (fromIndex: number, toIndex: number) => {
     const state = get();
@@ -831,9 +791,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       state.layoutConfig,
     );
 
-    set({ tabOrder: newOrder, layoutConfig, panelRects });
-    saveLayout({ ...get() });
-  },
+    set({ tabOrder: newOrder, layoutConfig, panelRects });  },
 
   setPanelRect: (id: string, rect: PanelRect) => {
     set((state) => {
@@ -858,18 +816,14 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       gutterAxis,
     );
 
-    set({ stealFraction: newFraction });
-    saveLayout({ ...get() });
-  },
+    set({ stealFraction: newFraction });  },
 
   resetStealFraction: () => {
     const state = get();
     if (!state.layoutConfig) return;
 
     const rects = computeRects(state.layoutConfig, state.focusedId, 0.5);
-    set({ stealFraction: 0.5, panelRects: rects });
-    saveLayout({ ...get() });
-  },
+    set({ stealFraction: 0.5, panelRects: rects });  },
 
   clearPanelRects: () => {
     set({ panelRects: new Map() });
@@ -880,7 +834,5 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const config = buildSnapConfig(state.tabOrder, snappedId, zone, state.layoutConfig);
     const rects = computeRects(config, state.focusedId, state.stealFraction);
 
-    set({ layoutConfig: config, panelRects: rects });
-    saveLayout({ ...get() });
-  },
+    set({ layoutConfig: config, panelRects: rects });  },
 }));

@@ -25,6 +25,13 @@ interface PluginState {
   /** Create a new plugin instance, returns the instance ID */
   createInstance: (pluginName: string) => string;
 
+  /**
+   * Recreate a plugin instance under a GIVEN id (workspace restore — the id
+   * must match the persisted layout panel id). Returns false if the plugin
+   * is not in the registry.
+   */
+  restoreInstance: (pluginName: string, id: string, title?: string) => boolean;
+
   /** Remove a plugin instance */
   destroyInstance: (instanceId: string) => void;
 
@@ -104,6 +111,34 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     });
 
     return id;
+  },
+
+  restoreInstance: (pluginName: string, id: string, title?: string) => {
+    const manifest = get().registry.get(pluginName);
+    if (!manifest) {
+      console.warn(`[pluginStore] Cannot restore instance: plugin "${pluginName}" not found in registry`);
+      return false;
+    }
+    if (get().instances.has(id)) return true;
+
+    const instance: PluginInstance = {
+      id,
+      pluginName,
+      iframeReady: false,
+      title: title ?? manifest.defaultTitle,
+      icon: manifest.icon,
+      badge: null,
+      accentColor: manifest.accentColor ?? null,
+      userColor: null,
+    };
+
+    set((state) => {
+      const next = new Map(state.instances);
+      next.set(id, instance);
+      return { instances: next };
+    });
+
+    return true;
   },
 
   destroyInstance: (instanceId: string) => {

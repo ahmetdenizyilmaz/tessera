@@ -1,4 +1,5 @@
 import type { InstanceConfig } from './instance';
+import type { WorkspaceSnapshotV3 } from '../lib/workspaceSerializer';
 
 export interface SessionInfo {
   sessionId: string;
@@ -74,7 +75,19 @@ export interface AdyFile {
     stealFraction: number;
     focusedId: string | null;
     panelTypes?: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin'>;
+    widgetKinds?: Record<string, string>;
   };
+}
+
+/** .ady workspace files, v2: the workspace body is a full v3 snapshot */
+export interface AdyFileV2 {
+  version: 2;
+  appVersion: string;
+  createdAt: string;
+  name?: string;
+  window: { x: number; y: number; width: number; height: number; isMaximized: boolean };
+  settings?: Partial<AppSettings>;
+  workspace: WorkspaceSnapshotV3;
 }
 
 export interface SavedWorkspace {
@@ -95,5 +108,6 @@ export interface SavedWorkspace {
     panelRects: Record<string, PanelRect>;
     stealFraction: number;
     panelTypes?: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin'>;
+    widgetKinds?: Record<string, string>;
   };
 }

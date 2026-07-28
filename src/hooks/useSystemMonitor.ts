@@ -5,17 +5,24 @@ import { useSystemStore } from '../store/systemStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { SystemUpdatePayload } from '../types/ipc';
 
+// Serialize start/stop invokes so a stop from a previous effect cleanup can
+// never land after (and kill) the monitor started by the next effect run
+let monitorControl: Promise<unknown> = Promise.resolve();
+
 export function useSystemMonitor() {
+  // Reactive: restart the backend monitor whenever the interval setting changes
+  const interval = useSettingsStore((s) => s.settings.systemMonitorInterval);
+
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let isMounted = true;
 
-    const interval = useSettingsStore.getState().settings.systemMonitorInterval;
-
     // Start the system monitor on the backend
-    invoke('system_monitor_start').catch((err) => {
-      console.error('Failed to start system monitor:', err);
-    });
+    monitorControl = monitorControl
+      .then(() => invoke('system_monitor_start', { intervalMs: interval }))
+      .catch((err) => {
+        console.error('Failed to start system monitor:', err);
+      });
 
     // Listen for system-update events
     (async () => {
@@ -33,7 +40,9 @@ export function useSystemMonitor() {
     return () => {
       isMounted = false;
       if (unlisten) unlisten();
-      invoke('system_monitor_stop').catch(() => {});
+      monitorControl = monitorControl
+        .then(() => invoke('system_monitor_stop'))
+        .catch(() => {});
     };
-  }, []);
+  }, [interval]);
 }

@@ -11,6 +11,7 @@ export type {
   SnapZone,
   AppSettings,
   AdyFile,
+  AdyFileV2,
   SavedWorkspace,
 } from './session';
 

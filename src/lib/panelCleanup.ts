@@ -49,6 +49,15 @@ export async function closePanel(id: string): Promise<void> {
 
   useLayoutStore.getState().removePanel(id);
 
+  // Remove the closed panel from any group that still lists it as a child so
+  // no ghost childIds linger (and get persisted)
+  const groups = useGroupStore.getState().groups;
+  for (const [groupId, group] of groups) {
+    if (group.childIds.includes(id)) {
+      useGroupStore.getState().removeFromGroup(groupId, id);
+    }
+  }
+
   if (panelType !== 'group' && panelType !== 'widget' && panelType !== 'plugin') {
     useInstanceStore.getState().removeInstance(id);
   }

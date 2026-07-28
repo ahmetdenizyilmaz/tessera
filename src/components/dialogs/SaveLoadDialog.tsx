@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import type { AdyFile } from '../../types/session';
-import type { InstanceConfig } from '../../types/instance';
+import { serializeWorkspace, deserializeWorkspace } from '../../lib/workspaceSerializer';
+import type { AdyFile, AdyFileV2, SavedWorkspace } from '../../types/session';
 
 interface SaveLoadDialogProps {
   isOpen: boolean;
@@ -17,9 +15,6 @@ export const SaveLoadDialog: React.FC<SaveLoadDialogProps> = ({ isOpen, onClose,
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const instances = useInstanceStore((s) => s.instances);
-  const { addInstance } = useInstanceStore();
-  const layout = useLayoutStore();
   const { settings } = useSettingsStore();
 
   if (!isOpen) return null;
@@ -32,30 +27,13 @@ export const SaveLoadDialog: React.FC<SaveLoadDialogProps> = ({ isOpen, onClose,
       });
       if (!path) return;
 
-      const instanceArray = Array.from(instances.values()).map((inst) => ({
-        id: inst.id,
-        name: inst.name,
-        color: inst.color,
-        config: inst.config,
-        claudeSessionId: inst.claudeSessionId,
-      }));
-
-      const adyFile: AdyFile = {
-        version: 1,
+      const adyFile: AdyFileV2 = {
+        version: 2,
         appVersion: '0.0.2-beta',
         createdAt: new Date().toISOString(),
         window: { x: 0, y: 0, width: 1200, height: 800, isMaximized: false },
-        tabOrder: layout.tabOrder,
-        activeTabId: layout.activeTabId,
-        instances: instanceArray,
         settings,
-        layout: {
-          layoutConfig: layout.layoutConfig,
-          panelRects: Object.fromEntries(layout.panelRects),
-          stealFraction: layout.stealFraction,
-          focusedId: layout.focusedId,
-          panelTypes: layout.panelTypes,
-        },
+        workspace: serializeWorkspace(),
       };
 
       const content = JSON.stringify(adyFile, null, 2);
@@ -78,93 +56,31 @@ export const SaveLoadDialog: React.FC<SaveLoadDialogProps> = ({ isOpen, onClose,
       if (!path) return;
 
       const raw = await invoke<string>('session_load_ady', { path: path as string });
-      const adyFile = JSON.parse(raw) as AdyFile;
+      const adyFile = JSON.parse(raw) as AdyFile | AdyFileV2;
 
-      // Create ID mapping: old ID -> new ID
-      const idMap = new Map<string, string>();
-
-      for (const inst of adyFile.instances) {
-        const config: InstanceConfig = inst.config;
-        const newId = addInstance(config, inst.name);
-        idMap.set(inst.id, newId);
-
-        // Restore color
-        useInstanceStore.getState().setColor(newId, inst.color);
-
-        // Restore session ID if available — drop it when the session file is gone
-        if (inst.claudeSessionId) {
-          useInstanceStore.getState().setClaudeSessionId(newId, inst.claudeSessionId);
-          const sid = inst.claudeSessionId;
-          invoke<boolean>('session_exists', { projectPath: inst.config.cwd || '', sessionId: sid })
-            .then((exists) => {
-              if (!exists) {
-                const cur = useInstanceStore.getState().instances.get(newId)?.claudeSessionId;
-                if (cur === sid) {
-                  useInstanceStore.getState().setClaudeSessionId(newId, '');
-                }
+      if (adyFile.version === 2) {
+        deserializeWorkspace(adyFile.workspace);
+      } else {
+        // Legacy v1 .ady: convert to the v2 SavedWorkspace shape the
+        // serializer knows how to migrate
+        const legacy: SavedWorkspace = {
+          version: 2,
+          savedAt: Date.now(),
+          instances: adyFile.instances,
+          layout: adyFile.layout && adyFile.tabOrder
+            ? {
+                tabOrder: adyFile.tabOrder,
+                activeTabId: adyFile.activeTabId,
+                focusedId: adyFile.layout.focusedId,
+                layoutConfig: adyFile.layout.layoutConfig,
+                panelRects: adyFile.layout.panelRects,
+                stealFraction: adyFile.layout.stealFraction ?? 0.5,
+                panelTypes: adyFile.layout.panelTypes,
+                widgetKinds: adyFile.layout.widgetKinds,
               }
-            })
-            .catch(() => {});
-        }
-      }
-
-      // Restore layout with remapped IDs
-      if (adyFile.layout && adyFile.tabOrder) {
-        const newTabOrder = adyFile.tabOrder
-          .map((id) => idMap.get(id))
-          .filter((id): id is string => id !== undefined);
-
-        const newActiveTab = adyFile.activeTabId ? idMap.get(adyFile.activeTabId) ?? null : null;
-        const newFocused = adyFile.layout.focusedId ? idMap.get(adyFile.layout.focusedId) ?? null : null;
-
-        // Remap panel rects
-        const newRects = new Map<string, { x: number; y: number; w: number; h: number }>();
-        if (adyFile.layout.panelRects) {
-          for (const [oldId, rect] of Object.entries(adyFile.layout.panelRects)) {
-            const newId = idMap.get(oldId);
-            if (newId) newRects.set(newId, rect);
-          }
-        }
-
-        // Remap layout config panel order
-        let newLayoutConfig = adyFile.layout.layoutConfig;
-        if (newLayoutConfig) {
-          newLayoutConfig = {
-            ...newLayoutConfig,
-            panelOrder: newLayoutConfig.panelOrder
-              .map((id) => idMap.get(id))
-              .filter((id): id is string => id !== undefined),
-          };
-        }
-
-        // Remap panel types
-        const newPanelTypes: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin'> = {};
-        if (adyFile.layout.panelTypes) {
-          for (const [oldId, type] of Object.entries(adyFile.layout.panelTypes)) {
-            const newId = idMap.get(oldId);
-            if (newId) newPanelTypes[newId] = type;
-          }
-        }
-
-        // Remap widget kinds
-        const newWidgetKinds: Record<string, string> = {};
-        if ((adyFile.layout as Record<string, unknown>).widgetKinds) {
-          for (const [oldId, kind] of Object.entries((adyFile.layout as Record<string, unknown>).widgetKinds as Record<string, string>)) {
-            const newId = idMap.get(oldId);
-            if (newId) newWidgetKinds[newId] = kind;
-          }
-        }
-
-        layout.restoreLayout(
-          newTabOrder,
-          newActiveTab,
-          newFocused,
-          newLayoutConfig,
-          newRects,
-          adyFile.layout.stealFraction ?? 0.5,
-          newPanelTypes,
-          newWidgetKinds,
-        );
+            : undefined,
+        };
+        deserializeWorkspace(legacy);
       }
 
       // Restore settings if present

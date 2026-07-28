@@ -1,129 +1,31 @@
-import { useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { useEffect } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore } from '../store/layoutStore';
+import { useGroupStore } from '../store/groupStore';
+import { usePluginStore } from '../store/pluginStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSessionStore } from '../store/sessionStore';
-import type { SavedWorkspace } from '../types/session';
-import type { PanelRect } from '../types/session';
+import { restoreOnce, saveNow, scheduleSave } from '../lib/workspaceSerializer';
 
-const AUTOSAVE_KEY = 'claude-gui-autosave';
 const AUTOSAVE_INTERVAL = 30000; // 30 seconds
 
 export function useAutoSave() {
-  const restoredRef = useRef(false);
+  // Reactive: toggling the setting takes effect without a reload
+  const autoSave = useSettingsStore((s) => s.settings.autoSave);
 
-  // Restore on mount
+  // Restore on mount (module-level guard in the serializer makes this safe
+  // against double-mount / StrictMode / App remount)
   useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
-
-    try {
-      const raw = localStorage.getItem(AUTOSAVE_KEY);
-      if (!raw) return;
-
-      const saved: SavedWorkspace = JSON.parse(raw);
-      if (saved.version !== 2 || !saved.instances?.length) return;
-
-      // ID remapping: old IDs -> new IDs
-      const idMap = new Map<string, string>();
-
-      for (const inst of saved.instances) {
-        const newId = useInstanceStore.getState().addInstance(
-          inst.config,
-          inst.name,
-        );
-        idMap.set(inst.id, newId);
-
-        // Restore color and session ID
-        if (inst.color) {
-          useInstanceStore.getState().setColor(newId, inst.color);
-        }
-        if (inst.claudeSessionId) {
-          useInstanceStore.getState().setClaudeSessionId(newId, inst.claudeSessionId);
-          // Drop stale session ids at restore time so they stop being
-          // re-persisted forever (the Rust-side resume guard is authoritative)
-          const sid = inst.claudeSessionId;
-          invoke<boolean>('session_exists', { projectPath: inst.config.cwd || '', sessionId: sid })
-            .then((exists) => {
-              if (!exists) {
-                const cur = useInstanceStore.getState().instances.get(newId)?.claudeSessionId;
-                if (cur === sid) {
-                  useInstanceStore.getState().setClaudeSessionId(newId, '');
-                }
-              }
-            })
-            .catch(() => {});
-        }
-      }
-
-      // Restore layout with remapped IDs
-      if (saved.layout) {
-        const remapId = (id: string) => idMap.get(id) ?? id;
-        const newTabOrder = saved.layout.tabOrder.map(remapId);
-        const newActiveTabId = saved.layout.activeTabId ? remapId(saved.layout.activeTabId) : null;
-        const newFocusedId = saved.layout.focusedId ? remapId(saved.layout.focusedId) : null;
-
-        let newLayoutConfig = saved.layout.layoutConfig;
-        if (newLayoutConfig) {
-          newLayoutConfig = {
-            ...newLayoutConfig,
-            panelOrder: newLayoutConfig.panelOrder.map(remapId),
-          };
-        }
-
-        const newPanelRects = new Map<string, PanelRect>();
-        for (const [oldId, rect] of Object.entries(saved.layout.panelRects)) {
-          newPanelRects.set(remapId(oldId), rect);
-        }
-
-        // Remap panel types
-        const newPanelTypes: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin'> = {};
-        if (saved.layout.panelTypes) {
-          for (const [oldId, type] of Object.entries(saved.layout.panelTypes)) {
-            newPanelTypes[remapId(oldId)] = type;
-          }
-        }
-
-        // Remap widget kinds
-        const newWidgetKinds: Record<string, string> = {};
-        if ((saved.layout as Record<string, unknown>).widgetKinds) {
-          for (const [oldId, kind] of Object.entries((saved.layout as Record<string, unknown>).widgetKinds as Record<string, string>)) {
-            newWidgetKinds[remapId(oldId)] = kind;
-          }
-        }
-
-        useLayoutStore.getState().restoreLayout(
-          newTabOrder,
-          newActiveTabId,
-          newFocusedId,
-          newLayoutConfig,
-          newPanelRects,
-          saved.layout.stealFraction,
-          newPanelTypes,
-          newWidgetKinds,
-        );
-      } else {
-        // No saved layout: add panels for each instance
-        for (const inst of saved.instances) {
-          const newId = idMap.get(inst.id);
-          if (newId) {
-            useLayoutStore.getState().addPanel(newId);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to restore auto-save:', err);
-    }
+    restoreOnce();
   }, []);
 
-  // Persist active sessions on window close
+  // Persist active sessions AND the workspace on window close
   useEffect(() => {
     let cancelled = false;
     let unlistenFn: (() => void) | null = null;
 
-    listen('tauri://close-requested', () => {
+    getCurrentWindow().onCloseRequested(() => {
       const instances = useInstanceStore.getState().instances;
       const sessionStore = useSessionStore.getState();
       instances.forEach((inst) => {
@@ -136,6 +38,9 @@ export function useAutoSave() {
           endedAt: Date.now(),
         });
       });
+      if (useSettingsStore.getState().settings.autoSave) {
+        saveNow();
+      }
     }).then((fn) => {
       if (cancelled) {
         fn();
@@ -150,45 +55,27 @@ export function useAutoSave() {
     };
   }, []);
 
-  // Auto-save on interval
+  // Debounced save on every workspace mutation
   useEffect(() => {
-    const autoSave = useSettingsStore.getState().settings.autoSave;
     if (!autoSave) return;
 
-    const timer = setInterval(() => {
-      try {
-        const instances = useInstanceStore.getState().instances;
-        if (instances.size === 0) return;
+    const unsubs = [
+      useInstanceStore.subscribe(scheduleSave),
+      useLayoutStore.subscribe(scheduleSave),
+      useGroupStore.subscribe(scheduleSave),
+      usePluginStore.subscribe(scheduleSave),
+    ];
 
-        const layoutState = useLayoutStore.getState();
+    return () => {
+      for (const unsub of unsubs) unsub();
+    };
+  }, [autoSave]);
 
-        const workspace: SavedWorkspace = {
-          version: 2,
-          instances: Array.from(instances.values()).map((inst) => ({
-            id: inst.id,
-            name: inst.name,
-            color: inst.color,
-            config: inst.config,
-            claudeSessionId: inst.claudeSessionId,
-          })),
-          savedAt: Date.now(),
-          layout: {
-            tabOrder: layoutState.tabOrder,
-            activeTabId: layoutState.activeTabId,
-            focusedId: layoutState.focusedId,
-            layoutConfig: layoutState.layoutConfig,
-            panelRects: Object.fromEntries(layoutState.panelRects),
-            stealFraction: layoutState.stealFraction,
-            panelTypes: layoutState.panelTypes,
-          },
-        };
+  // Auto-save on interval (safety net)
+  useEffect(() => {
+    if (!autoSave) return;
 
-        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(workspace));
-      } catch (err) {
-        console.error('Auto-save failed:', err);
-      }
-    }, AUTOSAVE_INTERVAL);
-
+    const timer = setInterval(saveNow, AUTOSAVE_INTERVAL);
     return () => clearInterval(timer);
-  }, []);
+  }, [autoSave]);
 }

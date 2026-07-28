@@ -30,79 +30,13 @@ const EMPTY_CHILDREN: string[] = [];
 const EMPTY_BREADCRUMB: BreadcrumbSegment[] = [];
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
-
-const GROUP_STORAGE_KEY = 'claude-gui-groups';
-
-interface SerializedGroupState {
-  id: string;
-  name: string;
-  icon?: string;
-  color?: string;
-  parentId: string | null;
-  childIds: string[];
-  layoutConfig: LayoutConfig | null;
-  panelRects: Record<string, PanelRect>;
-  focusedChildId: string | null;
-  activeChildId: string | null;
-  stealFraction: number;
-}
-
-interface SerializedGroupStore {
-  groups: Record<string, SerializedGroupState>;
-  groupStack: string[];
-}
-
-function saveGroupState(groups: Map<string, GroupState>, groupStack: string[]) {
-  try {
-    const serialized: SerializedGroupStore = {
-      groups: {},
-      groupStack,
-    };
-    for (const [id, group] of groups) {
-      serialized.groups[id] = {
-        ...group,
-        panelRects: Object.fromEntries(group.panelRects),
-      };
-    }
-    localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(serialized));
-  } catch {
-    // Silently fail on localStorage errors
-  }
-}
-
-// ─── Debounced save (300ms trailing) ──────────────────────────────────────────
-
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
-
-function debouncedSave(groups: Map<string, GroupState>, groupStack: string[]) {
-  if (_saveTimer !== null) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    _saveTimer = null;
-    saveGroupState(groups, groupStack);
-  }, 300);
-}
-
-function loadGroupState(): { groups: Map<string, GroupState>; groupStack: string[] } | null {
-  try {
-    const raw = localStorage.getItem(GROUP_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: SerializedGroupStore = JSON.parse(raw);
-    const groups = new Map<string, GroupState>();
-    for (const [id, sg] of Object.entries(parsed.groups)) {
-      groups.set(id, {
-        ...sg,
-        panelRects: new Map(Object.entries(sg.panelRects)),
-      });
-    }
-    return { groups, groupStack: parsed.groupStack ?? [] };
-  } catch {
-    return null;
-  }
-}
+// Group persistence is owned by lib/workspaceSerializer.ts (the single source
+// of truth for the whole workspace). The legacy 'claude-gui-groups' key is
+// read there once for migration.
 
 // ─── Layout Sync (swap layout state when entering/exiting groups) ────────────
 
-interface SavedLayoutState {
+export interface SavedLayoutState {
   tabOrder: string[];
   activeTabId: string | null;
   focusedId: string | null;
@@ -198,6 +132,26 @@ function syncLayoutToGroup(
   return updated;
 }
 
+/**
+ * Snapshot for workspace serialization: the full groups map (with the live
+ * layout synced into the currently open group) plus the root-level layout
+ * when we're currently inside a group (the root layout then sits at the
+ * bottom of the saved layout stack).
+ */
+export function captureGroupSnapshot(): {
+  groups: Map<string, GroupState>;
+  rootLayout: SavedLayoutState | null;
+} {
+  const state = useGroupStore.getState();
+  if (state.groupStack.length === 0) {
+    return { groups: state.groups, rootLayout: null };
+  }
+  const currentGroupId = state.groupStack[state.groupStack.length - 1];
+  const groups = syncLayoutToGroup(state.groups, currentGroupId);
+  const rootLayout = savedLayoutStack.length > 0 ? savedLayoutStack[0] : null;
+  return { groups, rootLayout };
+}
+
 // ─── Group Counter (anchored to globalThis for HMR survival)
 
 const groupCounter: { value: number } = (globalThis as any).__groupCounter ??= { value: 0 };
@@ -221,6 +175,7 @@ interface GroupStoreState {
   createGroup: (parentId: string | null, name?: string) => string;
   renameGroup: (groupId: string, name: string) => void;
   deleteGroup: (groupId: string) => void;
+  restoreGroups: (groups: Map<string, GroupState>) => void;
 
   // Panel management within groups
   addToGroup: (groupId: string, panelId: string) => void;
@@ -240,11 +195,8 @@ interface GroupStoreState {
   getBreadcrumb: () => BreadcrumbSegment[];
 }
 
-// Load persisted state (always reset groupStack — savedLayoutStack isn't persisted)
-const persisted = loadGroupState();
-
 export const useGroupStore = create<GroupStoreState>((set, get) => ({
-  groups: persisted?.groups ?? new Map(),
+  groups: new Map(),
   groupStack: [], // Always start at root; layout sync state is lost across reloads
   transitionDirection: null,
   transitionGroupId: null,
@@ -282,7 +234,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
 
     const newStack = [...state.groupStack, groupId];
     set({ groupStack: newStack, transitionDirection: null, transitionGroupId: null });
-    debouncedSave(state.groups, newStack);
   },
 
   exitGroup: () => {
@@ -299,7 +250,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
 
     const newStack = state.groupStack.slice(0, -1);
     set({ groups: newGroups, groupStack: newStack, transitionDirection: 'exit', transitionGroupId: currentGroupId });
-    debouncedSave(newGroups, newStack);
   },
 
   jumpToLevel: (groupId: string | null) => {
@@ -317,7 +267,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
       if (rootSaved) restoreLayoutFromSaved(rootSaved);
 
       set({ groups: newGroups, groupStack: [], transitionDirection: 'exit', transitionGroupId: currentGroupId });
-      debouncedSave(newGroups, []);
       return;
     }
 
@@ -332,7 +281,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
 
     const newStack = state.groupStack.slice(0, idx + 1);
     set({ groups: newGroups, groupStack: newStack, transitionDirection: 'exit', transitionGroupId: currentGroupId });
-    debouncedSave(newGroups, newStack);
   },
 
   // ─── Group CRUD ──────────────────────────────────────────────────────
@@ -369,7 +317,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     }
 
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
     return id;
   },
 
@@ -381,7 +328,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const newGroups = new Map(state.groups);
     newGroups.set(groupId, { ...group, name });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   deleteGroup: (groupId: string) => {
@@ -433,7 +379,18 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     }
 
     set({ groups: newGroups, groupStack: newStack });
-    debouncedSave(newGroups, newStack);
+  },
+
+  restoreGroups: (groups: Map<string, GroupState>) => {
+    // Merge restored groups over any existing ones (restored ids win) and
+    // reset navigation to root — the restored layout is the root layout
+    const state = get();
+    const merged = new Map(state.groups);
+    for (const [id, group] of groups) {
+      merged.set(id, group);
+    }
+    savedLayoutStack.length = 0;
+    set({ groups: merged, groupStack: [], transitionDirection: null, transitionGroupId: null });
   },
 
   // ─── Panel Management ────────────────────────────────────────────────
@@ -450,7 +407,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
       childIds: [...group.childIds, panelId],
     });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   removeFromGroup: (groupId: string, panelId: string) => {
@@ -471,7 +427,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
         : group.activeChildId,
     });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   moveToGroup: (panelId: string, fromGroupId: string | null, toGroupId: string | null) => {
@@ -508,7 +463,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     }
 
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   // ─── Group Layout State ──────────────────────────────────────────────
@@ -521,7 +475,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const newGroups = new Map(state.groups);
     newGroups.set(groupId, { ...group, layoutConfig: config });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   setGroupPanelRects: (groupId: string, rects: Map<string, PanelRect>) => {
@@ -531,7 +484,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const newGroups = new Map(state.groups);
     newGroups.set(groupId, { ...group, panelRects: rects });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   setGroupFocusedChild: (groupId: string, childId: string | null) => {
@@ -542,7 +494,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const newGroups = new Map(state.groups);
     newGroups.set(groupId, { ...group, focusedChildId: childId });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   setGroupActiveChild: (groupId: string, childId: string | null) => {
@@ -553,7 +504,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const newGroups = new Map(state.groups);
     newGroups.set(groupId, { ...group, activeChildId: childId });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   setGroupStealFraction: (groupId: string, fraction: number) => {
@@ -564,7 +514,6 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
     const newGroups = new Map(state.groups);
     newGroups.set(groupId, { ...group, stealFraction: fraction });
     set({ groups: newGroups });
-    debouncedSave(newGroups, state.groupStack);
   },
 
   // ─── Computed Helpers ────────────────────────────────────────────────
