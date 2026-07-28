@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { useChatStore } from '../../store/chatStore';
 import type { ControlResponsePayload, PendingControlRequest } from '../../types/stream';
 
 interface ControlRequestAreaProps {
@@ -24,7 +25,7 @@ export const ControlRequestArea: React.FC<ControlRequestAreaProps> = ({
 
   const toolName = head.request.tool_name ?? '';
   if (toolName === 'AskUserQuestion') {
-    return <AskUserQuestionCard key={head.requestId} req={head} respond={respond} />;
+    return <AskUserQuestionCard key={head.requestId} instanceId={instanceId} req={head} respond={respond} />;
   }
   if (toolName === 'ExitPlanMode') {
     return <ExitPlanModeCard key={head.requestId} instanceId={instanceId} req={head} respond={respond} />;
@@ -106,9 +107,10 @@ interface AskQuestion {
 }
 
 const AskUserQuestionCard: React.FC<{
+  instanceId: string;
   req: PendingControlRequest;
   respond: ControlRequestAreaProps['respond'];
-}> = ({ req, respond }) => {
+}> = ({ instanceId, req, respond }) => {
   const { request, requestId } = req;
   const input = request.input ?? {};
   const questions: AskQuestion[] = Array.isArray((input as Record<string, unknown>).questions)
@@ -156,9 +158,16 @@ const AskUserQuestionCard: React.FC<{
   const submit = () => {
     if (busy || !canSubmit) return;
     setBusy(true);
+    const answers = buildAnswers();
+    // Record the answers on the transcript's tool_use block too — the CLI
+    // never echoes updatedInput back, so without this the chosen answer
+    // would vanish once the card closes.
+    if (request.tool_use_id) {
+      useChatStore.getState().mergeToolInput(instanceId, request.tool_use_id, { answers });
+    }
     respond(requestId, {
       behavior: 'allow',
-      updatedInput: { ...(input as Record<string, unknown>), answers: buildAnswers() },
+      updatedInput: { ...(input as Record<string, unknown>), answers },
     }).catch(() => setBusy(false));
   };
 

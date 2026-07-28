@@ -16,6 +16,21 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({ input, result
       }>)
     : [];
   const answers = (input.answers ?? {}) as Record<string, string>;
+  const hasAnswers = Object.keys(answers).length > 0;
+
+  // While unanswered, the interactive card below the transcript shows the
+  // full question — a duplicate here is just noise, so render a stub row.
+  if (!hasAnswers && result == null) {
+    return (
+      <div className="tool-widget tool-widget--question">
+        <div className="tool-widget__header tool-widget__header--static">
+          <span className="tool-widget__icon">{'❓'}</span>
+          <span className="tool-widget__label">Question</span>
+          <span className="question-widget__pending">answer below ↓</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="tool-widget tool-widget--question">
@@ -27,6 +42,7 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({ input, result
         {questions.map((q) => {
           const answer = answers[q.question];
           const answerParts = answer ? answer.split(',').map((s) => s.trim()) : [];
+          const freeText = answer && !(q.options ?? []).some((o) => answerParts.includes(o.label));
           return (
             <div key={q.question} className="question-widget__item">
               <div className="question-widget__question">{q.question}</div>
@@ -43,8 +59,13 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({ input, result
                   );
                 })}
               </div>
-              {answer && !(q.options ?? []).some((o) => answerParts.includes(o.label)) && (
+              {freeText && (
                 <div className="question-widget__free-answer">→ {answer}</div>
+              )}
+              {!answer && (
+                <div className="question-widget__free-answer question-widget__free-answer--skipped">
+                  (skipped)
+                </div>
               )}
             </div>
           );

@@ -267,6 +267,38 @@ export class StreamAccumulator {
     });
   }
 
+  /**
+   * Merge fields into a tool_use block's input (copy-on-write). Used to
+   * record locally-known data the CLI never echoes back — e.g. the answers
+   * the user picked in an AskUserQuestion card.
+   */
+  mergeToolInput(toolUseId: string, patch: Record<string, unknown>): void {
+    const loc = this.toolUseLoc.get(toolUseId);
+    if (!loc) return;
+
+    if (this.currentIdx === loc.msg && this.current) {
+      const b = this.current.blocks[loc.block];
+      if (b?.type === 'tool_use') {
+        b.input = { ...b.input, ...patch };
+        this.syncCurrent();
+      }
+      return;
+    }
+
+    const msg = this.allMessages[loc.msg];
+    if (!msg || !('blocks' in msg)) return;
+    const b = msg.blocks[loc.block];
+    if (b?.type !== 'tool_use') return;
+
+    const newBlock: AccumulatedToolUseBlock = { ...b, input: { ...b.input, ...patch } };
+    const blocks = [...msg.blocks];
+    blocks[loc.block] = newBlock;
+    const clone: AccumulatedMessage = { ...msg, blocks };
+    const next = [...this.allMessages];
+    next[loc.msg] = clone;
+    this.allMessages = next;
+  }
+
   /** Link a tool result to a previously seen tool_use block by its ID */
   setToolResult(toolUseId: string, result: string, isError?: boolean): void {
     const loc = this.toolUseLoc.get(toolUseId);

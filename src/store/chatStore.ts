@@ -34,6 +34,7 @@ interface ChatState {
   addUserMessage: (instanceId: string, text: string, images?: string[]) => void;
   clearError: (instanceId: string) => void;
   pushCliWarning: (instanceId: string, warning: string) => void;
+  mergeToolInput: (instanceId: string, toolUseId: string, patch: Record<string, unknown>) => void;
   removeControlRequest: (instanceId: string, requestId: string) => void;
   clearControlRequests: (instanceId: string) => void;
   setStreaming: (instanceId: string, streaming: boolean) => void;
@@ -237,6 +238,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const session = ensureSession(next, instanceId);
       const warnings = [...session.cliWarnings, warning].slice(-20);
       next.set(instanceId, { ...session, cliWarnings: warnings });
+      return { sessions: next };
+    });
+  },
+
+  mergeToolInput: (instanceId, toolUseId, patch) => {
+    set((state) => {
+      const next = new Map(state.sessions);
+      const session = next.get(instanceId);
+      if (session) {
+        session.accumulator.mergeToolInput(toolUseId, patch);
+        next.set(instanceId, { ...session, messages: rebuildMessages(session) });
+      }
       return { sessions: next };
     });
   },

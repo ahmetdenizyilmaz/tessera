@@ -1342,6 +1342,18 @@
   color: #3fb950;
 }
 
+.question-widget__free-answer--skipped {
+  color: var(--text-muted, #6a737d);
+  font-style: italic;
+}
+
+.question-widget__pending {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted, #6a737d);
+  font-style: italic;
+}
+
 .plan-widget__content {
   max-height: 280px;
   overflow: auto;
