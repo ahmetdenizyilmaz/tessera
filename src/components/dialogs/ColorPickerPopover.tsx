@@ -21,7 +21,9 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
   if (!isOpen) return null;
 
   const style: React.CSSProperties = {
-    position: 'absolute',
+    // Always fixed: the anchor rect is in viewport coordinates, and absolute
+    // positioning inside a mosaic tile would misplace and clip the popover
+    position: 'fixed',
     background: 'var(--bg-surface)',
     border: '1px solid var(--border-light)',
     borderRadius: 'var(--radius-md)',
@@ -33,13 +35,12 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
 
   if (anchorEl) {
     const rect = anchorEl.getBoundingClientRect();
-    style.top = rect.bottom + 4;
-    style.left = rect.left;
+    style.top = Math.min(rect.bottom + 4, window.innerHeight - 220);
+    style.left = Math.min(rect.left, window.innerWidth - 200);
   } else {
     style.top = '50%';
     style.left = '50%';
     style.transform = 'translate(-50%, -50%)';
-    style.position = 'fixed';
   }
 
   const handleSelect = (color: string) => {
@@ -60,7 +61,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
         style={{ position: 'fixed', inset: 0, zIndex: 1099 }}
         onClick={onClose}
       />
-      <div style={style}>
+      <div className="color-picker-popover" style={style}>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 500 }}>
           Pick a color
         </div>

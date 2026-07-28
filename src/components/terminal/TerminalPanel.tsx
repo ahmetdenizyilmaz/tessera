@@ -175,6 +175,10 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
     if (!contextMenu) return;
     let cleaned = false;
     const handleClick = (e: MouseEvent) => {
+      // Clicks inside the color popover belong to it — closing here would
+      // unmount the swatch before its own click handler can fire
+      const target = e.target as Element | null;
+      if (target?.closest?.('.color-picker-popover')) return;
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
         setShowColorPicker(false);

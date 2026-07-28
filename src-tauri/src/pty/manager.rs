@@ -191,8 +191,15 @@ pub async fn pty_spawn(
 
     cmd.cwd(&work_dir);
 
-    // Remove CLAUDECODE env var to prevent nested context detection
+    // Strip nested-session markers: if the GUI itself was launched from
+    // inside a Claude Code session (e.g. `tauri dev` in a CC terminal), the
+    // PTY child would otherwise think it's a child session — refusing to
+    // start ("cannot launch inside another session") or silently disabling
+    // transcript saving ("inherited CLAUDE_CODE_CHILD_SESSION marker").
     cmd.env_remove("CLAUDECODE");
+    cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
+    cmd.env_remove("CLAUDE_CODE_CHILD_SESSION");
+    cmd.env_remove("CLAUDE_EXE");
 
     let child = pair
         .slave
