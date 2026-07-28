@@ -104,6 +104,13 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
   useEffect(() => {
     if (systemInfo?.subtype === 'init') {
       setIsReady(true);
+      // The chat process is alive — reflect it in the status badge (the
+      // terminal path sets this on PTY spawn, but chat-only panels never
+      // spawn a PTY anymore)
+      const inst = useInstanceStore.getState().instances.get(instanceId);
+      if (inst && inst.status !== 'running') {
+        useInstanceStore.getState().setStatus(instanceId, 'running');
+      }
       const sid = systemInfo.session_id;
       if (sid) {
         const cur = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;

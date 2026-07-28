@@ -235,12 +235,13 @@ fn ensure_process(
     }
     if cfg.dangerously_skip_permissions {
         cmd.arg("--dangerously-skip-permissions");
-    } else {
-        // Permission prompts, AskUserQuestion and plan approval arrive as
-        // can_use_tool control requests on stdout and are answered over stdin
-        // (the same mechanism the official SDK uses).
-        cmd.arg("--permission-prompt-tool").arg("stdio");
     }
+    // ALWAYS declare the stdio prompt channel: the CLI only injects the
+    // AskUserQuestion tool (and routes plan approval) when a prompt channel
+    // exists. Verified compatible with --dangerously-skip-permissions —
+    // tool permissions stay bypassed while questions still arrive as
+    // can_use_tool control requests answered over stdin.
+    cmd.arg("--permission-prompt-tool").arg("stdio");
 
     cmd.current_dir(&cfg.cwd);
 
