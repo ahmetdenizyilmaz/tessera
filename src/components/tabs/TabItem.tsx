@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -47,6 +48,9 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
   const enterGroup = useGroupStore((s) => s.enterGroup);
   const pluginInstance = usePluginStore((s) => s.instances.get(id));
 
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
   const {
     attributes,
     listeners,
@@ -54,7 +58,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
     transform,
     transition,
     isDragging,
-  } = useSortable({ id });
+  } = useSortable({ id, disabled: isRenaming });
 
   // Group tabs are also droppable targets for cross-group moves
   const isGroup = panelType === 'group';
@@ -85,6 +89,22 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
   const handleDoubleClick = () => {
     if (isGroup) {
       enterGroup(id);
+      return;
+    }
+    // Widgets have fixed labels; instances and plugins rename inline
+    if (isWidget) return;
+    setRenameValue(tabName);
+    setIsRenaming(true);
+  };
+
+  const commitRename = () => {
+    const v = renameValue.trim();
+    setIsRenaming(false);
+    if (!v || v === tabName) return;
+    if (isPlugin) {
+      usePluginStore.getState().setInstanceTitle(id, v);
+    } else {
+      useInstanceStore.getState().setName(id, v);
     }
   };
 
@@ -151,7 +171,25 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
           style={{ filter: `drop-shadow(0 0 3px ${instance!.color})` }}
         />
       )}
-      <span className="tab-name">{tabName}</span>
+      {isRenaming ? (
+        <input
+          className="tab-rename-input"
+          value={renameValue}
+          autoFocus
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') commitRename();
+            if (e.key === 'Escape') setIsRenaming(false);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="tab-name">{tabName}</span>
+      )}
       {isPlugin && pluginInstance?.badge != null && pluginInstance.badge > 0 && (
         <span style={{
           background: 'var(--accent)',

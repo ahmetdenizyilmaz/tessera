@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -82,6 +82,32 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
 
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const activeTabId = useLayoutStore((s) => s.activeTabId);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [showTabList, setShowTabList] = useState(false);
+
+  // Show the ⌄ all-tabs menu whenever tabs don't fit the strip
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const check = () => setIsOverflowing(el.scrollWidth > el.clientWidth + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tabOrder.length]);
+
+  const getTabLabel = useCallback((id: string): string => {
+    const pt = useLayoutStore.getState().panelTypes[id];
+    if (pt === 'group') return useGroupStore.getState().groups.get(id)?.name ?? 'Group';
+    if (pt === 'widget') {
+      const kind = useLayoutStore.getState().widgetKinds[id];
+      return kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : 'Widget';
+    }
+    if (pt === 'plugin') return usePluginStore.getState().instances.get(id)?.title ?? 'Plugin';
+    return useInstanceStore.getState().getInstance(id)?.name ?? id;
+  }, []);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -307,7 +333,7 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
           items={tabOrder}
           strategy={horizontalListSortingStrategy}
         >
-          <div className="tab-bar-tabs">
+          <div className="tab-bar-tabs" ref={tabsRef}>
             {tabOrder.map((id) => (
               <TabItem
                 key={id}
@@ -338,6 +364,35 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {isOverflowing && (
+        <div style={{ position: 'relative' }}>
+          <button
+            className="tab-bar-add"
+            onClick={() => setShowTabList((v) => !v)}
+            title="All tabs"
+          >
+            {'⌄'}
+          </button>
+          {showTabList && (
+            <div className="tab-overflow-menu" onMouseLeave={() => setShowTabList(false)}>
+              {tabOrder.map((id) => (
+                <button
+                  key={id}
+                  className={`tab-overflow-item${id === activeTabId ? ' tab-overflow-item--active' : ''}`}
+                  onClick={() => {
+                    useLayoutStore.getState().setActiveTab(id);
+                    useLayoutStore.getState().setFocused(id);
+                    setShowTabList(false);
+                  }}
+                >
+                  {getTabLabel(id)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ position: 'relative' }}>
         <button

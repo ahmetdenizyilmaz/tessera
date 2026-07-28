@@ -88,7 +88,8 @@ pub async fn session_load_history(
     session_id: String,
     project_path: String,
 ) -> Result<Vec<HistoryChatMessage>, String> {
-    let file_path = claude_paths::session_file_path(&project_path, &session_id);
+    let resolved = claude_paths::resolve_work_dir(&project_path);
+    let file_path = claude_paths::session_file_path(&resolved, &session_id);
 
     if !file_path.exists() {
         return Err(format!("Session file not found: {}", file_path.display()));

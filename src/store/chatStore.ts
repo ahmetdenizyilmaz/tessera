@@ -34,6 +34,7 @@ interface ChatState {
   addUserMessage: (instanceId: string, text: string, images?: string[]) => void;
   clearError: (instanceId: string) => void;
   pushCliWarning: (instanceId: string, warning: string) => void;
+  seedHistory: (instanceId: string, items: Array<{ role: string; content: string; timestamp?: string | null }>) => void;
   mergeToolInput: (instanceId: string, toolUseId: string, patch: Record<string, unknown>) => void;
   removeControlRequest: (instanceId: string, requestId: string) => void;
   clearControlRequests: (instanceId: string) => void;
@@ -238,6 +239,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const session = ensureSession(next, instanceId);
       const warnings = [...session.cliWarnings, warning].slice(-20);
       next.set(instanceId, { ...session, cliWarnings: warnings });
+      return { sessions: next };
+    });
+  },
+
+  seedHistory: (instanceId, items) => {
+    set((state) => {
+      const next = new Map(state.sessions);
+      const session = ensureSession(next, instanceId);
+      // Only seed a pristine session — never clobber a live conversation
+      if (session.accumulator.getAllMessages().length > 0 || session.isStreaming) {
+        return { sessions: next };
+      }
+      items.forEach((item, i) => {
+        const text = item.content?.trim();
+        if (!text) return;
+        if (item.role === 'user') {
+          session.accumulator.addUserMessage({
+            id: `hist-${i}`,
+            role: 'user',
+            text,
+            timestamp: item.timestamp ? (Date.parse(item.timestamp) || Date.now()) : Date.now(),
+          });
+        } else {
+          session.accumulator.addLocalAssistantMessage(text);
+        }
+      });
+      session.messages = rebuildMessages(session);
+      next.set(instanceId, { ...session });
       return { sessions: next };
     });
   },

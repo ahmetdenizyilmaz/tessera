@@ -142,6 +142,29 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     prevStreamingRef.current = isStreaming;
   }, [isStreaming, messages, instanceId, claudeSessionId, createCheckpoint]);
 
+  // ---- Restore the visible transcript from the session file on reopen ----
+  // The workspace restore brings back the panel + session id; the CLI resumes
+  // the conversation context — this brings back the chat the user can SEE.
+  useEffect(() => {
+    if (!claudeSessionId || !projectDir) return;
+    if (clearedRef.current) return;
+    const session = useChatStore.getState().sessions.get(instanceId);
+    if (session && session.messages.length > 0) return;
+    let mounted = true;
+    invoke<Array<{ role: string; content: string; timestamp?: string | null }>>('session_load_history', {
+      sessionId: claudeSessionId,
+      projectPath: projectDir,
+    })
+      .then((items) => {
+        if (!mounted || !items || items.length === 0) return;
+        useChatStore.getState().seedHistory(instanceId, items);
+      })
+      .catch(() => {
+        // No session file yet (fresh session) — nothing to restore
+      });
+    return () => { mounted = false; };
+  }, [instanceId, claudeSessionId, projectDir]);
+
   // ---- Session scan (for --resume detection) ----
   useEffect(() => {
     if (!projectDir) return;
