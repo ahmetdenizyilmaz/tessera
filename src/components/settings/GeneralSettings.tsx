@@ -59,9 +59,10 @@ export function GeneralSettings() {
           value={settings.defaultModel}
           onChange={(e) => updateSettings({ defaultModel: e.target.value })}
         >
-          <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-          <option value="claude-opus-4-6">Claude Opus 4.6</option>
-          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+          <option value="sonnet">Claude Sonnet</option>
+          <option value="opus">Claude Opus</option>
+          <option value="fable">Claude Fable</option>
+          <option value="haiku">Claude Haiku</option>
         </select>
       </div>
 

@@ -87,7 +87,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       name: parsed.name ?? 'Imported Agent',
       description: parsed.description ?? '',
       system_prompt: parsed.system_prompt ?? '',
-      model: parsed.model ?? 'claude-sonnet-4-6',
+      model: parsed.model ?? 'sonnet',
       tools: parsed.tools ?? '[]',
       mcp_servers: parsed.mcp_servers ?? '[]',
     });

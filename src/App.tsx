@@ -25,70 +25,8 @@ import { useLayoutStore } from './store/layoutStore';
 import { useGroupStore } from './store/groupStore';
 import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
-import { useChatStore } from './store/chatStore';
 import { registerBuiltins } from './lib/builtinPlugins';
 import type { LlmProvider } from './types/instance';
-import type { ChatMessage, AccumulatedUserMessage, AccumulatedMessage } from './types/stream';
-
-// DEV: Inject test messages for visual/overlap testing (Ctrl+T)
-function injectTestMessages() {
-  const layout = useLayoutStore.getState();
-  const activeTab = layout.activeTabId;
-  if (!activeTab) { alert('No active tab'); return; }
-  const chatStore = useChatStore.getState();
-  let session = chatStore.sessions.get(activeTab);
-  if (!session) {
-    chatStore.initSession(activeTab);
-    session = chatStore.sessions.get(activeTab)!;
-  }
-
-  const msgs: ChatMessage[] = [];
-  const count = 600; // Over 500 to trigger virtualizer
-
-  for (let i = 0; i < count; i++) {
-    const uid = `test-user-${i}`;
-    const aid = `test-asst-${i}`;
-
-    // User message
-    const userMsg: AccumulatedUserMessage = {
-      id: uid, role: 'user', text: `Test message #${i + 1}: ${'Lorem ipsum dolor sit amet. '.repeat(1 + (i % 5))}`, timestamp: Date.now() - (count - i) * 1000,
-    };
-    msgs.push(userMsg);
-
-    // Assistant message with varied content
-    const blocks: AccumulatedMessage['blocks'] = [];
-    if (i % 7 === 0) {
-      // Thinking block
-      blocks.push({ type: 'thinking', thinking: `Analyzing request #${i + 1}...` });
-    }
-    // Text block with varied length
-    const textLen = i % 10 === 0 ? 8 : i % 5 === 0 ? 4 : 1;
-    blocks.push({
-      type: 'text',
-      text: `**Response ${i + 1}**\n\n${'This is a paragraph of test content to verify that long messages render correctly without overlapping. '.repeat(textLen)}${i % 3 === 0 ? '\n\n```typescript\nconst x = ' + i + ';\nconsole.log("test line 1");\nconsole.log("test line 2");\nconsole.log("test line 3");\n```' : ''}`,
-    });
-    // Tool use block every 4th message
-    if (i % 4 === 0) {
-      blocks.push({ type: 'tool_use', id: `tool-${i}`, name: i % 8 === 0 ? 'Bash' : 'Read', input: { command: `echo "test ${i}"` }, result: `Output line 1\nOutput line 2\nDone.` });
-    }
-
-    const asstMsg: AccumulatedMessage = {
-      id: aid, role: 'assistant', blocks, isStreaming: false,
-    };
-    msgs.push(asstMsg);
-  }
-
-  // Directly set messages in the session
-  useChatStore.setState((state) => {
-    const newSessions = new Map(state.sessions);
-    const s = newSessions.get(activeTab);
-    if (s) {
-      s.messages = msgs;
-    }
-    return { sessions: newSessions };
-  });
-  console.log(`Injected ${msgs.length} test messages (${count} pairs) into ${activeTab}`);
-}
 
 // Register built-in plugins at module load (before any render)
 registerBuiltins();
@@ -100,6 +38,8 @@ export default function App() {
   useWorkerActivity();
 
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splash-shown'));
+  // Stable identity — an inline closure would reset SplashScreen's timers on every App render
+  const hideSplash = useCallback(() => setShowSplash(false), []);
   const [viewMode, setViewMode] = useState<'panels' | 'office'>('panels');
   const [showNewInstance, setShowNewInstance] = useState(false);
   const [showResumeSession, setShowResumeSession] = useState(false);
@@ -206,7 +146,6 @@ export default function App() {
           e.preventDefault();
           setShowClaudeMd(true);
           break;
-        // case 'j': e.preventDefault(); injectTestMessages(); break; // DEV: uncomment to test
       }
     };
 
@@ -216,7 +155,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+      {showSplash && <SplashScreen onComplete={hideSplash} />}
       <div className="app" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
         <MenuBar
           onNewInstance={() => setShowNewInstance(true)}

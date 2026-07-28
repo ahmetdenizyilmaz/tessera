@@ -9,7 +9,7 @@ interface SettingsState {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  defaultModel: 'claude-sonnet-4-6',
+  defaultModel: 'sonnet',
   defaultPermissionMode: 'default',
   defaultSkipPermissions: true,
   defaultAgentMode: false,

@@ -13,6 +13,13 @@ const PROVIDER_BASE_RATES: Record<LlmProvider, number> = {
 };
 
 const MODEL_MULTIPLIERS: Record<string, number> = {
+  'fable': 2.0,
+  'claude-fable-5': 2.0,
+  'opus': 1.5,
+  'claude-opus-5': 1.5,
+  'sonnet': 1.0,
+  'claude-sonnet-5': 1.0,
+  'haiku': 0.7,
   'claude-opus-4-6': 1.5,
   'claude-opus-4-5-20250620': 1.5,
   'gpt-4o': 1.5,

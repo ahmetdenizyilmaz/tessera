@@ -15,17 +15,6 @@ export type {
 } from './session';
 
 export type {
-  ParserState,
-  ThinkingInfo,
-  PermissionPrompt,
-  ChoiceBlock,
-  ChoiceOption,
-  TuiChoice,
-  TokenUsage,
-  ChatMessage,
-} from './chat';
-
-export type {
   PtySpawnArgs,
   SystemUpdatePayload,
   HistoryChatMessage,

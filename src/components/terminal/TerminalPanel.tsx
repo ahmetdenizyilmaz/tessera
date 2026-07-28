@@ -12,10 +12,12 @@ import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import { ThinkingModeSelector } from '../chat/ThinkingModeSelector';
 import type { ThinkingMode } from '../chat/ThinkingModeSelector';
 
+// CLI model aliases — the claude CLI resolves these to the current model ids
 const CLAUDE_MODELS = [
-  'claude-sonnet-4-6',
-  'claude-opus-4-6',
-  'claude-haiku-4-5-20251001',
+  'sonnet',
+  'opus',
+  'fable',
+  'haiku',
 ];
 
 interface TerminalPanelProps {

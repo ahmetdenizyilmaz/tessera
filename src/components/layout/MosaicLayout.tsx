@@ -139,6 +139,10 @@ export function MosaicLayout() {
     resizeTimer.current = setTimeout(() => setResizing(false), 270);
   }, []);
 
+  useEffect(() => () => {
+    if (resizeTimer.current) clearTimeout(resizeTimer.current);
+  }, []);
+
   // Display rects: preview snap layout during drag
   const displayRects = useMemo((): Map<string, PanelRect> => {
     if (draggingId && layoutConfig) {

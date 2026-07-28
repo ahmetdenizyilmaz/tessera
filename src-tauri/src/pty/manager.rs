@@ -36,7 +36,6 @@ fn build_claude_args(
     dangerously_skip_permissions: bool,
     permission_mode: &Option<String>,
     allowed_tools: &Option<Vec<String>>,
-    max_turns_budget: &Option<f64>,
     system_prompt: &Option<String>,
     claude_session_id: &Option<String>,
     mcp_config_path: &Option<String>,
@@ -70,16 +69,9 @@ fn build_claude_args(
         }
     }
 
-    if let Some(budget) = max_turns_budget {
-        if *budget > 0.0 {
-            args.push("--max-turns-budget".to_string());
-            args.push(budget.to_string());
-        }
-    }
-
     if let Some(sp) = system_prompt {
         if !sp.is_empty() {
-            args.push("--system-prompt".to_string());
+            args.push("--append-system-prompt".to_string());
             args.push(sp.clone());
         }
     }
@@ -111,7 +103,6 @@ pub async fn pty_spawn(
     dangerously_skip_permissions: Option<bool>,
     permission_mode: Option<String>,
     allowed_tools: Option<Vec<String>>,
-    max_turns_budget: Option<f64>,
     system_prompt: Option<String>,
     claude_session_id: Option<String>,
     mcp_config_path: Option<String>,
@@ -143,7 +134,6 @@ pub async fn pty_spawn(
         dangerously_skip_permissions.unwrap_or(false),
         &permission_mode,
         &allowed_tools,
-        &max_turns_budget,
         &system_prompt,
         &claude_session_id,
         &effective_mcp_config,

@@ -65,7 +65,6 @@ export function usePty(instanceId: string) {
         claudeSessionId: instance.claudeSessionId || null,
         permissionMode: instance.config.permissionMode || null,
         allowedTools: instance.config.allowedTools.length > 0 ? instance.config.allowedTools : null,
-        maxTurnsBudget: instance.config.maxBudget || null,
         systemPrompt: instance.config.systemPrompt || null,
       });
       spawnedPtys.set(instanceId, 'running');

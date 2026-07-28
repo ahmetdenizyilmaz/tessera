@@ -115,9 +115,10 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
           <div className="form-group">
             <label className="form-label">Model</label>
             <select className="form-select" value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-              <option value="claude-opus-4-6">claude-opus-4-6</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+              <option value="sonnet">Sonnet (default)</option>
+              <option value="opus">Opus</option>
+              <option value="fable">Fable</option>
+              <option value="haiku">Haiku</option>
             </select>
           </div>
 

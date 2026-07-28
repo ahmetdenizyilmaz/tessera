@@ -4,7 +4,6 @@ import { useAuthStore } from '../store/authStore';
 import { useRelaySync } from '../hooks/useRelaySync';
 import { useRelayEvents } from '../hooks/useRelayEvents';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { LoginScreen } from './LoginScreen';
 
 interface AuthGateProps {
   children: React.ReactNode;
@@ -19,7 +18,6 @@ const OnlineApp: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [checking, setChecking] = useState(true);
-  const [showLogin, setShowLogin] = useState(false);
   const { isAuthenticated, offlineMode, setAuth, goOffline } = useAuthStore();
 
   useEffect(() => {
@@ -70,20 +68,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
         <div className="spinner" />
         <span>Checking authentication...</span>
       </div>
-    );
-  }
-
-  if (showLogin && !isAuthenticated && !offlineMode) {
-    return (
-      <ErrorBoundary>
-        <LoginScreen
-          onSuccess={() => setShowLogin(false)}
-          onGoOffline={() => {
-            goOffline();
-            setShowLogin(false);
-          }}
-        />
-      </ErrorBoundary>
     );
   }
 

@@ -126,7 +126,7 @@ pub async fn stream_send_message(
         .ok_or_else(|| "Could not find claude executable".to_string())?;
 
     // Extract config and kill any running process
-    let (cwd, model, system_prompt, session_id, mcp_config_path, thinking_budget_tokens, message_count) = {
+    let (cwd, model, system_prompt, session_id, mcp_config_path, _thinking_budget_tokens, message_count) = {
         let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
         let instance = instances.get_mut(&id)
             .ok_or_else(|| format!("Stream instance '{}' not found. Call stream_spawn first.", id))?;
@@ -184,7 +184,7 @@ pub async fn stream_send_message(
     // System prompt (only on first message)
     if let Some(ref sp) = system_prompt {
         if !sp.is_empty() && message_count == 0 {
-            cmd.arg("--system-prompt").arg(sp);
+            cmd.arg("--append-system-prompt").arg(sp);
         }
     }
 
@@ -195,12 +195,10 @@ pub async fn stream_send_message(
         }
     }
 
-    // Thinking budget
-    if let Some(budget) = thinking_budget_tokens {
-        if budget > 0 {
-            cmd.arg("--thinking-budget-tokens").arg(budget.to_string());
-        }
-    }
+    // NOTE: thinking budget is intentionally NOT passed as a CLI flag —
+    // `--thinking-budget-tokens` does not exist in the claude CLI. The stored
+    // value is applied via the control protocol (set_max_thinking_tokens) once
+    // the persistent-process pipeline lands.
 
     // Skip permissions (like opcode) — no stdin to respond with
     cmd.arg("--dangerously-skip-permissions");

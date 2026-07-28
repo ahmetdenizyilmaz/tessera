@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { FolderOpen, Bot, Server, BarChart3, GitBranch, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import { ClaudeMdEditor } from '../projects/ClaudeMdEditor';
@@ -53,6 +53,14 @@ export function Sidebar() {
   }, [activeTab, isOpen]);
 
   const dragCleanup = useRef<(() => void) | null>(null);
+
+  // If the sidebar unmounts mid-drag (e.g. view switch), the window listeners
+  // and the grabbing cursor would otherwise survive forever.
+  useEffect(() => () => {
+    dragCleanup.current?.();
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+  }, []);
 
   const handleIconPointerDown = useCallback((e: React.PointerEvent, tabId: SidebarTab) => {
     // Only left button
