@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { cleanupPty, isPtySpawned } from '../../hooks/usePty';
+import { cleanupPty } from '../../hooks/usePty';
 import { destroyTerminal } from '../../hooks/useTerminal';
 import { invoke } from '@tauri-apps/api/core';
 import { XTermView, clearTerminalState } from './XTermView';
@@ -45,7 +45,7 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-type ViewMode = 'chat' | 'terminal';
+
 
 export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
@@ -54,11 +54,9 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   const setName = useInstanceStore((s) => s.setName);
   const setColor = useInstanceStore((s) => s.setColor);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('chat');
-  // Lazy PTY: the interactive claude terminal only spawns once the Terminal
-  // tab is first opened (N chat-only panels must not mean N idle claude.exe).
-  // Initializer checks isPtySpawned so a group-move remount keeps the terminal.
-  const [termMounted, setTermMounted] = useState(() => isPtySpawned(instanceId));
+  // The panel's view is chosen at creation time and fixed for the session's
+  // lifetime — chat and terminal are separate Claude sessions by design.
+  const panelView = instance?.config?.panelView ?? 'chat';
   const [showCheckpoints, setShowCheckpoints] = useState(false);
 
   // Compact toolbar: below this panel width all controls collapse into ☰ —
@@ -81,6 +79,49 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   useEffect(() => {
     if (!compact) setShowToolbarMenu(false);
   }, [compact]);
+
+  // Terminal panels: capture the session id the interactive CLI creates
+  // (the CLI doesn't report it, so we watch the project's session files).
+  // Needed so a restart can --resume the terminal conversation.
+  useEffect(() => {
+    if (panelView !== 'terminal') return;
+    const normPath = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    let mounted = true;
+    let attempts = 0;
+
+    const tryScan = () => {
+      if (!mounted) return;
+      const inst = useInstanceStore.getState().instances.get(instanceId);
+      if (!inst || inst.claudeSessionId) return;
+      const cwd = inst.config.cwd;
+      if (!cwd) return;
+      attempts++;
+      invoke<Array<{ sessionId: string; project: string; timestamp: number; hasFile: boolean }>>('session_scan_all')
+        .then((sessions) => {
+          if (!mounted) return;
+          const cur = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;
+          if (cur) return;
+          const cwdNorm = normPath(cwd);
+          const match = sessions
+            .filter((s) => normPath(s.project) === cwdNorm && s.hasFile)
+            .sort((a, b) => b.timestamp - a.timestamp)[0];
+          if (match) {
+            useInstanceStore.getState().setClaudeSessionId(instanceId, match.sessionId);
+          } else if (attempts < 10) {
+            setTimeout(tryScan, 3000);
+          }
+        })
+        .catch(() => {
+          if (attempts < 10 && mounted) setTimeout(tryScan, 3000);
+        });
+    };
+
+    const timer = setTimeout(tryScan, 2500);
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
+  }, [instanceId, panelView]);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto');
   const setModel = useInstanceStore((s) => s.setModel);
 
@@ -259,26 +300,6 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
     />
   );
 
-  const viewToggle = (
-    <div className="view-toggle">
-      <button
-        className={viewMode === 'chat' ? 'active' : ''}
-        onClick={() => setViewMode('chat')}
-      >
-        Chat
-      </button>
-      <button
-        className={viewMode === 'terminal' ? 'active' : ''}
-        onClick={() => {
-          setTermMounted(true);
-          setViewMode('terminal');
-        }}
-      >
-        Terminal
-      </button>
-    </div>
-  );
-
   const checkpointsBtn = (
     <button
       className="toolbar-btn"
@@ -338,7 +359,9 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
           {!compact && statusBadge}
         </div>
 
-        {/* Right side: full controls, or a single ☰ menu when narrow */}
+        {/* Right side: full controls, or a single ☰ menu when narrow.
+            Terminal panels manage model/thinking inside the CLI itself, so
+            they only carry the status. */}
         <div className="toolbar-actions">
           {compact ? (
             <div style={{ position: 'relative' }}>
@@ -353,19 +376,22 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
               {showToolbarMenu && (
                 <div className="toolbar-menu" onMouseLeave={() => setShowToolbarMenu(false)}>
                   <div className="toolbar-menu-row">{statusBadge}</div>
-                  <div className="toolbar-menu-row">{viewToggle}{checkpointsBtn}</div>
-                  <div className="toolbar-menu-row">{modelSelect}{thinkingSelect}</div>
+                  {panelView === 'chat' && (
+                    <>
+                      <div className="toolbar-menu-row">{checkpointsBtn}</div>
+                      <div className="toolbar-menu-row">{modelSelect}{thinkingSelect}</div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
-          ) : (
+          ) : panelView === 'chat' ? (
             <>
               {modelSelect}
               {thinkingSelect}
-              {viewToggle}
               {checkpointsBtn}
             </>
-          )}
+          ) : null}
         </div>
 
         {/* Close button always visible, outside toolbar-actions */}
@@ -379,21 +405,16 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
         </button>
       </div>
 
-      {/* Content area: all views stacked, toggle visibility via CSS classes */}
+      {/* Content area: one fixed view per panel (chosen at creation) */}
       <div className="terminal-content" style={{ display: 'flex' }}>
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          {/* Chat view */}
-          <div className={`view-layer ${viewMode === 'chat' ? 'visible' : 'hidden'}`}>
-            <ChatView instanceId={instanceId} isVisible={viewMode === 'chat'} />
+          <div className="view-layer visible">
+            {panelView === 'chat' ? (
+              <ChatView instanceId={instanceId} isVisible />
+            ) : (
+              <XTermView instanceId={instanceId} isVisible />
+            )}
           </div>
-
-          {/* Terminal (xterm.js) — mounted on first Terminal-tab activation,
-              then kept mounted so the PTY stays alive across tab switches */}
-          {termMounted && (
-            <div className={`view-layer ${viewMode === 'terminal' ? 'visible' : 'hidden'}`}>
-              <XTermView instanceId={instanceId} isVisible={viewMode === 'terminal'} />
-            </div>
-          )}
         </div>
 
         {/* Checkpoint sidebar panel */}

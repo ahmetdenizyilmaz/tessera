@@ -55,13 +55,14 @@ export default function App() {
   const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [showClaudeMd, setShowClaudeMd] = useState(false);
 
-  const handleNewInstance = useCallback(async () => {
+  const handleNewInstance = useCallback(async (panelView: 'chat' | 'terminal' = 'chat') => {
     const settings = useSettingsStore.getState().settings;
     // Real path, not '.' — encode_project_path('.') breaks session-file
     // resolution and usage polling on the Rust side
     const home = await homeDir().catch(() => '');
     const id = useInstanceStore.getState().addInstance({
       cwd: home,
+      panelView,
       model: settings.defaultModel,
       dangerouslySkipPermissions: settings.defaultSkipPermissions,
       permissionMode: settings.defaultPermissionMode,
@@ -197,7 +198,7 @@ export default function App() {
 
         {viewMode === 'panels' ? (
           <>
-            <TabBar onNewInstance={handleNewInstance} onNewInstanceSettings={() => setShowNewInstance(true)} onNewLlmChat={(p) => setShowNewLlm(p ?? 'openai')} onNewGroup={handleNewGroup} onNewPlugin={handleNewPlugin} />
+            <TabBar onNewInstance={(v) => handleNewInstance(v)} onNewInstanceSettings={() => setShowNewInstance(true)} onNewLlmChat={(p) => setShowNewLlm(p ?? 'openai')} onNewGroup={handleNewGroup} onNewPlugin={handleNewPlugin} />
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
               <Sidebar />
               <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>

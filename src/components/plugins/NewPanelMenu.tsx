@@ -1,5 +1,6 @@
 import { Folder, Puzzle } from 'lucide-react';
 import { usePluginStore } from '../../store/pluginStore';
+import { PanelViewPreview } from '../icons/PanelViewPreview';
 import claudeIcon from '../../assets/claude-icon.ico';
 import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
@@ -10,7 +11,6 @@ import type { LlmProvider } from '../../types/instance';
 // ─── Menu Item Definitions ──────────────────────────────────────────────────
 
 const LLM_MENU_ITEMS: { id: 'claude' | LlmProvider; label: string; icon: string }[] = [
-  { id: 'claude', label: 'Claude Chat', icon: claudeIcon },
   { id: 'openai', label: 'ChatGPT', icon: openaiIcon },
   { id: 'gemini', label: 'Gemini', icon: geminiIcon },
   { id: 'ollama', label: 'Ollama', icon: ollamaIcon },
@@ -21,7 +21,7 @@ const LLM_MENU_ITEMS: { id: 'claude' | LlmProvider; label: string; icon: string 
 
 interface NewPanelMenuProps {
   onClose: () => void;
-  onNewChat: () => void;
+  onNewChat: (panelView?: 'chat' | 'terminal') => void;
   onNewChatSettings?: () => void;
   onNewLlmChat?: (provider?: Exclude<LlmProvider, 'claude'>) => void;
   onNewGroup: () => void;
@@ -78,7 +78,37 @@ export function NewPanelMenu({
           Built-in
         </div>
 
-        {/* Claude / LLM Chat items */}
+        {/* Claude: pick chat or terminal at creation — the choice is fixed
+            for the session's lifetime, so it belongs here, not in a toggle */}
+        <div className="panel-view-menu-row">
+          {(['chat', 'terminal'] as const).map((kind) => (
+            <button
+              key={kind}
+              className="panel-view-menu-btn"
+              onClick={() => { onClose(); onNewChat(kind); }}
+              title={kind === 'chat' ? 'New Claude chat panel' : 'New Claude terminal panel'}
+            >
+              <PanelViewPreview kind={kind} size={52} />
+              <span className="panel-view-menu-btn__label">
+                <img src={claudeIcon} alt="" style={{ width: 12, height: 12, borderRadius: 2 }} />
+                {kind === 'chat' ? 'Chat' : 'Terminal'}
+              </span>
+            </button>
+          ))}
+          {onNewChatSettings && (
+            <button
+              className="panel-view-menu-settings"
+              onClick={(e) => { e.stopPropagation(); onClose(); onNewChatSettings(); }}
+              title="Create with custom settings"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M6.5 1.5A.5.5 0 0 1 7 1h2a.5.5 0 0 1 .5.5v1.05a5 5 0 0 1 1.37.564l.74-.742a.5.5 0 0 1 .707 0l1.414 1.414a.5.5 0 0 1 0 .707l-.742.74A5 5 0 0 1 13.45 6.5H14.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-1.05a5 5 0 0 1-.564 1.37l.742.74a.5.5 0 0 1 0 .707l-1.414 1.414a.5.5 0 0 1-.707 0l-.74-.742A5 5 0 0 1 9.5 13.45v1.05a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5v-1.05a5 5 0 0 1-1.37-.564l-.74.742a.5.5 0 0 1-.707 0L2.27 12.214a.5.5 0 0 1 0-.707l.742-.74A5 5 0 0 1 2.55 9.5H1.5A.5.5 0 0 1 1 9V7a.5.5 0 0 1 .5-.5h1.05a5 5 0 0 1 .564-1.37l-.742-.74a.5.5 0 0 1 0-.707L3.786 2.27a.5.5 0 0 1 .707 0l.74.742A5 5 0 0 1 6.5 2.55V1.5zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" fill="currentColor"/>
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Other LLM providers */}
         {LLM_MENU_ITEMS.map((item) => (
           <div
             key={item.id}
@@ -109,52 +139,12 @@ export function NewPanelMenu({
               onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
               onClick={() => {
                 onClose();
-                if (item.id === 'claude') {
-                  onNewChat();
-                } else {
-                  onNewLlmChat?.(item.id as Exclude<LlmProvider, 'claude'>);
-                }
+                onNewLlmChat?.(item.id as Exclude<LlmProvider, 'claude'>);
               }}
             >
               <img src={item.icon} alt="" style={{ width: 18, height: 18, borderRadius: 4 }} />
               {item.label}
             </button>
-            {item.id === 'claude' && onNewChatSettings && (
-              <button
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 24,
-                  height: 24,
-                  background: 'none',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4,
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-hover)';
-                  e.currentTarget.style.color = 'var(--text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'none';
-                  e.currentTarget.style.color = 'var(--text-muted)';
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                  onNewChatSettings();
-                }}
-                title="Create with custom settings"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M6.5 1.5A.5.5 0 0 1 7 1h2a.5.5 0 0 1 .5.5v1.05a5 5 0 0 1 1.37.564l.74-.742a.5.5 0 0 1 .707 0l1.414 1.414a.5.5 0 0 1 0 .707l-.742.74A5 5 0 0 1 13.45 6.5H14.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-1.05a5 5 0 0 1-.564 1.37l.742.74a.5.5 0 0 1 0 .707l-1.414 1.414a.5.5 0 0 1-.707 0l-.74-.742A5 5 0 0 1 9.5 13.45v1.05a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5v-1.05a5 5 0 0 1-1.37-.564l-.74.742a.5.5 0 0 1-.707 0L2.27 12.214a.5.5 0 0 1 0-.707l.742-.74A5 5 0 0 1 2.55 9.5H1.5A.5.5 0 0 1 1 9V7a.5.5 0 0 1 .5-.5h1.05a5 5 0 0 1 .564-1.37l-.742-.74a.5.5 0 0 1 0-.707L3.786 2.27a.5.5 0 0 1 .707 0l.74.742A5 5 0 0 1 6.5 2.55V1.5zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" fill="currentColor"/>
-                </svg>
-              </button>
-            )}
           </div>
         ))}
 

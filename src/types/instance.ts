@@ -20,6 +20,9 @@ export interface InstanceConfig {
   systemPrompt: string;
   agentMode: boolean;
   llmConfig?: LlmConfig;
+  /** Chosen at creation and fixed for the session's lifetime — chat and
+   *  terminal are separate Claude sessions. Legacy instances default to chat. */
+  panelView?: 'chat' | 'terminal';
 }
 
 export interface ClaudeInstance {

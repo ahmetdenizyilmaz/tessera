@@ -68,7 +68,7 @@ const crossGroupCollision: CollisionDetection = (args) => {
 const EMPTY_TAB_ORDER: string[] = [];
 
 interface TabBarProps {
-  onNewInstance?: () => void;
+  onNewInstance?: (panelView?: 'chat' | 'terminal') => void;
   onNewInstanceSettings?: () => void;
   onNewLlmChat?: (provider?: Exclude<LlmProvider, 'claude'>) => void;
   onNewGroup?: () => void;
@@ -405,7 +405,7 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
         {showAddMenu && (
           <NewPanelMenu
             onClose={() => setShowAddMenu(false)}
-            onNewChat={() => onNewInstance?.()}
+            onNewChat={(view) => onNewInstance?.(view)}
             onNewChatSettings={onNewInstanceSettings ? () => onNewInstanceSettings() : undefined}
             onNewLlmChat={(p) => onNewLlmChat?.(p)}
             onNewGroup={() => onNewGroup?.()}

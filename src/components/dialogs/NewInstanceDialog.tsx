@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
+import { PanelViewPreview } from '../icons/PanelViewPreview';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -19,6 +20,7 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
   const instanceCount = useInstanceStore((s) => s.instances.size);
 
   const [name, setName] = useState(() => `Claude ${instanceCount + 1}`);
+  const [panelView, setPanelView] = useState<'chat' | 'terminal'>('chat');
   const [cwd, setCwd] = useState('');
   const [model, setModel] = useState(settings.defaultModel);
   const [permissionMode, setPermissionMode] = useState(settings.defaultPermissionMode);
@@ -64,6 +66,7 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
       maxBudget,
       systemPrompt,
       agentMode: false,
+      panelView,
     };
 
     const id = addInstance(config, name || undefined);
@@ -86,6 +89,33 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
         </div>
 
         <div className="dialog-body" style={{ overflowY: 'auto', flex: 1 }}>
+          <div className="form-group">
+            <label className="form-label">Session Type</label>
+            <div className="panel-view-picker">
+              {(['chat', 'terminal'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className={`panel-view-option${panelView === kind ? ' panel-view-option--active' : ''}`}
+                  onClick={() => setPanelView(kind)}
+                >
+                  <PanelViewPreview kind={kind} />
+                  <span className="panel-view-option__label">
+                    {kind === 'chat' ? 'Chat' : 'Terminal'}
+                  </span>
+                  <span className="panel-view-option__hint">
+                    {kind === 'chat'
+                      ? 'Rich GUI — widgets, question cards, images'
+                      : 'Full Claude Code TUI in a real terminal'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="form-hint">
+              Fixed for this session — chat and terminal are separate conversations.
+            </div>
+          </div>
+
           <div className="form-group">
             <label className="form-label">Name</label>
             <input
