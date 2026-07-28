@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { useChatStore } from '../store/chatStore';
 import type {
   ChatMessage,
-  StreamPermissionRequest,
   StreamResult,
   StreamSystemEvent,
   PendingControlRequest,
@@ -23,7 +22,6 @@ interface SpawnOptions {
 interface UseStreamJsonReturn {
   messages: ChatMessage[];
   isStreaming: boolean;
-  permissionRequest: StreamPermissionRequest | null;
   controlRequests: PendingControlRequest[];
   systemInfo: StreamSystemEvent | null;
   result: StreamResult | null;
@@ -131,7 +129,6 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
   return {
     messages: session?.messages ?? [],
     isStreaming: session?.isStreaming ?? false,
-    permissionRequest: session?.permissionRequest ?? null,
     controlRequests: session?.controlRequests ?? [],
     systemInfo: session?.systemInfo ?? null,
     result: session?.result ?? null,

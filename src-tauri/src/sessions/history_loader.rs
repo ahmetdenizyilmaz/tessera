@@ -115,17 +115,14 @@ pub async fn session_load_history(
             Err(_) => continue,
         };
 
-        // We only care about "human" and "assistant" message types
+        // Real Claude Code session files use "user" and "assistant"
+        // (there is no "human" type on disk)
         let msg_type = entry.msg_type.as_deref().unwrap_or("");
-        if msg_type != "human" && msg_type != "assistant" {
+        if msg_type != "user" && msg_type != "assistant" {
             continue;
         }
 
-        let role = if msg_type == "human" {
-            "user".to_string()
-        } else {
-            "assistant".to_string()
-        };
+        let role = msg_type.to_string();
 
         // Try to get content from message.content first
         let content = if let Some(ref message) = entry.message {

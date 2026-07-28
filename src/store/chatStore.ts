@@ -3,7 +3,6 @@ import { StreamAccumulator } from '../lib/streamAccumulator';
 import type {
   StreamEvent,
   StreamAssistantMessage,
-  StreamPermissionRequest,
   StreamSystemEvent,
   StreamResult,
   ChatMessage,
@@ -17,7 +16,6 @@ const MAX_MESSAGES = 10000;
 interface ChatSession {
   messages: ChatMessage[];
   isStreaming: boolean;
-  permissionRequest: StreamPermissionRequest | null;
   systemInfo: StreamSystemEvent | null;
   result: StreamResult | null;
   error: string | null;
@@ -36,7 +34,6 @@ interface ChatState {
   addUserMessage: (instanceId: string, text: string, images?: string[]) => void;
   clearError: (instanceId: string) => void;
   pushCliWarning: (instanceId: string, warning: string) => void;
-  clearPermission: (instanceId: string) => void;
   removeControlRequest: (instanceId: string, requestId: string) => void;
   clearControlRequests: (instanceId: string) => void;
   setStreaming: (instanceId: string, streaming: boolean) => void;
@@ -49,7 +46,6 @@ function createSession(): ChatSession {
   return {
     messages: [],
     isStreaming: false,
-    permissionRequest: null,
     systemInfo: null,
     result: null,
     error: null,
@@ -104,10 +100,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             session.systemInfo = event;
             session.error = event.error;
           }
-          break;
-
-        case 'permission':
-          session.permissionRequest = event;
           break;
 
         case 'control_request':
@@ -269,17 +261,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const session = next.get(instanceId);
       if (session && session.controlRequests.length > 0) {
         next.set(instanceId, { ...session, controlRequests: [] });
-      }
-      return { sessions: next };
-    });
-  },
-
-  clearPermission: (instanceId) => {
-    set((state) => {
-      const next = new Map(state.sessions);
-      const session = next.get(instanceId);
-      if (session) {
-        next.set(instanceId, { ...session, permissionRequest: null });
       }
       return { sessions: next };
     });
