@@ -19,7 +19,23 @@ struct SessionLine {
     role: Option<String>,
     message: Option<MessageContent>,
     timestamp: Option<String>,
+    /// CLI-internal lines (slash-command wrappers, caveats, …)
+    #[serde(rename = "isMeta")]
+    is_meta: Option<bool>,
+    /// Subagent (Task tool) transcript lines
+    #[serde(rename = "isSidechain")]
+    is_sidechain: Option<bool>,
 }
+
+/// Command/plumbing wrappers that must never render as chat content
+const META_CONTENT_PREFIXES: &[&str] = &[
+    "<command-name>",
+    "<command-message>",
+    "<command-args>",
+    "<local-command-stdout>",
+    "<local-command-caveat>",
+    "<local-command-stderr>",
+];
 
 #[derive(Debug, Deserialize)]
 struct MessageContent {
@@ -123,6 +139,11 @@ pub async fn session_load_history(
             continue;
         }
 
+        // Skip CLI-internal and subagent lines — they are plumbing, not chat
+        if entry.is_meta.unwrap_or(false) || entry.is_sidechain.unwrap_or(false) {
+            continue;
+        }
+
         let role = msg_type.to_string();
 
         // Try to get content from message.content first
@@ -137,6 +158,12 @@ pub async fn session_load_history(
         };
 
         if content.is_empty() {
+            continue;
+        }
+
+        // Command wrappers sometimes arrive without the isMeta flag
+        let trimmed = content.trim_start();
+        if META_CONTENT_PREFIXES.iter().any(|p| trimmed.starts_with(p)) {
             continue;
         }
 

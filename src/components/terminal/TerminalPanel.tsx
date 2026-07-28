@@ -247,7 +247,7 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
                 height: 6,
               }}
             />
-            {statusLabels[instance.status] ?? instance.status}
+            <span className="status-label">{statusLabels[instance.status] ?? instance.status}</span>
           </span>
         </div>
 

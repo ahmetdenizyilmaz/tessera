@@ -353,6 +353,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   height: 30px;
   padding: 0 8px;
   position: relative;
@@ -361,6 +362,37 @@ body,
   border-bottom: 1px solid var(--border);
   user-select: none;
   flex-shrink: 0;
+  /* Width container so the toolbar can collapse per-panel, not per-window */
+  container-type: inline-size;
+}
+
+/* Never half-clip the status into "STA…" — it either fits or is hidden by
+   the container rules below */
+.status-badge {
+  flex-shrink: 0;
+}
+
+/* Progressive collapse as the panel narrows: status text → status badge +
+   thinking selector → model selector */
+@container (max-width: 460px) {
+  .status-label {
+    display: none;
+  }
+}
+
+@container (max-width: 380px) {
+  .status-badge {
+    display: none;
+  }
+  .thinking-selector {
+    display: none;
+  }
+}
+
+@container (max-width: 300px) {
+  .model-selector {
+    display: none;
+  }
 }
 
 .terminal-toolbar-left {

@@ -11,6 +11,7 @@ import { ChatInput } from './ChatInput';
 import { ControlRequestArea } from './ControlRequestArea';
 import { isUserMessage } from '../../types/stream';
 import { ClaudeIcon } from '../icons/ProviderIcons';
+import { isPtySpawned } from '../../hooks/usePty';
 import type { SessionInfo } from '../../types/session';
 
 // ---- Constants ----
@@ -182,6 +183,14 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
       // Only capture a session id when this instance has NONE — never
       // overwrite a deliberately chosen or already-captured session.
       if (inst.claudeSessionId) return;
+      // Only the interactive Terminal flow creates sessions we can't see —
+      // the chat pipeline reports its session id in every init event. Without
+      // this gate a brand-new chat adopts the newest OLD session of its
+      // directory (and then renders that old transcript).
+      if (!isPtySpawned(instanceId)) {
+        setTimeout(tryScan, SESSION_SCAN_RETRY_MS);
+        return;
+      }
       const cwd = inst.config.cwd;
       if (!cwd) return;
       scanAttempts++;
