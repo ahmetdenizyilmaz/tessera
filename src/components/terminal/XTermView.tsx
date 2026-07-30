@@ -182,6 +182,59 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     termRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
+    // ─── Clipboard ─────────────────────────────────────────────────────
+    // xterm sends every keystroke to the PTY, so copy/paste needs explicit
+    // handling. Windows Terminal semantics: Ctrl+C copies when there IS a
+    // selection and otherwise still interrupts the CLI.
+
+    const copySelection = (): boolean => {
+      const sel = terminal.getSelection();
+      if (!sel) return false;
+      navigator.clipboard.writeText(sel).catch((err) => {
+        console.error('Copy failed:', err);
+      });
+      terminal.clearSelection();
+      return true;
+    };
+
+    const pasteClipboard = () => {
+      navigator.clipboard.readText()
+        .then((text) => {
+          if (text) write(text);
+        })
+        .catch((err) => console.error('Paste failed:', err));
+    };
+
+    terminal.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true;
+      const key = e.key.toLowerCase();
+
+      if (e.ctrlKey && e.shiftKey && key === 'c') {
+        copySelection();
+        return false;
+      }
+      // Plain Ctrl+C: copy if something is selected, else let it interrupt
+      if (e.ctrlKey && !e.shiftKey && key === 'c') {
+        return !copySelection();
+      }
+      if ((e.ctrlKey && key === 'v') || (e.shiftKey && e.key === 'Insert')) {
+        pasteClipboard();
+        return false;
+      }
+      if (e.ctrlKey && e.shiftKey && key === 'a') {
+        terminal.selectAll();
+        return false;
+      }
+      return true;
+    });
+
+    // Right-click: copy a selection if there is one, otherwise paste
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      if (!copySelection()) pasteClipboard();
+    };
+    container.addEventListener('contextmenu', handleContextMenu);
+
     // ─── Restore saved state from previous mount (group move) ──────────
 
     const savedBuffer = terminalBuffers.get(instanceId);
@@ -347,6 +400,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         clearTimeout(resizeDebounce);
         resizeDebounce = null;
       }
+      container.removeEventListener('contextmenu', handleContextMenu);
       resizeObserver.disconnect();
 
       // Save terminal buffer content before disposing. SerializeAddon

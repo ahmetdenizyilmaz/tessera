@@ -201,6 +201,13 @@ pub async fn pty_spawn(
     cmd.env_remove("CLAUDE_CODE_CHILD_SESSION");
     cmd.env_remove("CLAUDE_EXE");
 
+    // Windows ConPTY sets no TERM, so the CLI's color detection (chalk /
+    // supports-color) falls back to "no color" and the whole TUI renders
+    // plain white. Declare a 256-color truecolor terminal — xterm.js is one.
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("FORCE_COLOR", "3");
+
     let child = pair
         .slave
         .spawn_command(cmd)
