@@ -1,5 +1,10 @@
 use serde_json::Value;
 
+const ANTHROPIC_VERSION: &str = "2023-06-01";
+/// Caps thinking + response text together. 16k leaves room for adaptive
+/// thinking on every current model, Haiku 4.5's 64k ceiling included.
+const ANTHROPIC_MAX_TOKENS: u32 = 16000;
+
 pub fn build_request(
     client: &reqwest::Client,
     provider: &str,
@@ -7,9 +12,23 @@ pub fn build_request(
     api_key: Option<&str>,
     model: &str,
     messages_json: &str,
+    system_prompt: &str,
 ) -> Result<reqwest::RequestBuilder, String> {
-    let messages: Vec<Value> =
+    let mut messages: Vec<Value> =
         serde_json::from_str(messages_json).map_err(|e| format!("Invalid messages JSON: {}", e))?;
+
+    // The session's system prompt lives outside the transcript — prepend it
+    // unless the caller already supplied one.
+    if !system_prompt.is_empty()
+        && !messages
+            .iter()
+            .any(|m| m["role"].as_str() == Some("system"))
+    {
+        messages.insert(
+            0,
+            serde_json::json!({ "role": "system", "content": system_prompt }),
+        );
+    }
 
     match provider {
         "openai" => {
@@ -33,6 +52,39 @@ pub fn build_request(
                 "stream": true,
             });
             Ok(client.post(&url).json(&body))
+        }
+        // Anthropic Messages API — the plain-chat path, distinct from the
+        // Claude Code CLI panels. System turns live in a top-level `system`
+        // field rather than in `messages`.
+        "anthropic" => {
+            let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
+
+            let system: Vec<&str> = messages
+                .iter()
+                .filter(|m| m["role"].as_str() == Some("system"))
+                .filter_map(|m| m["content"].as_str())
+                .collect();
+            let turns: Vec<&Value> = messages
+                .iter()
+                .filter(|m| m["role"].as_str() != Some("system"))
+                .collect();
+
+            let mut body = serde_json::json!({
+                "model": model,
+                "max_tokens": ANTHROPIC_MAX_TOKENS,
+                "messages": turns,
+                "stream": true,
+            });
+            if !system.is_empty() {
+                body["system"] = Value::String(system.join("\n\n"));
+            }
+
+            // No temperature/top_p: current Claude models reject them.
+            Ok(client
+                .post(&url)
+                .header("x-api-key", api_key.unwrap_or(""))
+                .header("anthropic-version", ANTHROPIC_VERSION)
+                .json(&body))
         }
         "gemini" => {
             let url = format!(
@@ -96,6 +148,30 @@ pub fn parse_sse_chunk(provider: &str, line: &str) -> Option<String> {
                 .and_then(|c| c.as_str())
                 .map(|s| s.to_string())
         }
+        "anthropic" => {
+            let data = line.strip_prefix("data: ")?;
+            let json: Value = serde_json::from_str(data).ok()?;
+            match json.get("type").and_then(|t| t.as_str())? {
+                // Only text_delta: thinking deltas carry no text unless
+                // `display: summarized` is requested, and an API error
+                // mid-stream arrives as its own event type.
+                "content_block_delta" => json
+                    .get("delta")
+                    .filter(|d| d.get("type").and_then(|t| t.as_str()) == Some("text_delta"))
+                    .and_then(|d| d.get("text"))
+                    .and_then(|t| t.as_str())
+                    .map(|s| s.to_string()),
+                "error" => {
+                    let msg = json
+                        .get("error")
+                        .and_then(|e| e.get("message"))
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("unknown error");
+                    Some(format!("\n\n[Anthropic API error: {}]", msg))
+                }
+                _ => None,
+            }
+        }
         "gemini" => {
             let data = line.strip_prefix("data: ")?;
             let json: Value = serde_json::from_str(data).ok()?;
@@ -126,7 +202,7 @@ pub fn parse_sse_chunk(provider: &str, line: &str) -> Option<String> {
 pub fn list_models_url(provider: &str, base_url: &str) -> String {
     let base = base_url.trim_end_matches('/');
     match provider {
-        "openai" | "lmstudio" => format!("{}/v1/models", base),
+        "openai" | "lmstudio" | "anthropic" => format!("{}/v1/models", base),
         "gemini" => format!("{}/v1beta/models", base),
         "ollama" => format!("{}/api/tags", base),
         _ => format!("{}/v1/models", base),
@@ -135,7 +211,7 @@ pub fn list_models_url(provider: &str, base_url: &str) -> String {
 
 pub fn parse_model_list(provider: &str, body_json: &Value) -> Vec<String> {
     match provider {
-        "openai" | "lmstudio" => body_json["data"]
+        "openai" | "lmstudio" | "anthropic" => body_json["data"]
             .as_array()
             .map(|arr| {
                 arr.iter()

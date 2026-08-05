@@ -6,6 +6,7 @@ import { useInstanceStore } from './instanceStore';
 
 const PROVIDER_BASE_RATES: Record<LlmProvider, number> = {
   claude: 22.5,
+  anthropic: 20,
   openai: 12,
   gemini: 10,
   ollama: 8,

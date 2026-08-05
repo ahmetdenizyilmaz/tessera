@@ -8,8 +8,10 @@ export const LlmProviderSettings: React.FC = () => {
   const updateSettings = useSettingsStore((s) => s.updateSettings);
 
   // API key states (masked display)
+  const [anthropicKey, setAnthropicKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
+  const [anthropicHasKey, setAnthropicHasKey] = useState(false);
   const [openaiHasKey, setOpenaiHasKey] = useState(false);
   const [geminiHasKey, setGeminiHasKey] = useState(false);
 
@@ -19,6 +21,9 @@ export const LlmProviderSettings: React.FC = () => {
 
   // Load existing key status on mount
   useEffect(() => {
+    invoke<string | null>('llm_get_api_key', { provider: 'anthropic' }).then((key) => {
+      if (key) setAnthropicHasKey(true);
+    }).catch(() => {});
     invoke<string | null>('llm_get_api_key', { provider: 'openai' }).then((key) => {
       if (key) setOpenaiHasKey(true);
     }).catch(() => {});
@@ -77,6 +82,43 @@ export const LlmProviderSettings: React.FC = () => {
 
   return (
     <div style={{ padding: 4 }}>
+      {/* Claude (API) — separate from the Claude Code CLI panels, which use
+          your CLI login and need no key here */}
+      <div style={sty.section}>
+        <div style={sty.heading}>{LLM_PROVIDERS.anthropic.icon} Claude (API)</div>
+        <div style={{ ...sty.label, marginBottom: 6 }}>
+          Plain chat via the Anthropic API. Claude Code chat and terminal panels use
+          your CLI login instead and ignore this key.
+        </div>
+        <label style={sty.label}>API Key</label>
+        <div style={sty.row}>
+          <input
+            type="password"
+            value={anthropicKey}
+            onChange={(e) => setAnthropicKey(e.target.value)}
+            placeholder={anthropicHasKey ? '•••• (saved)' : 'sk-ant-...'}
+            style={{ ...sty.input, flex: 1 }}
+          />
+          <button
+            className="btn btn-secondary"
+            style={{ fontSize: 11 }}
+            onClick={() => saveApiKey('anthropic', anthropicKey, setAnthropicHasKey)}
+            disabled={!anthropicKey.trim()}
+          >
+            Save
+          </button>
+          {anthropicHasKey && (
+            <button
+              className="btn btn-secondary"
+              style={{ fontSize: 11 }}
+              onClick={() => deleteApiKey('anthropic', setAnthropicHasKey, setAnthropicKey)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* OpenAI */}
       <div style={sty.section}>
         <div style={sty.heading}>{LLM_PROVIDERS.openai.icon} OpenAI</div>

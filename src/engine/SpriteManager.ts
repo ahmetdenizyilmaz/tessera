@@ -4,6 +4,7 @@ import type { LlmProvider } from '../types/instance';
 // Provider color coding
 export const PROVIDER_COLORS: Record<LlmProvider, number> = {
   claude: 0xFF8C00,    // orange
+  anthropic: 0xD97757, // terracotta
   openai: 0x10A37F,    // green
   gemini: 0x4285F4,    // blue
   ollama: 0xCCCCCC,    // light gray

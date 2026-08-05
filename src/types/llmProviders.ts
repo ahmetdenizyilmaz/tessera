@@ -11,6 +11,21 @@ export interface ProviderMeta {
 }
 
 export const LLM_PROVIDERS: Record<Exclude<LlmProvider, 'claude'>, ProviderMeta> = {
+  anthropic: {
+    id: 'anthropic',
+    displayName: 'Claude (API)',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    models: [
+      'claude-opus-5',
+      'claude-sonnet-5',
+      'claude-haiku-4-5',
+      'claude-opus-4-8',
+      'claude-fable-5',
+    ],
+    requiresApiKey: true,
+    supportsModelDiscovery: false,
+    icon: '✦',
+  },
   openai: {
     id: 'openai',
     displayName: 'OpenAI',

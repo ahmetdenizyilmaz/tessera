@@ -6,12 +6,14 @@ import { useGroupStore } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { LLM_PROVIDERS, type ProviderMeta } from '../../types/llmProviders';
 import type { LlmProvider, LlmConfig } from '../../types/instance';
+import claudeIcon from '../../assets/claude-icon.ico';
 import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
 
 const PROVIDER_ICONS: Record<string, string> = {
+  anthropic: claudeIcon,
   openai: openaiIcon,
   gemini: geminiIcon,
   ollama: ollamaIcon,

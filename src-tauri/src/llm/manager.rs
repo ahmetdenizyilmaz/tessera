@@ -75,6 +75,7 @@ pub async fn llm_send_message(
     let model = session.model.clone();
     let base_url = session.base_url.clone();
     let api_key = session.api_key.clone();
+    let system_prompt = session.system_prompt.clone();
     let cancel = session.cancel.clone();
 
     let request = providers::build_request(
@@ -84,6 +85,7 @@ pub async fn llm_send_message(
         api_key.as_deref(),
         &model,
         &messages_json,
+        &system_prompt,
     )?;
 
     drop(sessions);
@@ -199,6 +201,10 @@ pub async fn llm_list_models(
     if let Some(key) = &api_key {
         if provider == "openai" {
             req = req.bearer_auth(key);
+        } else if provider == "anthropic" {
+            req = req
+                .header("x-api-key", key.as_str())
+                .header("anthropic-version", "2023-06-01");
         } else if provider == "gemini" {
             // Gemini uses query param for auth, already in URL for streaming
             // For model listing, append key
@@ -227,7 +233,9 @@ pub async fn llm_check_connection(
     state: tauri::State<'_, LlmManager>,
 ) -> Result<bool, String> {
     let url = match provider.as_str() {
-        "openai" | "lmstudio" => format!("{}/v1/models", base_url.trim_end_matches('/')),
+        "openai" | "lmstudio" | "anthropic" => {
+            format!("{}/v1/models", base_url.trim_end_matches('/'))
+        }
         "gemini" => format!("{}/v1beta/models", base_url.trim_end_matches('/')),
         "ollama" => format!("{}/api/tags", base_url.trim_end_matches('/')),
         _ => return Err(format!("Unknown provider: {}", provider)),

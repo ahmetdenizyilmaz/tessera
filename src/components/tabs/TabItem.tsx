@@ -16,6 +16,7 @@ import lmstudioIcon from '../../assets/lmstudio-icon.png';
 
 const PROVIDER_ICONS: Record<string, string> = {
   claude: claudeIcon,
+  anthropic: claudeIcon,
   openai: openaiIcon,
   gemini: geminiIcon,
   ollama: ollamaIcon,

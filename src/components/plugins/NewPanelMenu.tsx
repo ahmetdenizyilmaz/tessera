@@ -11,6 +11,7 @@ import type { LlmProvider } from '../../types/instance';
 // ─── Menu Item Definitions ──────────────────────────────────────────────────
 
 const LLM_MENU_ITEMS: { id: 'claude' | LlmProvider; label: string; icon: string }[] = [
+  { id: 'anthropic', label: 'Claude', icon: claudeIcon },
   { id: 'openai', label: 'ChatGPT', icon: openaiIcon },
   { id: 'gemini', label: 'Gemini', icon: geminiIcon },
   { id: 'ollama', label: 'Ollama', icon: ollamaIcon },

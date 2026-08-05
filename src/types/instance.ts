@@ -1,4 +1,6 @@
-export type LlmProvider = 'claude' | 'openai' | 'gemini' | 'ollama' | 'lmstudio';
+/** 'claude' is the Claude Code CLI (subscription login, tools, agentic).
+ *  'anthropic' is the Messages API with your own key — plain chat only. */
+export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'lmstudio';
 
 export type ThinkingMode = 'auto' | 'think' | 'think_hard' | 'think_harder' | 'ultrathink';
 

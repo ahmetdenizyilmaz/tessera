@@ -56,6 +56,7 @@ export function LmStudioIcon({ size = 36, className, style }: IconProps) {
 
 const PROVIDER_ICON_MAP: Record<string, React.FC<IconProps>> = {
   claude: ClaudeIcon,
+  anthropic: ClaudeIcon,
   openai: OpenAiIcon,
   gemini: GeminiIcon,
   ollama: OllamaIcon,

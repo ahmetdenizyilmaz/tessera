@@ -7,12 +7,14 @@ import { LLM_PROVIDERS } from '../../types/llmProviders';
 import type { LlmProvider } from '../../types/instance';
 import { ColorPickerPopover } from '../dialogs/ColorPickerPopover';
 import LlmChatView from './LlmChatView';
+import claudeIcon from '../../assets/claude-icon.ico';
 import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
 
 const PROVIDER_IMAGES: Record<string, string> = {
+  anthropic: claudeIcon,
   openai: openaiIcon,
   gemini: geminiIcon,
   ollama: ollamaIcon,

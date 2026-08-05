@@ -23,7 +23,8 @@ export function WorkerTooltip({ instanceId, screenX, screenY }: WorkerTooltipPro
   const working = isWorking(worker.activity);
 
   const PROVIDER_LABELS: Record<string, string> = {
-    claude: 'Claude',
+    claude: 'Claude Code',
+    anthropic: 'Claude (API)',
     openai: 'OpenAI',
     gemini: 'Gemini',
     ollama: 'Ollama',
