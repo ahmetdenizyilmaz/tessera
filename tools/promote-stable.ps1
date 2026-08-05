@@ -29,6 +29,15 @@ if ($running) {
 
 Copy-Item $source -Destination $target -Force
 
+# The exe is NOT standalone: this GNU-toolchain build loads WebView2Loader.dll
+# at runtime. Without it Windows shows "WebView2Loader.dll was not found" and
+# the app never starts. Ship every DLL that sits beside the built exe.
+$srcDir = Split-Path -Parent $source
+Get-ChildItem -Path $srcDir -Filter '*.dll' | ForEach-Object {
+    Copy-Item $_.FullName -Destination $dest -Force
+    Write-Host ("  + {0}" -f $_.Name)
+}
+
 $info = Get-Item $target
 Write-Host ("Promoted: {0:N0} MB, built {1}" -f ($info.Length / 1MB), $info.LastWriteTime)
 Write-Host "Launch it from the 'Claude GUI' desktop shortcut."
