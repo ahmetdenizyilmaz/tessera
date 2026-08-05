@@ -45,6 +45,20 @@ const FALLBACK_SLASH_COMMANDS = [
 /** Call when an instance is permanently closed to free the draft memory. */
 export function clearInstanceDraft(instanceId: string): void {
   draftStore.delete(instanceId);
+  draftListeners.delete(instanceId);
+}
+
+// Mounted inputs register here so external sources (file drops) can append
+// text to the right panel's composer.
+const draftListeners = new Map<string, (value: string) => void>();
+
+/** Append text to a panel's composer, adding a separating space if needed. */
+export function insertIntoDraft(instanceId: string, text: string): void {
+  const current = draftStore.get(instanceId) ?? '';
+  const needsSpace = current.length > 0 && !/\s$/.test(current);
+  const next = current + (needsSpace ? ' ' : '') + text;
+  draftStore.set(instanceId, next);
+  draftListeners.get(instanceId)?.(next);
 }
 
 interface PendingImage {
@@ -401,6 +415,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
   const clearQueue = useCallback(() => {
     setMessageQueue([]);
   }, []);
+
+  // Let external sources (dropped files) append into this composer
+  useEffect(() => {
+    draftListeners.set(instanceId, (next) => {
+      setValue(next);
+      textareaRef.current?.focus();
+    });
+    return () => {
+      draftListeners.delete(instanceId);
+    };
+  }, [instanceId]);
 
   // Cleanup draft on unmount (instance closed)
   useEffect(() => {

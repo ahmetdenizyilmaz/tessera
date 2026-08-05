@@ -4,6 +4,7 @@ import { useSystemMonitor } from './hooks/useSystemMonitor';
 import { useUsagePolling } from './hooks/useUsagePolling';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useWorkerActivity } from './hooks/useWorkerActivity';
+import { useFileDrop } from './hooks/useFileDrop';
 import { MenuBar } from './components/menubar/MenuBar';
 // Lazy: OfficeView drags in pixi.js (~500KB) — keep it out of the startup chunk
 const OfficeView = lazy(() =>
@@ -40,6 +41,7 @@ export default function App() {
   useUsagePolling();
   useAutoSave();
   useWorkerActivity();
+  useFileDrop();
 
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splash-shown'));
   // Stable identity — an inline closure would reset SplashScreen's timers on every App render

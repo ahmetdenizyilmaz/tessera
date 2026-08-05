@@ -217,14 +217,14 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (e.ctrlKey && !e.shiftKey && key === 'c') {
         return !copySelection();
       }
-      if ((e.ctrlKey && key === 'v') || (e.shiftKey && e.key === 'Insert')) {
-        pasteClipboard();
-        return false;
-      }
       if (e.ctrlKey && e.shiftKey && key === 'a') {
         terminal.selectAll();
         return false;
       }
+      // NOTE: paste keys (Ctrl+V, Ctrl+Shift+V, Shift+Insert) are deliberately
+      // NOT handled here. The webview still delivers a native paste event to
+      // xterm's hidden textarea, so handling them too pasted the clipboard
+      // twice. xterm's own handler is the single source of truth.
       return true;
     });
 
