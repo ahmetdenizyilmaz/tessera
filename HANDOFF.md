@@ -101,21 +101,21 @@ Condensed; `git log` has the detail.
 
 **Verified working (seen live):** chat replies with tool widgets, token streaming, AskUserQuestion card end-to-end, question Q&A record, hamburger collapse, tab overflow, startup with no white flash, workspace restore of panels/directories.
 
-**Implemented + compiling but NOT yet exercised:**
-- Zombie cleanup on a clean **X** close (a force-killed dev process bypasses Tauri's exit event, so it is not a valid test).
-- Permission cards with Skip Permissions **off**; plan-mode approval round-trip.
-- Image paste (base64 content blocks).
-- `/clear` producing genuine amnesia.
-- Transcript restore after a real close/reopen cycle.
-- The window-**X**-closes fix (Tauri prevents the native close once a JS `onCloseRequested` listener exists; the handler now preventDefaults, saves inside try/catch, and destroys the window itself).
+**Implemented + compiling but NOT yet exercised: see `TESTING.md`.** That file is the
+living checklist (zombie cleanup on a clean X close, permission cards with Skip
+Permissions off, plan approval, image paste, `/clear` amnesia, transcript restore,
+attach-external-session, the Claude API provider, panel messaging). Keep it there
+rather than duplicating the list here, where it drifts.
 
 ## 9. Known gaps / candidate next steps
 
 1. **Session History dialog can't reopen anything** — it is only a local log (search/favorite/delete) from `sessionStore`. Reopening lives in **File → Resume Session** (backed by `session_list_recent`). Adding an "Open" button to Session History was offered and not yet done.
 2. **Restored transcripts are plain text** — the session JSONL gives text only, so old tool widgets/thinking blocks/question cards come back as conversation text. New messages render fully.
-3. **MCP config is never passed to either pipeline** (`mcp_config_path` is plumbed but the frontend never sends it) — servers configured in McpManager are inert; only user-global `~/.claude.json` servers load.
+3. **MCP config is never passed to either pipeline** (`mcp_config_path` is plumbed but the frontend never sends it) — servers configured in McpManager are inert; only user-global `~/.claude.json` servers load. *Being fixed as part of panel messaging (Phase 2).*
 4. No multi-OS-window support (single window by design so far).
-5. A release build (`npx tauri build`) was started at handoff time — check `src-tauri\target\release\bundle\nsis\` for the installer.
+5. `mcp_check_status` is invoked by `McpServerCard.tsx` but **does not exist in Rust** — the Test Connection button always reports disconnected.
+6. The `mcp_servers` table seeds a `desktop-control` row pointing at `mcp_server.py`, which is not shipped in this repo. Disabled by default, but it should go.
+7. The temperature slider shows for the Claude (API) provider but does nothing — current Claude models reject `temperature`.
 
 ## 10. Conventions
 
