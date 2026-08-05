@@ -16,6 +16,7 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
+import { useLayoutStore } from '../store/layoutStore';
 import { useChatStore } from '../store/chatStore';
 
 declare global {
@@ -42,25 +43,34 @@ let lastSerialized = '';
 
 function snapshot(): PanelInfoPayload[] {
   const chat = useChatStore.getState().sessions;
-  return Array.from(useInstanceStore.getState().instances.values()).map((inst) => {
-    const session = chat.get(inst.id);
-    const kind: PanelInfoPayload['kind'] = inst.config.llmConfig
-      ? 'llm'
-      : inst.config.panelView === 'terminal'
-        ? 'terminal'
-        : 'chat';
-    return {
-      id: inst.id,
-      name: inst.name,
-      cwd: inst.config.cwd,
-      kind,
-      status: inst.status,
-      busy: session?.isStreaming ?? false,
-      awaiting_user: (session?.controlRequests?.length ?? 0) > 0,
-      model: inst.config.model || null,
-      session_id: inst.claudeSessionId || null,
-    };
-  });
+  const instances = useInstanceStore.getState().instances;
+  // Only panels that actually have a tab. instanceStore accumulates orphans
+  // (instances whose panel was closed, and stale entries carried forward by
+  // workspace restore), and listing those would bury the real panels in dead
+  // entries with duplicate names.
+  return useLayoutStore
+    .getState()
+    .tabOrder.map((id) => instances.get(id))
+    .filter((inst): inst is NonNullable<typeof inst> => Boolean(inst))
+    .map((inst) => {
+      const session = chat.get(inst.id);
+      const kind: PanelInfoPayload['kind'] = inst.config.llmConfig
+        ? 'llm'
+        : inst.config.panelView === 'terminal'
+          ? 'terminal'
+          : 'chat';
+      return {
+        id: inst.id,
+        name: inst.name,
+        cwd: inst.config.cwd,
+        kind,
+        status: inst.status,
+        busy: session?.isStreaming ?? false,
+        awaiting_user: (session?.controlRequests?.length ?? 0) > 0,
+        model: inst.config.model || null,
+        session_id: inst.claudeSessionId || null,
+      };
+    });
 }
 
 function scheduleSync() {
@@ -94,6 +104,7 @@ export function initPanelBus() {
   };
 
   useInstanceStore.subscribe(scheduleSync);
+  useLayoutStore.subscribe(scheduleSync);
   useChatStore.subscribe(scheduleSync);
   scheduleSync();
 }

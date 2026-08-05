@@ -65,12 +65,20 @@ pub async fn call(app: &AppHandle, caller_id: &str, name: &str, args: Value) -> 
         return Err("panel messaging is switched off in this app's settings".into());
     }
     // The caller identifies itself by the URL it was configured with, not by
-    // anything the model can influence.
+    // anything the model can influence. A panel that has been closed leaves its
+    // tools inert even if its CLI is somehow still alive.
     if bus.with_registry(|r| r.get(caller_id).is_none()) {
-        return Err(format!(
-            "this panel ({}) is no longer open, so its tools are inert",
-            caller_id
-        ));
+        // CLAUDE_GUI_PANELBUS_DEBUG lets the roster be read without a real
+        // panel id, so the endpoint can be exercised from curl or the MCP
+        // inspector. Read-only, and still behind the bearer token.
+        let debug_roster =
+            name == "list_panels" && std::env::var("CLAUDE_GUI_PANELBUS_DEBUG").is_ok();
+        if !debug_roster {
+            return Err(format!(
+                "this panel ({}) is no longer open, so its tools are inert",
+                caller_id
+            ));
+        }
     }
 
     match name {
