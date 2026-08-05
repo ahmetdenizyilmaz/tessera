@@ -67,7 +67,11 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     if (checking) return;
     let raf = requestAnimationFrame(() => {
       raf = requestAnimationFrame(() => {
-        getCurrentWindow().show().catch(() => {});
+        getCurrentWindow().show().catch((err) => {
+          // Don't hide this: if show() is denied the window only appears via
+          // the Rust failsafe, several seconds late.
+          console.error('Window show failed:', err);
+        });
       });
     });
     return () => cancelAnimationFrame(raf);

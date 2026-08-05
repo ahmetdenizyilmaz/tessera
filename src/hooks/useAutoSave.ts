@@ -50,7 +50,16 @@ export function useAutoSave() {
       } catch (err) {
         console.error('Save on close failed:', err);
       }
-      await getCurrentWindow().destroy().catch(() => {});
+      // Must not be swallowed: if destroy() is rejected (e.g. a missing
+      // core:window:allow-destroy permission) the close stays prevented and
+      // the window becomes impossible to close.
+      try {
+        await getCurrentWindow().destroy();
+      } catch (err) {
+        console.error('Window destroy failed — forcing exit:', err);
+        const { exit } = await import('@tauri-apps/plugin-process');
+        await exit(0);
+      }
     }).then((fn) => {
       if (cancelled) {
         fn();
