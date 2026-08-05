@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { INSTANCE_COLORS } from '../../types/instance';
 
 interface ColorPickerPopoverProps {
@@ -20,23 +21,21 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
 
   if (!isOpen) return null;
 
-  const style: React.CSSProperties = {
-    // Always fixed: the anchor rect is in viewport coordinates, and absolute
-    // positioning inside a mosaic tile would misplace and clip the popover
-    position: 'fixed',
-    background: 'var(--bg-surface)',
-    border: '1px solid var(--border-light)',
-    borderRadius: 'var(--radius-md)',
-    padding: 12,
-    zIndex: 1100,
-    boxShadow: '0 8px 24px var(--shadow)',
-    minWidth: 180,
-  };
+  // Positioning only — appearance lives in .color-picker-popover so the
+  // portaled node still looks like the rest of the app.
+  const WIDTH = 208;
+  const HEIGHT = 150;
+  const style: React.CSSProperties = { position: 'fixed', zIndex: 1100, width: WIDTH };
 
   if (anchorEl) {
     const rect = anchorEl.getBoundingClientRect();
-    style.top = Math.min(rect.bottom + 4, window.innerHeight - 220);
-    style.left = Math.min(rect.left, window.innerWidth - 200);
+    // Sit beside the context menu rather than on top of it; flip to the left
+    // when there isn't room on the right.
+    const right = rect.right + 8;
+    style.left = right + WIDTH <= window.innerWidth - 8
+      ? right
+      : Math.max(8, rect.left - WIDTH - 8);
+    style.top = Math.max(8, Math.min(rect.top, window.innerHeight - HEIGHT - 8));
   } else {
     style.top = '50%';
     style.left = '50%';
@@ -55,24 +54,36 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
     }
   };
 
-  return (
+  // Rendered into document.body: inside a mosaic tile the popover is subject
+  // to that tile's stacking context and overflow:hidden, which can leave it
+  // clipped or painted underneath the panel.
+  return createPortal(
     <>
       <div
         style={{ position: 'fixed', inset: 0, zIndex: 1099 }}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={onClose}
       />
-      <div className="color-picker-popover" style={style}>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 500 }}>
-          Pick a color
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+      <div
+        className="color-picker-popover"
+        style={style}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="color-picker-popover__title">Pick a color</div>
+        <div className="color-picker-popover__swatches">
+          {/* Real buttons, not divs: MosaicLayout's pointer-down handler only
+              lets clicks through for button/input/select/textarea, and would
+              otherwise treat a swatch click as a panel focus/drag. */}
           {INSTANCE_COLORS.map((color) => (
-            <div
+            <button
               key={color}
+              type="button"
+              title={color}
               onClick={() => handleSelect(color)}
               style={{
                 width: 24,
                 height: 24,
+                padding: 0,
                 borderRadius: '50%',
                 background: color,
                 cursor: 'pointer',
@@ -80,25 +91,33 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                 boxShadow: color === currentColor ? '0 0 0 2px var(--accent)' : 'none',
                 transition: 'transform 150ms ease',
               }}
-              onMouseEnter={(e) => { (e.target as HTMLDivElement).style.transform = 'scale(1.15)'; }}
-              onMouseLeave={(e) => { (e.target as HTMLDivElement).style.transform = 'scale(1)'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
             />
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div className="color-picker-popover__hex">
           <input
+            className="color-picker-popover__input"
             type="text"
             value={customHex}
             onChange={(e) => setCustomHex(e.target.value)}
             placeholder="#ff00ff"
-            style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleCustomSubmit(); }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') handleCustomSubmit();
+            }}
           />
-          <button className="btn btn-primary" style={{ fontSize: 11, padding: '4px 8px' }} onClick={handleCustomSubmit}>
+          <button
+            type="button"
+            className="color-picker-popover__set"
+            onClick={handleCustomSubmit}
+          >
             Set
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 };

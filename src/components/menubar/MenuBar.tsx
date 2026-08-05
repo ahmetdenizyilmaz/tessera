@@ -6,6 +6,7 @@ interface MenuBarProps {
   onNewLlmChat: () => void;
   onNewComputer: () => void;
   onResumeSession: () => void;
+  onAttachSession?: () => void;
   onSessionHistory: () => void;
   onSaveWorkspace: () => void;
   onLoadWorkspace: () => void;
@@ -39,6 +40,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onNewLlmChat,
   onNewComputer,
   onResumeSession,
+  onAttachSession,
   onSessionHistory,
   onSaveWorkspace,
   onLoadWorkspace,
@@ -63,6 +65,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
     { label: 'New Computer Panel', action: onNewComputer },
     { separator: true },
     { label: 'Resume Session', action: onResumeSession },
+    { label: 'Attach External Session...', action: () => onAttachSession?.() },
     { label: 'Session History', action: onSessionHistory },
     { separator: true },
     { label: 'Save Workspace', shortcut: 'Ctrl+S', action: onSaveWorkspace },

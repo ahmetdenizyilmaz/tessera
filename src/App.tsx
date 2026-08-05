@@ -18,6 +18,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { SplashScreen } from './components/SplashScreen';
 import { NewInstanceDialog } from './components/dialogs/NewInstanceDialog';
 import { ResumeSessionDialog } from './components/dialogs/ResumeSessionDialog';
+import { AttachSessionDialog } from './components/dialogs/AttachSessionDialog';
 import { SaveLoadDialog } from './components/dialogs/SaveLoadDialog';
 import { SettingsDialog } from './components/dialogs/SettingsDialog';
 import { AboutDialog } from './components/menubar/AboutDialog';
@@ -41,7 +42,6 @@ export default function App() {
   useUsagePolling();
   useAutoSave();
   useWorkerActivity();
-  useFileDrop();
 
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splash-shown'));
   // Stable identity — an inline closure would reset SplashScreen's timers on every App render
@@ -56,6 +56,15 @@ export default function App() {
   const [showNewLlm, setShowNewLlm] = useState<Exclude<LlmProvider, 'claude'> | null>(null);
   const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [showClaudeMd, setShowClaudeMd] = useState(false);
+  // Attach-session dialog; droppedFolder is set when opened by a folder drop
+  const [attachSession, setAttachSession] = useState<{ open: boolean; cwd: string | null }>(
+    { open: false, cwd: null },
+  );
+
+  const handleFolderDropped = useCallback((path: string) => {
+    setAttachSession({ open: true, cwd: path });
+  }, []);
+  useFileDrop(handleFolderDropped);
 
   const handleNewInstance = useCallback(async (panelView: 'chat' | 'terminal' = 'chat') => {
     const settings = useSettingsStore.getState().settings;
@@ -185,6 +194,7 @@ export default function App() {
             useLayoutStore.getState().addPanel(id, 'computer');
           }}
           onResumeSession={() => setShowResumeSession(true)}
+          onAttachSession={() => setAttachSession({ open: true, cwd: null })}
           onSessionHistory={() => setShowSessionHistory(true)}
           onSaveWorkspace={() => setShowSaveLoad('save')}
           onLoadWorkspace={() => setShowSaveLoad('load')}
@@ -231,6 +241,13 @@ export default function App() {
           <ResumeSessionDialog
             isOpen={true}
             onClose={() => setShowResumeSession(false)}
+          />
+        )}
+        {attachSession.open && (
+          <AttachSessionDialog
+            isOpen={true}
+            initialCwd={attachSession.cwd}
+            onClose={() => setAttachSession({ open: false, cwd: null })}
           />
         )}
         {showSaveLoad && (

@@ -1,9 +1,20 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { readDir } from '@tauri-apps/plugin-fs';
 import { useLayoutStore } from '../store/layoutStore';
 import { insertIntoDraft } from '../components/chat/ChatInput';
 import { isPtySpawned } from './usePty';
+
+/** A folder drop means "work here"; a file drop means "here's a path" */
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    await readDir(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Wrap paths containing spaces so shells and the CLI treat them as one arg */
 function quoteIfNeeded(path: string): string {
@@ -27,7 +38,7 @@ function panelAt(position: { x: number; y: number }): string | null {
   return panel?.dataset.panelId ?? null;
 }
 
-export function useFileDrop(): void {
+export function useFileDrop(onFolderDropped?: (path: string) => void): void {
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
@@ -47,6 +58,25 @@ export function useFileDrop(): void {
         if (event.payload.type !== 'drop') return;
         const { paths, position } = event.payload;
         if (!paths || paths.length === 0) return;
+
+        // A single folder means "open this project" — offer to attach one of
+        // its sessions (or start fresh) rather than pasting a path.
+        if (paths.length === 1 && onFolderDropped) {
+          void isDirectory(paths[0]).then((dir) => {
+            if (dir) onFolderDropped(paths[0]);
+            else handlePathDrop(paths, position);
+          });
+          return;
+        }
+        handlePathDrop(paths, position);
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch((err) => console.error('Failed to register drag-drop listener:', err));
+
+    function handlePathDrop(paths: string[], position: { x: number; y: number }) {
 
         const panelId = panelAt(position)
           ?? useLayoutStore.getState().focusedId
@@ -73,16 +103,11 @@ export function useFileDrop(): void {
         } else {
           insertIntoDraft(panelId, text);
         }
-      })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
-      .catch((err) => console.error('Failed to register drag-drop listener:', err));
+    }
 
     return () => {
       cancelled = true;
       unlisten?.();
     };
-  }, []);
+  }, [onFolderDropped]);
 }

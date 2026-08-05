@@ -61,7 +61,7 @@ export function NewPanelMenu({
           border: '1px solid var(--border)',
           borderRadius: 6,
           padding: '4px 0',
-          minWidth: 200,
+          minWidth: 250,
           zIndex: 1000,
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
         }}
@@ -75,8 +75,9 @@ export function NewPanelMenu({
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
         }}>
-          Built-in
+          Claude Code
         </div>
+        <div className="menu-section-note">Uses your Claude Code CLI login</div>
 
         {/* Claude: pick chat or terminal at creation — the choice is fixed
             for the session's lifetime, so it belongs here, not in a toggle */}
@@ -106,6 +107,19 @@ export function NewPanelMenu({
               </svg>
             </button>
           )}
+        </div>
+
+        {/* Separator + API-key providers */}
+        <div style={{ height: 1, background: 'var(--border)', margin: '6px 8px 4px' }} />
+        <div style={{
+          padding: '2px 12px 0',
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          Chat via API key
         </div>
 
         {/* Other LLM providers */}
