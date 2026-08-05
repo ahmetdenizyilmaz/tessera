@@ -16,7 +16,22 @@ behave differently under a dev process.
 
 ## 1. Process lifecycle
 
-### 1.1 ⏳ No zombies after a clean close
+### 1.1 ⚠️ No zombies after a clean close — *partially verified 2026-08-05*
+A dev-build window with five spawned CLIs was closed normally (exit code 0) and
+left **zero** orphaned `claude.exe` processes. That is real evidence the exit
+teardown works, but it was the dev binary, so still confirm on the stable build.
+
+Useful check that separates app zombies from your own VS Code sessions:
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | ForEach-Object {
+  $par = Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue
+  "{0} parent={1}" -f $_.ProcessId, $(if ($par) { $par.ProcessName } else { "<dead>" })
+}
+```
+Anything with `parent=<dead>` is an orphan. `parent=Code` is your editor's own
+Claude, not the app's.
+
+### 1.1b ⏳ Original procedure
 Why it matters: a force-killed dev process bypasses Tauri's exit event entirely, so
 every previous "test" of this proved nothing.
 
@@ -146,6 +161,11 @@ Toggle it off, open another new panel, `/mcp` → gone.
 ---
 
 ## 7. Panel messaging  *(after Phase 4)*
+
+Verified already, without the UI: the CLI connects to the bus and lists all three
+tools; `claude plugin validate --strict` passes; the endpoint answers 405/401/403/404
+correctly for GET, missing auth, cross-origin and bad paths — in both the dev and
+the stable build. What follows needs the UI.
 
 ### 7.1 ⏳ Discovery
 Two chat panels in **different** directories. In A: `list the other panels open in
