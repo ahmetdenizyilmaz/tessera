@@ -64,6 +64,7 @@ fn build_claude_args(
     system_prompt: &Option<String>,
     claude_session_id: &Option<String>,
     mcp_config_path: &Option<String>,
+    panel_mcp_config: &Option<String>,
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
@@ -113,6 +114,20 @@ fn build_claude_args(
             args.push("--mcp-config".to_string());
             args.push(mcp.clone());
         }
+    }
+
+    // The merged panel-bus + McpManager config (see stream/manager.rs for why
+    // it is built at spawn time and why --strict-mcp-config is not used).
+    if let Some(path) = panel_mcp_config {
+        args.push("--mcp-config".to_string());
+        args.push(path.clone());
+        args.push("--allowedTools".to_string());
+        args.push(crate::panelbus::spawn_config::allowed_tool_pattern());
+    }
+
+    if let Some(dir) = crate::panelbus::plugin::plugin_dir() {
+        args.push("--plugin-dir".to_string());
+        args.push(dir.to_string_lossy().to_string());
     }
 
     args
@@ -179,6 +194,7 @@ pub async fn pty_spawn(
         &system_prompt,
         &effective_session_id,
         &effective_mcp_config,
+        &crate::panelbus::spawn_config::write_for_panel(&app, &id),
     );
 
     let claude_exe = claude_paths::find_claude_exe()
@@ -381,20 +397,31 @@ pub async fn pty_write(
     data: String,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
+    write_to_instance(&state, &id, &data)
+}
+
+/// The body of `pty_write`, callable from Rust. The panel bus uses it to type
+/// a cross-panel message into a terminal panel's TUI.
+pub fn write_to_instance(
+    state: &tauri::State<'_, PtyManager>,
+    id: &str,
+    data: &str,
+) -> Result<(), String> {
     let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-    if let Some(instance) = instances.get_mut(&id) {
-        if let Some(ref mut writer) = instance.writer {
-            writer
-                .write_all(data.as_bytes())
-                .map_err(|e| format!("Write failed: {}", e))?;
-            writer.flush().map_err(|e| format!("Flush failed: {}", e))?;
-        } else {
-            return Err("Writer not available".to_string());
-        }
-    } else {
-        return Err(format!("PTY instance '{}' not found", id));
-    }
-    Ok(())
+    let instance = instances.get_mut(id).ok_or_else(|| {
+        format!(
+            "that panel's terminal has not started yet — open it once so its \
+Claude session spawns, then try again"
+        )
+    })?;
+    let writer = instance
+        .writer
+        .as_mut()
+        .ok_or_else(|| "that panel's terminal is not accepting input".to_string())?;
+    writer
+        .write_all(data.as_bytes())
+        .map_err(|e| format!("Write failed: {}", e))?;
+    writer.flush().map_err(|e| format!("Flush failed: {}", e))
 }
 
 #[tauri::command]

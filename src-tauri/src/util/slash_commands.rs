@@ -104,5 +104,13 @@ pub async fn list_slash_commands(cwd: String) -> Result<Vec<SlashCommand>, Strin
         commands.extend(scan_command_dir(&project_dir, "project"));
     }
 
+    // Commands the app itself ships to every session via --plugin-dir.
+    // Verified against the CLI: plugin commands are exposed unprefixed
+    // (`/panels`, not `/claude-gui-panels:panels`), so the bare file stem is
+    // the name to insert.
+    if let Some(app_dir) = crate::panelbus::plugin::commands_dir() {
+        commands.extend(scan_command_dir(&app_dir, "app"));
+    }
+
     Ok(commands)
 }

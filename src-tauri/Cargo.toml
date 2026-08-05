@@ -38,6 +38,11 @@ tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
 zstd = "0.13"
 ignore = "0.4"
+# Loopback MCP server for panel-to-panel messaging. All three are already in
+# Cargo.lock via reqwest/tauri, so this adds no new crates to the tree.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "server"] }
+http-body-util = "0.1"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

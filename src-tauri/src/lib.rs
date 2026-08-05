@@ -13,6 +13,7 @@ pub mod checkpoints;
 pub mod mcp;
 pub mod analytics;
 pub mod llm;
+pub mod panelbus;
 
 use db::Database;
 use pty::manager::PtyManager;
@@ -37,6 +38,46 @@ pub fn run() {
                     }
                 });
             }
+
+            // Panel bus. Bind SYNCHRONOUSLY here: the port has to be known
+            // before the first `stream_configure`, and setup() runs before any
+            // command can execute. Never rebind — sessions already spawned
+            // hold the old port in their MCP config file.
+            let token = format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4()).replace('-', "");
+            let bound = tauri::async_runtime::block_on(async {
+                tokio::net::TcpListener::bind(("127.0.0.1", 0)).await
+            });
+            let port = match bound {
+                Ok(listener) => {
+                    let port = listener.local_addr().ok().map(|a| a.port());
+                    let handle = app.handle().clone();
+                    tauri::async_runtime::spawn(panelbus::server::serve(listener, handle));
+                    if let Some(p) = port {
+                        eprintln!("[panelbus] listening on 127.0.0.1:{}", p);
+                        // Opt-in: prints the bearer token so the endpoint can be
+                        // exercised with the MCP inspector or curl. Off by
+                        // default — the token is a live credential for this
+                        // window's panels.
+                        if std::env::var("CLAUDE_GUI_PANELBUS_DEBUG").is_ok() {
+                            eprintln!("[panelbus] debug token: {}", token);
+                        }
+                    }
+                    port
+                }
+                Err(e) => {
+                    // Degrade, never panic: panel messaging goes dark, the app
+                    // still starts.
+                    eprintln!("[panelbus] could not bind loopback port: {} — panel messaging disabled", e);
+                    None
+                }
+            };
+            app.manage(panelbus::PanelBus::new(port, token));
+
+            // Skill + slash commands handed to every session via --plugin-dir.
+            if panelbus::plugin::ensure_installed().is_none() {
+                eprintln!("[panelbus] plugin not installed — sessions will spawn without it");
+            }
+
             Ok(())
         })
         .manage(PtyManager::new())
@@ -149,6 +190,10 @@ pub fn run() {
             llm::keystore::llm_get_api_key,
             llm::keystore::llm_set_api_key,
             llm::keystore::llm_delete_api_key,
+            // Panel bus (cross-panel messaging)
+            panelbus::panel_registry_sync,
+            panelbus::panel_bus_set_enabled,
+            panelbus::panel_bus_status,
             // File listing
             util::file_listing::list_project_files,
             // Slash commands

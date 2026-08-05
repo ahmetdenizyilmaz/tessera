@@ -37,6 +37,25 @@ pub struct StreamConfig {
     pub thinking_budget_tokens: Option<u32>,
 }
 
+/// How a turn ended, as seen on the child's stdout. This is the authoritative
+/// signal — the frontend's `isStreaming` flag is derived from the same events
+/// but lives in a webview whose timers get throttled when the window is hidden.
+#[derive(Debug, Clone)]
+pub enum TurnOutcome {
+    /// A `{"type":"result"}` line: the turn is over.
+    Done {
+        is_error: bool,
+        subtype: String,
+        text: Option<String>,
+    },
+    /// The CLI is asking the user something (permission, AskUserQuestion, plan
+    /// approval). Nothing further will happen until a human answers, so a
+    /// waiter should give up immediately rather than burn its timeout.
+    BlockedOnUser,
+    /// stdout closed.
+    ProcessDied,
+}
+
 pub struct StreamInstance {
     config: StreamConfig,
     /// Claude's session id — refreshed from EVERY system/init event, so
@@ -48,6 +67,9 @@ pub struct StreamInstance {
     /// they were spawned with and stop pumping when it no longer matches.
     generation: u64,
     request_counter: u64,
+    /// Parties waiting for the current turn to finish (panel-bus injections
+    /// sent with `wait_for_reply`). Drained on the first terminal outcome.
+    turn_watchers: Vec<tokio::sync::oneshot::Sender<TurnOutcome>>,
 }
 
 pub struct StreamJsonManager {
@@ -138,6 +160,88 @@ fn write_line(stdin: &Arc<Mutex<ChildStdin>>, value: &serde_json::Value) -> Resu
     guard.flush().map_err(|e| format!("stdin flush failed: {}", e))
 }
 
+/// Resolve every party waiting on this instance's current turn. A no-op when
+/// the generation has moved on (the process was cleared or respawned) or when
+/// nobody is waiting, which is the common case.
+fn notify_turn_watchers(
+    instances: &Arc<Mutex<HashMap<String, StreamInstance>>>,
+    id: &str,
+    generation: u64,
+    outcome: TurnOutcome,
+) {
+    let watchers = match instances.lock() {
+        Ok(mut map) => match map.get_mut(id) {
+            Some(inst) if inst.generation == generation && !inst.turn_watchers.is_empty() => {
+                std::mem::take(&mut inst.turn_watchers)
+            }
+            _ => return,
+        },
+        Err(_) => return,
+    };
+    for w in watchers {
+        let _ = w.send(outcome.clone());
+    }
+}
+
+/// Register interest in the next terminal outcome for this instance. Must be
+/// called BEFORE the user line is written, or a fast turn can finish first.
+pub fn watch_turn(
+    state: &tauri::State<'_, StreamJsonManager>,
+    id: &str,
+) -> Result<tokio::sync::oneshot::Receiver<TurnOutcome>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+    let inst = instances
+        .get_mut(id)
+        .ok_or_else(|| format!("Stream instance '{}' not found", id))?;
+    inst.turn_watchers.push(tx);
+    Ok(rx)
+}
+
+/// The live session id for an instance, as refreshed from the CLI's
+/// `system/init` events.
+pub fn session_id_of(app: &AppHandle, id: &str) -> Option<String> {
+    let state = app.state::<StreamJsonManager>();
+    let instances = state.instances.lock().ok()?;
+    instances
+        .get(id)
+        .and_then(|i| i.session_id.clone())
+        .filter(|s| !s.is_empty())
+}
+
+/// Register a minimal config for an id that has never been through
+/// `stream_configure`. A panel inside a collapsed group renders as a preview,
+/// so its `ChatView` never mounts and never configures — without this, it would
+/// be permanently unreachable from the panel bus. No-op if already known.
+pub fn ensure_configured(
+    state: &tauri::State<'_, StreamJsonManager>,
+    id: &str,
+    cwd: &str,
+    model: Option<String>,
+) -> Result<(), String> {
+    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+    if instances.contains_key(id) {
+        return Ok(());
+    }
+    instances.insert(
+        id.to_string(),
+        StreamInstance {
+            config: StreamConfig {
+                cwd: claude_paths::resolve_work_dir(cwd),
+                model: model.filter(|m| !m.is_empty()),
+                ..Default::default()
+            },
+            session_id: None,
+            child: None,
+            stdin: None,
+            generation: 0,
+            request_counter: 0,
+            turn_watchers: Vec::new(),
+        },
+    );
+    Ok(())
+}
+
 /// Get the live stdin handle for an instance, if its process is running.
 fn get_stdin(
     state: &tauri::State<'_, StreamJsonManager>,
@@ -217,10 +321,26 @@ fn ensure_process(
             cmd.arg("--append-system-prompt").arg(sp);
         }
     }
+    // An explicitly supplied config (plugin SDK) stays independent of ours.
     if let Some(ref mcp) = cfg.mcp_config_path {
         if !mcp.is_empty() {
             cmd.arg("--mcp-config").arg(mcp);
         }
+    }
+    // The merged config: the user's enabled McpManager servers plus this
+    // panel's bus endpoint. Built here, at spawn time, rather than in
+    // stream_configure — that command overwrites mcp_config_path on every call
+    // and the frontend routinely passes null, which would silently disarm the
+    // panel tools. Deliberately NOT --strict-mcp-config: that would switch off
+    // the user's own ~/.claude.json servers.
+    let panel_cfg = crate::panelbus::spawn_config::write_for_panel(app, id);
+    if let Some(ref path) = panel_cfg {
+        cmd.arg("--mcp-config").arg(path);
+    }
+    // Session-scoped: the panel-messaging skill and its slash commands, without
+    // touching the user's own Claude Code configuration.
+    if let Some(dir) = crate::panelbus::plugin::plugin_dir() {
+        cmd.arg("--plugin-dir").arg(dir);
     }
     let mode = cfg.permission_mode.as_deref().unwrap_or("default");
     if mode != "default" {
@@ -232,6 +352,12 @@ fn ensure_process(
                 cmd.arg("--allowedTools").arg(tool);
             }
         }
+    }
+    // Pre-approve the panel tools. MCP tools need approval by default, so
+    // without this every cross-panel message raises a permission card.
+    if panel_cfg.is_some() {
+        cmd.arg("--allowedTools")
+            .arg(crate::panelbus::spawn_config::allowed_tool_pattern());
     }
     if cfg.dangerously_skip_permissions {
         cmd.arg("--dangerously-skip-permissions");
@@ -399,10 +525,35 @@ fn ensure_process(
                     }
                 }
 
+                // Turn-completion signal for panel-bus waiters. Cheap substring
+                // prefilter first — most lines are content deltas and parsing
+                // every one of them would be wasteful.
+                let terminal = if text.contains("\"type\":\"result\"") {
+                    serde_json::from_str::<serde_json::Value>(&text)
+                        .ok()
+                        .filter(|m| m["type"] == "result")
+                        .map(|m| TurnOutcome::Done {
+                            is_error: m["is_error"].as_bool().unwrap_or(false),
+                            subtype: m["subtype"].as_str().unwrap_or("").to_string(),
+                            text: m["result"].as_str().map(|s| s.to_string()),
+                        })
+                } else if text.contains("\"type\":\"control_request\"") {
+                    Some(TurnOutcome::BlockedOnUser)
+                } else {
+                    None
+                };
+                if let Some(outcome) = terminal {
+                    notify_turn_watchers(&instances_arc, &reader_id, my_gen, outcome);
+                }
+
                 if tx.send(text).is_err() {
                     break;
                 }
             }
+
+            // stdout closed: release anyone still waiting rather than letting
+            // them sit until their timeout.
+            notify_turn_watchers(&instances_arc, &reader_id, my_gen, TurnOutcome::ProcessDied);
 
             // EOF (or stale): if still the current generation, take the child
             // out and reap it WITHOUT holding the map lock.
@@ -521,6 +672,7 @@ pub async fn stream_configure(
                 stdin: None,
                 generation: 0,
                 request_counter: 0,
+                turn_watchers: Vec::new(),
             },
         );
     }
@@ -579,25 +731,38 @@ pub async fn stream_send_message(
     app: AppHandle,
     state: tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
-    ensure_process(&id, &app, &state)?;
+    send_user_turn(&id, &message, images, &app, &state)
+}
+
+/// The body of `stream_send_message`, callable from Rust (the panel bus injects
+/// cross-panel messages through here rather than round-tripping via the
+/// webview).
+pub fn send_user_turn(
+    id: &str,
+    message: &str,
+    images: Option<Vec<String>>,
+    app: &AppHandle,
+    state: &tauri::State<'_, StreamJsonManager>,
+) -> Result<(), String> {
+    ensure_process(id, app, state)?;
 
     let payload = serde_json::json!({
         "type": "user",
-        "message": { "role": "user", "content": build_user_content(&message, images) }
+        "message": { "role": "user", "content": build_user_content(message, images) }
     });
 
-    let stdin = get_stdin(&state, &id)?;
+    let stdin = get_stdin(state, id)?;
     if let Err(first_err) = write_line(&stdin, &payload) {
         eprintln!("[stream:{}] write failed ({}), respawning once", id, first_err);
         // Process likely died — tear down and retry once with --resume.
         {
             let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-            if let Some(instance) = instances.get_mut(&id) {
+            if let Some(instance) = instances.get_mut(id) {
                 teardown_process(instance, false);
             }
         }
-        ensure_process(&id, &app, &state)?;
-        let stdin = get_stdin(&state, &id)?;
+        ensure_process(id, app, state)?;
+        let stdin = get_stdin(state, id)?;
         write_line(&stdin, &payload)?;
     }
     Ok(())

@@ -104,7 +104,30 @@ pub async fn session_load_history(
     session_id: String,
     project_path: String,
 ) -> Result<Vec<HistoryChatMessage>, String> {
-    let resolved = claude_paths::resolve_work_dir(&project_path);
+    load_history(&session_id, &project_path)
+}
+
+/// The last `limit` messages of a session, oldest first. Used by the panel
+/// bus's `read_panel` tool so one panel can pick up another's context without
+/// interrupting it.
+pub fn read_recent(
+    project_path: &str,
+    session_id: &str,
+    limit: usize,
+) -> Result<Vec<HistoryChatMessage>, String> {
+    let mut all = load_history(session_id, project_path)?;
+    if all.len() > limit {
+        all.drain(..all.len() - limit);
+    }
+    Ok(all)
+}
+
+pub fn load_history(
+    session_id: &str,
+    project_path: &str,
+) -> Result<Vec<HistoryChatMessage>, String> {
+    let session_id = session_id.to_string();
+    let resolved = claude_paths::resolve_work_dir(project_path);
     let file_path = claude_paths::session_file_path(&resolved, &session_id);
 
     if !file_path.exists() {
