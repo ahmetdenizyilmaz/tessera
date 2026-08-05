@@ -19,6 +19,14 @@ function quoteIfNeeded(path: string): string {
  * `paths`, and routes by hit-testing the drop position against the mosaic
  * tile under the cursor.
  */
+/** Hit-test a drag position (physical px) against the mosaic tiles */
+function panelAt(position: { x: number; y: number }): string | null {
+  const ratio = window.devicePixelRatio || 1;
+  const el = document.elementFromPoint(position.x / ratio, position.y / ratio);
+  const panel = el?.closest('[data-panel-id]') as HTMLElement | null;
+  return panel?.dataset.panelId ?? null;
+}
+
 export function useFileDrop(): void {
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -26,19 +34,30 @@ export function useFileDrop(): void {
 
     getCurrentWebview()
       .onDragDropEvent((event) => {
+        // Dragging over a panel focuses it, so the drop target is obvious
+        // before releasing — same feedback as clicking it.
+        if (event.payload.type === 'over') {
+          const hoverId = panelAt(event.payload.position);
+          if (hoverId && useLayoutStore.getState().focusedId !== hoverId) {
+            useLayoutStore.getState().setActiveTab(hoverId);
+            useLayoutStore.getState().setFocused(hoverId);
+          }
+          return;
+        }
         if (event.payload.type !== 'drop') return;
         const { paths, position } = event.payload;
         if (!paths || paths.length === 0) return;
 
-        // Which panel was the drop over? Tauri reports physical pixels;
-        // elementFromPoint expects CSS pixels.
-        const ratio = window.devicePixelRatio || 1;
-        const el = document.elementFromPoint(position.x / ratio, position.y / ratio);
-        const panel = el?.closest('[data-panel-id]') as HTMLElement | null;
-        const panelId = panel?.dataset.panelId
+        const panelId = panelAt(position)
           ?? useLayoutStore.getState().focusedId
           ?? useLayoutStore.getState().activeTabId;
         if (!panelId) return;
+
+        // Make sure the dropped-on panel is the active one
+        if (useLayoutStore.getState().focusedId !== panelId) {
+          useLayoutStore.getState().setActiveTab(panelId);
+          useLayoutStore.getState().setFocused(panelId);
+        }
 
         const panelType = useLayoutStore.getState().panelTypes[panelId];
         if (panelType && panelType !== 'terminal') return;

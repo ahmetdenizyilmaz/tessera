@@ -221,12 +221,30 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         terminal.selectAll();
         return false;
       }
-      // NOTE: paste keys (Ctrl+V, Ctrl+Shift+V, Shift+Insert) are deliberately
-      // NOT handled here. The webview still delivers a native paste event to
-      // xterm's hidden textarea, so handling them too pasted the clipboard
-      // twice. xterm's own handler is the single source of truth.
+      // Paste: we do it ourselves AND preventDefault, so the webview cannot
+      // also deliver a native paste event to xterm's textarea. Handling it
+      // without preventDefault pasted twice; leaving it entirely to the
+      // native path pasted not at all in WebView2.
+      if ((e.ctrlKey && key === 'v') || (e.shiftKey && e.key === 'Insert')) {
+        e.preventDefault();
+        pasteClipboard();
+        return false;
+      }
       return true;
     });
+
+    // Belt and braces: if a native paste event still reaches the terminal
+    // (context-menu paste, IME quirks), let it through exactly once and
+    // never in addition to the handler above.
+    const handleNativePaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text');
+      if (text) {
+        e.preventDefault();
+        e.stopPropagation();
+        write(text);
+      }
+    };
+    container.addEventListener('paste', handleNativePaste, true);
 
     // Right-click: copy a selection if there is one, otherwise paste
     const handleContextMenu = (e: MouseEvent) => {
@@ -401,6 +419,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         resizeDebounce = null;
       }
       container.removeEventListener('contextmenu', handleContextMenu);
+      container.removeEventListener('paste', handleNativePaste, true);
       resizeObserver.disconnect();
 
       // Save terminal buffer content before disposing. SerializeAddon
