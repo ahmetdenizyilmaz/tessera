@@ -230,6 +230,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Ctrl+Tab switches panels app-wide. Bail out before the popup handlers
+      // below, which treat a bare Tab as "accept the highlighted completion".
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Tab') {
+        return;
+      }
       // Handle @ mention navigation
       if (mentionState.active && mentionFiles.length > 0) {
         if (e.key === 'ArrowDown') {

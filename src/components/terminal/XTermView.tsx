@@ -209,6 +209,13 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (e.type !== 'keydown') return true;
       const key = e.key.toLowerCase();
 
+      // Ctrl+Tab belongs to the app (panel switching), not the shell. Returning
+      // false keeps xterm from writing it to the PTY; the event still bubbles
+      // to the document handler in App.tsx.
+      if (e.ctrlKey && key === 'tab') {
+        return false;
+      }
+
       if (e.ctrlKey && e.shiftKey && key === 'c') {
         copySelection();
         return false;

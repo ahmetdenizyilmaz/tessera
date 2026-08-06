@@ -612,6 +612,7 @@ interface LayoutState {
   ) => void;
   setActiveTab: (id: string | null) => void;
   setFocused: (id: string | null) => void;
+  cycleFocus: (delta: 1 | -1) => void;
   moveTab: (fromIndex: number, toIndex: number) => void;
   setPanelRect: (id: string, rect: PanelRect) => void;
   setRawPanelRects: (rects: Map<string, PanelRect>) => void;
@@ -792,6 +793,27 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
   setActiveTab: (id: string | null) => {
     set({ activeTabId: id });
+  },
+
+  /// Move focus to the next (+1) or previous (-1) panel in tab-strip order,
+  /// wrapping around. Does exactly what clicking that tab does, so the 'main'
+  /// layout still promotes the newly focused panel to the large slot.
+  cycleFocus: (delta: 1 | -1) => {
+    const state = get();
+    const order = state.tabOrder;
+    if (order.length < 2) return;
+
+    const current = state.focusedId ?? state.activeTabId;
+    const currentIdx = current ? order.indexOf(current) : -1;
+    // Nothing focused yet: step in from whichever end matches the direction.
+    const nextIdx =
+      currentIdx === -1
+        ? (delta === 1 ? 0 : order.length - 1)
+        : (currentIdx + delta + order.length) % order.length;
+
+    const nextId = order[nextIdx];
+    set({ activeTabId: nextId });
+    get().setFocused(nextId);
   },
 
   setFocused: (id: string | null) => {

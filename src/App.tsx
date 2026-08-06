@@ -134,6 +134,26 @@ export default function App() {
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl) return;
 
+      // Ctrl+Tab / Ctrl+Shift+Tab cycle panels. Handled before the switch
+      // because preventDefault has to beat the webview's own focus traversal.
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        useLayoutStore.getState().cycleFocus(e.shiftKey ? -1 : 1);
+        // Clicking a panel moves DOM focus as a side effect; a keyboard switch
+        // has to do it explicitly, or the next keystroke still lands in the
+        // panel we just left. One frame later, so the layout has re-rendered.
+        const target = useLayoutStore.getState().focusedId;
+        if (target) {
+          requestAnimationFrame(() => {
+            // Matches the chat composer and xterm's helper textarea alike.
+            document
+              .querySelector<HTMLTextAreaElement>(`[data-panel-id="${CSS.escape(target)}"] textarea`)
+              ?.focus();
+          });
+        }
+        return;
+      }
+
       switch (e.key.toLowerCase()) {
         case 'n':
           e.preventDefault();

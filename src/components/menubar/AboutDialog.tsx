@@ -6,6 +6,8 @@ interface AboutDialogProps {
 }
 
 const SHORTCUTS: { key: string; label: string }[] = [
+  { key: 'Ctrl+Tab', label: 'Next Panel' },
+  { key: 'Ctrl+Shift+Tab', label: 'Previous Panel' },
   { key: 'Ctrl+N', label: 'New Instance (dialog)' },
   { key: 'Ctrl+Shift+N', label: 'Quick Instance' },
   { key: 'Ctrl+S', label: 'Save Workspace' },
