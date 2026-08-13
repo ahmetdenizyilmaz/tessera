@@ -65,6 +65,18 @@ export function usePty(instanceId: string) {
     // Register one-time exit listener to auto-clean on PTY death
     registerExitListener(instanceId);
 
+    // Pin the session id before the CLI starts. Rust resumes it if the JSONL
+    // exists and passes --session-id otherwise, so this panel owns a known
+    // conversation from the first keystroke. Previously the id was left to the
+    // CLI and recovered afterwards by picking the newest session in the same
+    // directory — which adopted an unrelated conversation whenever two panels
+    // shared a folder, or one had been used by Claude Code outside the app.
+    let sessionId = instance.claudeSessionId;
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      useInstanceStore.getState().setClaudeSessionId(instanceId, sessionId);
+    }
+
     try {
       await invoke('pty_spawn', {
         id: instanceId,
@@ -73,7 +85,7 @@ export function usePty(instanceId: string) {
         rows,
         model: instance.config.model || null,
         dangerouslySkipPermissions: instance.config.dangerouslySkipPermissions,
-        claudeSessionId: instance.claudeSessionId || null,
+        claudeSessionId: sessionId,
         permissionMode: instance.config.permissionMode || null,
         allowedTools: instance.config.allowedTools.length > 0 ? instance.config.allowedTools : null,
         systemPrompt: instance.config.systemPrompt || null,

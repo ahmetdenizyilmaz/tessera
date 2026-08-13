@@ -56,13 +56,21 @@ impl PtyManager {
     }
 }
 
+/// Which session flag to spawn with. `Resume` continues an existing JSONL;
+/// `New` pins the id of a conversation that does not exist yet, so the panel
+/// knows its session id without having to guess afterwards.
+pub enum SessionArg {
+    Resume(String),
+    New(String),
+}
+
 fn build_claude_args(
     model: &Option<String>,
     dangerously_skip_permissions: bool,
     permission_mode: &Option<String>,
     allowed_tools: &Option<Vec<String>>,
     system_prompt: &Option<String>,
-    claude_session_id: &Option<String>,
+    session: &Option<SessionArg>,
     mcp_config_path: &Option<String>,
     panel_mcp_config: &Option<String>,
 ) -> Vec<String> {
@@ -102,11 +110,16 @@ fn build_claude_args(
         }
     }
 
-    if let Some(sid) = claude_session_id {
-        if !sid.is_empty() {
+    match session {
+        Some(SessionArg::Resume(sid)) => {
             args.push("--resume".to_string());
             args.push(sid.clone());
         }
+        Some(SessionArg::New(sid)) => {
+            args.push("--session-id".to_string());
+            args.push(sid.clone());
+        }
+        None => {}
     }
 
     if let Some(mcp) = mcp_config_path {
@@ -173,18 +186,26 @@ pub async fn pty_spawn(
     // below needs it to locate the session file.
     let work_dir = claude_paths::resolve_work_dir(&cwd);
 
-    // Drop --resume when the session JSONL no longer exists: the CLI does not
-    // fall back, it prints "No conversation found with session ID: …" and exits.
-    let effective_session_id = claude_session_id.filter(|sid| {
-        if sid.is_empty() {
-            return false;
-        }
-        let exists = claude_paths::session_file_path(&work_dir, sid).exists();
-        if !exists {
-            eprintln!("[pty:{}] session {} has no file on disk — starting fresh", id, sid);
-        }
-        exists
-    });
+    // The panel always hands us an id. If its JSONL already exists we resume
+    // it; if not we pass --session-id so the CLI *starts* the conversation
+    // under that exact id.
+    //
+    // The alternative — let the CLI pick an id and then work out which file it
+    // created — cannot be done reliably: the only signal is "newest session in
+    // this directory", which silently adopts an unrelated conversation whenever
+    // two panels share a working directory, or when a Claude Code session was
+    // run in that directory outside the app. That is exactly how panels ended
+    // up showing each other's transcripts after a restart.
+    let session_arg = claude_session_id
+        .filter(|sid| !sid.is_empty())
+        .map(|sid| {
+            let exists = claude_paths::session_file_path(&work_dir, &sid).exists();
+            if exists {
+                SessionArg::Resume(sid)
+            } else {
+                SessionArg::New(sid)
+            }
+        });
 
     let args = build_claude_args(
         &model,
@@ -192,7 +213,7 @@ pub async fn pty_spawn(
         &permission_mode,
         &allowed_tools,
         &system_prompt,
-        &effective_session_id,
+        &session_arg,
         &effective_mcp_config,
         &crate::panelbus::spawn_config::write_for_panel(&app, &id),
     );

@@ -82,48 +82,11 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
     if (!compact) setShowToolbarMenu(false);
   }, [compact]);
 
-  // Terminal panels: capture the session id the interactive CLI creates
-  // (the CLI doesn't report it, so we watch the project's session files).
-  // Needed so a restart can --resume the terminal conversation.
-  useEffect(() => {
-    if (panelView !== 'terminal') return;
-    const normPath = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    let mounted = true;
-    let attempts = 0;
+  // Terminal panels used to discover their session id by scanning the project
+  // directory and taking the newest file. That guess is gone: usePty now mints
+  // the id and spawns the CLI with --session-id, so the panel knows which
+  // conversation is its own. See usePty.spawn.
 
-    const tryScan = () => {
-      if (!mounted) return;
-      const inst = useInstanceStore.getState().instances.get(instanceId);
-      if (!inst || inst.claudeSessionId) return;
-      const cwd = inst.config.cwd;
-      if (!cwd) return;
-      attempts++;
-      invoke<Array<{ sessionId: string; project: string; timestamp: number; hasFile: boolean }>>('session_scan_all')
-        .then((sessions) => {
-          if (!mounted) return;
-          const cur = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;
-          if (cur) return;
-          const cwdNorm = normPath(cwd);
-          const match = sessions
-            .filter((s) => normPath(s.project) === cwdNorm && s.hasFile)
-            .sort((a, b) => b.timestamp - a.timestamp)[0];
-          if (match) {
-            useInstanceStore.getState().setClaudeSessionId(instanceId, match.sessionId);
-          } else if (attempts < 10) {
-            setTimeout(tryScan, 3000);
-          }
-        })
-        .catch(() => {
-          if (attempts < 10 && mounted) setTimeout(tryScan, 3000);
-        });
-    };
-
-    const timer = setTimeout(tryScan, 2500);
-    return () => {
-      mounted = false;
-      clearTimeout(timer);
-    };
-  }, [instanceId, panelView]);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto');
   const setModel = useInstanceStore((s) => s.setModel);
 

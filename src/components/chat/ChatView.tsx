@@ -11,13 +11,9 @@ import { ChatInput } from './ChatInput';
 import { ControlRequestArea } from './ControlRequestArea';
 import { isUserMessage } from '../../types/stream';
 import { ClaudeIcon } from '../icons/ProviderIcons';
-import { isPtySpawned } from '../../hooks/usePty';
 import type { SessionInfo } from '../../types/session';
 
 // ---- Constants ----
-const SESSION_SCAN_DELAY_MS = 2500;
-const SESSION_SCAN_RETRY_MS = 3000;
-const SESSION_SCAN_MAX_RETRIES = 5;
 
 // ---- Component ----
 
@@ -166,63 +162,11 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     return () => { mounted = false; };
   }, [instanceId, claudeSessionId, projectDir]);
 
-  // ---- Session scan (for --resume detection) ----
-  useEffect(() => {
-    if (!projectDir) return;
-
-    const normPath = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    let scanAttempts = 0;
-    let mounted = true;
-
-    const tryScan = () => {
-      if (!mounted) return;
-      // Never resurrect a session the user just cleared
-      if (clearedRef.current) return;
-      const inst = useInstanceStore.getState().instances.get(instanceId);
-      if (!inst) return;
-      // Only capture a session id when this instance has NONE — never
-      // overwrite a deliberately chosen or already-captured session.
-      if (inst.claudeSessionId) return;
-      // Only the interactive Terminal flow creates sessions we can't see —
-      // the chat pipeline reports its session id in every init event. Without
-      // this gate a brand-new chat adopts the newest OLD session of its
-      // directory (and then renders that old transcript).
-      if (!isPtySpawned(instanceId)) {
-        setTimeout(tryScan, SESSION_SCAN_RETRY_MS);
-        return;
-      }
-      const cwd = inst.config.cwd;
-      if (!cwd) return;
-      scanAttempts++;
-
-      invoke<SessionInfo[]>('session_scan_all')
-        .then((sessions) => {
-          if (!mounted) return;
-          const current = useInstanceStore.getState().instances.get(instanceId)?.claudeSessionId;
-          if (current) return;
-          const cwdNorm = normPath(cwd);
-          const match = sessions
-            .filter((s) => normPath(s.project) === cwdNorm && s.hasFile)
-            .sort((a, b) => b.timestamp - a.timestamp)[0];
-          if (match) {
-            useInstanceStore.getState().setClaudeSessionId(instanceId, match.sessionId);
-          } else if (scanAttempts < SESSION_SCAN_MAX_RETRIES) {
-            setTimeout(tryScan, SESSION_SCAN_RETRY_MS);
-          }
-        })
-        .catch(() => {
-          if (scanAttempts < SESSION_SCAN_MAX_RETRIES && mounted) {
-            setTimeout(tryScan, SESSION_SCAN_RETRY_MS);
-          }
-        });
-    };
-
-    const timer = setTimeout(tryScan, SESSION_SCAN_DELAY_MS);
-    return () => {
-      mounted = false;
-      clearTimeout(timer);
-    };
-  }, [instanceId, projectDir]);
+  // A chat panel learns its session id from the CLI's own system/init event,
+  // which is authoritative. The scan that used to run here — adopt the newest
+  // session file in this directory — guessed wrong whenever two panels shared
+  // a folder or Claude Code had been run there outside the app, which is how
+  // panels came back showing each other's conversations.
 
   // ---- Auto-scroll ----
   useEffect(() => {
