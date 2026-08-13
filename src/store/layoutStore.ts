@@ -224,6 +224,9 @@ export function computeRects(
       break;
     }
 
+    // 'grid' is no longer produced, but saved workspaces still contain it.
+    // Render those as 'main' so an old layout doesn't come back as equal cells.
+    case 'grid':
     case 'main': {
       // 5+ panels: main(80%) + sidebar(20%) + bottom(20%)
       const SIDE = 20;
@@ -255,21 +258,6 @@ export function computeRects(
       break;
     }
 
-    case 'grid': {
-      // 6+ panels: near-square grid of equal cells; the last row's panels
-      // stretch to fill the full row width
-      const cols = Math.ceil(Math.sqrt(n));
-      const rows = Math.ceil(n / cols);
-      const rowH = 100 / rows;
-      for (let i = 0; i < n; i++) {
-        const row = Math.floor(i / cols);
-        const colsInRow = row === rows - 1 ? n - row * cols : cols;
-        const colW = 100 / colsInRow;
-        const col = i - row * cols;
-        rects.set(order[i], { x: col * colW, y: row * rowH, w: colW, h: rowH });
-      }
-      break;
-    }
   }
 
   return rects;
@@ -404,18 +392,18 @@ export function getDefaultConfig(
   if (n === 4) {
     return { type: 'quarters', panelOrder: [...tabOrder] };
   }
-  if (n === 5) {
-    // 5: main layout with focusedId as main panel
-    const order = [...tabOrder];
-    if (focusedId && order.includes(focusedId)) {
-      const idx = order.indexOf(focusedId);
-      order.splice(idx, 1);
-      order.unshift(focusedId);
-    }
-    return { type: 'main', panelOrder: order };
+  // 5+: main layout, focused panel promoted to the large slot. The overflow
+  // past the four sidebar slots goes to a bottom strip (see the 'main' case in
+  // computeRects), so the focused panel keeps its size as the count grows.
+  // An equal-cell grid was tried here for 6+ and was wrong: it dropped the
+  // main/sidebar arrangement entirely the moment a sixth panel opened.
+  const order = [...tabOrder];
+  if (focusedId && order.includes(focusedId)) {
+    const idx = order.indexOf(focusedId);
+    order.splice(idx, 1);
+    order.unshift(focusedId);
   }
-  // 6+: equal-cell grid
-  return { type: 'grid', panelOrder: [...tabOrder] };
+  return { type: 'main', panelOrder: order };
 }
 
 // ─── Build Snap Config ──────────────────────────────────────────────────────
@@ -489,13 +477,8 @@ export function buildSnapConfig(
     return { type: 'quarters', panelOrder: existing };
   }
 
-  if (n === 5) {
-    // 5: main layout with snappedId as main
-    return { type: 'main', panelOrder: [snappedId, ...others] };
-  }
-
-  // 6+: grid with the snapped panel first
-  return { type: 'grid', panelOrder: [snappedId, ...others] };
+  // 5+: main layout with the snapped panel as main
+  return { type: 'main', panelOrder: [snappedId, ...others] };
 }
 
 // ─── Snap Zone Detection ────────────────────────────────────────────────────

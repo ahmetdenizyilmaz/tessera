@@ -59,8 +59,8 @@ export function GeneralSettings() {
           value={settings.defaultModel}
           onChange={(e) => updateSettings({ defaultModel: e.target.value })}
         >
-          <option value="sonnet">Claude Sonnet</option>
           <option value="opus">Claude Opus</option>
+          <option value="sonnet">Claude Sonnet</option>
           <option value="fable">Claude Fable</option>
           <option value="haiku">Claude Haiku</option>
         </select>
@@ -73,8 +73,15 @@ export function GeneralSettings() {
           value={settings.defaultPermissionMode}
           onChange={(e) => updateSettings({ defaultPermissionMode: e.target.value })}
         >
-          <option value="default">Default</option>
+          {/* Matches the CLI's own choices (acceptEdits, auto,
+              bypassPermissions, manual, dontAsk, plan). "Default" is the app's
+              own sentinel meaning "don't pass --permission-mode at all". */}
+          <option value="auto">Auto</option>
+          <option value="default">Default (CLI's own)</option>
+          <option value="acceptEdits">Accept Edits</option>
           <option value="plan">Plan</option>
+          <option value="manual">Manual</option>
+          <option value="dontAsk">Don't Ask</option>
           <option value="bypassPermissions">Bypass Permissions</option>
         </select>
       </div>

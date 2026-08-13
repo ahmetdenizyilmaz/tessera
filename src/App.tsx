@@ -71,10 +71,13 @@ export default function App() {
     // Real path, not '.' — encode_project_path('.') breaks session-file
     // resolution and usage polling on the Rust side
     const home = await homeDir().catch(() => '');
+    // Picking chat or terminal here counts as choosing a type, so the New
+    // Instance dialog opens on it next time.
+    useSettingsStore.getState().updateSettings({ lastPanelView: panelView });
     const id = useInstanceStore.getState().addInstance({
       cwd: home,
       panelView,
-      model: settings.defaultModel,
+      model: settings.lastModel || settings.defaultModel,
       dangerouslySkipPermissions: settings.defaultSkipPermissions,
       permissionMode: settings.defaultPermissionMode,
       allowedTools: [],

@@ -20,9 +20,12 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
   const instanceCount = useInstanceStore((s) => s.instances.size);
 
   const [name, setName] = useState(() => `Claude ${instanceCount + 1}`);
-  const [panelView, setPanelView] = useState<'chat' | 'terminal'>('chat');
+  // Opens on whatever was created last, falling back to the configured default.
+  const [panelView, setPanelView] = useState<'chat' | 'terminal'>(
+    settings.lastPanelView || 'chat',
+  );
   const [cwd, setCwd] = useState('');
-  const [model, setModel] = useState(settings.defaultModel);
+  const [model, setModel] = useState(settings.lastModel || settings.defaultModel);
   const [permissionMode, setPermissionMode] = useState(settings.defaultPermissionMode);
   const [skipPermissions, setSkipPermissions] = useState(settings.defaultSkipPermissions);
   const [allowedTools, setAllowedTools] = useState('');
@@ -69,6 +72,12 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
       panelView,
     };
 
+    // Remember this choice for the next time the dialog opens.
+    useSettingsStore.getState().updateSettings({
+      lastModel: model,
+      lastPanelView: panelView,
+    });
+
     const id = addInstance(config, name || undefined);
     addPanel(id);
     setActiveTab(id);
@@ -92,7 +101,12 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
           <div className="form-group">
             <label className="form-label">Session Type</label>
             <div className="panel-view-picker">
-              {(['chat', 'terminal'] as const).map((kind) => (
+              {/* Last-created type sits on the left, so the common case is the
+                  first thing under the cursor. */}
+              {(settings.lastPanelView === 'terminal'
+                ? (['terminal', 'chat'] as const)
+                : (['chat', 'terminal'] as const)
+              ).map((kind) => (
                 <button
                   key={kind}
                   type="button"
@@ -146,8 +160,8 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
           <div className="form-group">
             <label className="form-label">Model</label>
             <select className="form-select" value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="sonnet">Sonnet (default)</option>
-              <option value="opus">Opus</option>
+              <option value="opus">Opus (default)</option>
+              <option value="sonnet">Sonnet</option>
               <option value="fable">Fable</option>
               <option value="haiku">Haiku</option>
             </select>
@@ -156,12 +170,13 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
           <div className="form-group">
             <label className="form-label">Permission Mode</label>
             <select className="form-select" value={permissionMode} onChange={(e) => setPermissionMode(e.target.value)}>
-              <option value="default">default</option>
-              <option value="plan">plan</option>
-              <option value="acceptEdits">acceptEdits</option>
-              <option value="bypassPermissions">bypassPermissions</option>
-              <option value="dontAsk">dontAsk</option>
               <option value="auto">auto</option>
+              <option value="default">default</option>
+              <option value="acceptEdits">acceptEdits</option>
+              <option value="plan">plan</option>
+              <option value="manual">manual</option>
+              <option value="dontAsk">dontAsk</option>
+              <option value="bypassPermissions">bypassPermissions</option>
             </select>
           </div>
 
@@ -185,7 +200,10 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
               placeholder="Read, Write, Bash, ..."
               rows={2}
             />
-            <span className="form-hint">Comma-separated list of allowed tools</span>
+            <span className="form-hint">
+              Comma-separated. Leave empty unless you want to narrow what this
+              instance may do — the permission mode above already governs it.
+            </span>
           </div>
 
           <div className="form-group">

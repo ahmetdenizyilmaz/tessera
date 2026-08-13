@@ -44,6 +44,11 @@ export interface AppSettings {
   defaultPermissionMode: string;
   defaultSkipPermissions: boolean;
   defaultAgentMode: boolean;
+  /** What the New Instance dialog opens with, carried over from the last
+   *  instance actually created. Kept separate from the `default*` fields so
+   *  creating an instance never silently rewrites the configured defaults. */
+  lastModel: string;
+  lastPanelView: 'chat' | 'terminal';
   fontSize: number;
   fontFamily: string;
   autoSave: boolean;

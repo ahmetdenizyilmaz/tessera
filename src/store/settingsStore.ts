@@ -9,10 +9,16 @@ interface SettingsState {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  defaultModel: 'sonnet',
-  defaultPermissionMode: 'default',
-  defaultSkipPermissions: true,
+  defaultModel: 'opus',
+  // 'auto' is a real CLI permission mode (choices: acceptEdits, auto,
+  // bypassPermissions, manual, dontAsk, plan). Previously this was 'default'
+  // plus dangerouslySkipPermissions, i.e. every new instance bypassed every
+  // permission check.
+  defaultPermissionMode: 'auto',
+  defaultSkipPermissions: false,
   defaultAgentMode: false,
+  lastModel: '',
+  lastPanelView: 'chat',
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
   autoSave: true,
@@ -44,6 +50,24 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'claude-gui-settings',
+      version: 1,
+      // v0 → v1: new instances defaulted to sonnet with permissions bypassed.
+      // Persisted settings shadow the defaults above, so without this the new
+      // values would never reach anyone who has used the app before.
+      migrate: (persisted, version) => {
+        const state = persisted as SettingsState | undefined;
+        if (!state?.settings) return state as SettingsState;
+        if (version >= 1) return state;
+        return {
+          ...state,
+          settings: {
+            ...state.settings,
+            defaultModel: 'opus',
+            defaultPermissionMode: 'auto',
+            defaultSkipPermissions: false,
+          },
+        };
+      },
       merge: (persisted, current) => {
         const p = persisted as SettingsState | undefined;
         return {
