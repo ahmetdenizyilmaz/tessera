@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { cleanupPty } from '../../hooks/usePty';
+import { cleanupPty, restartPty } from '../../hooks/usePty';
 import { destroyTerminal } from '../../hooks/useTerminal';
 import { invoke } from '@tauri-apps/api/core';
 import { XTermView, clearTerminalState } from './XTermView';
@@ -86,6 +86,22 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
   // directory and taking the newest file. That guess is gone: usePty now mints
   // the id and spawns the CLI with --session-id, so the panel knows which
   // conversation is its own. See usePty.spawn.
+
+  const [restartKey, setRestartKey] = useState(0);
+  const [restarting, setRestarting] = useState(false);
+
+  // Restart the CLI in place. Used mainly to pick up MCP servers enabled after
+  // this panel started — the CLI only reads --mcp-config at spawn.
+  const handleRestart = useCallback(async () => {
+    if (restarting) return;
+    setRestarting(true);
+    try {
+      await restartPty(instanceId);
+      setRestartKey((k) => k + 1);
+    } finally {
+      setRestarting(false);
+    }
+  }, [instanceId, restarting]);
 
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto');
   const setModel = useInstanceStore((s) => s.setModel);
@@ -359,7 +375,26 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
           ) : null}
         </div>
 
-        {/* Maximize + close stay visible at any width, outside toolbar-actions */}
+        {/* Restart + maximize + close stay visible at any width */}
+        {panelView === 'terminal' && (
+          <button
+            className="toolbar-btn"
+            onClick={(e) => { e.stopPropagation(); handleRestart(); }}
+            disabled={restarting}
+            title="Restart Claude in this panel — picks up newly enabled MCP servers. The conversation is resumed."
+            style={{ flexShrink: 0, marginLeft: 4, opacity: restarting ? 0.5 : undefined }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path
+                d="M10.5 6a4.5 4.5 0 1 1-1.32-3.18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                fill="none"
+              />
+              <path d="M10.5 0.8V3.2H8.1" stroke="currentColor" strokeLinecap="round" fill="none" />
+            </svg>
+          </button>
+        )}
         <button
           className="toolbar-btn"
           onClick={(e) => { e.stopPropagation(); toggleMaximized(instanceId); }}
@@ -395,7 +430,9 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
             {panelView === 'chat' ? (
               <ChatView instanceId={instanceId} isVisible />
             ) : (
-              <XTermView instanceId={instanceId} isVisible />
+              // restartKey remounts the view after the process is killed, so
+              // the fresh terminal fits and spawns from scratch.
+              <XTermView key={restartKey} instanceId={instanceId} isVisible />
             )}
           </div>
         </div>

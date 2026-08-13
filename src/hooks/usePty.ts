@@ -150,6 +150,37 @@ export function usePty(instanceId: string) {
 }
 
 // Export for external cleanup — also attempts pty_kill as safety net
+/**
+ * Tear down a panel's Claude process so it can be spawned again.
+ *
+ * The CLI reads --mcp-config once, at spawn, so a server enabled in McpManager
+ * only reaches a terminal that starts afterwards. Restarting is how an open
+ * panel picks one up. The conversation survives: the panel keeps its session
+ * id and the fresh process resumes it.
+ *
+ * Callers are responsible for remounting the view afterwards.
+ */
+export async function restartPty(id: string) {
+  spawnedPtys.set(id, 'killing');
+  try {
+    await invoke('pty_kill', { id });
+  } catch (err) {
+    console.error(`Failed to kill PTY ${id} for restart:`, err);
+  }
+  spawnedPtys.delete(id);
+  const cleanup = exitListeners.get(id);
+  if (cleanup) {
+    cleanup();
+    exitListeners.delete(id);
+  }
+  // Drop the saved scrollback — it belongs to the process that just died, and
+  // the resumed session redraws its own history.
+  const buffers = (globalThis as Record<string, unknown>).__termBuffers as
+    | Map<string, string>
+    | undefined;
+  buffers?.delete(id);
+}
+
 export function cleanupPty(id: string) {
   spawnedPtys.delete(id);
   writeChains.delete(id);
