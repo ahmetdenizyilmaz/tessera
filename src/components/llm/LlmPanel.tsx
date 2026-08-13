@@ -49,6 +49,8 @@ function hexToRgba(hex: string, alpha: number): string {
 export function LlmPanel({ instanceId }: LlmPanelProps) {
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const removePanel = useLayoutStore((s) => s.removePanel);
+  const toggleMaximized = useLayoutStore((s) => s.toggleMaximized);
+  const isMaximized = useLayoutStore((s) => s.maximizedId === instanceId);
   const removeInstance = useInstanceStore((s) => s.removeInstance);
   const setName = useInstanceStore((s) => s.setName);
   const setColor = useInstanceStore((s) => s.setColor);
@@ -258,6 +260,22 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
         </div>
 
         <div className="toolbar-actions">
+          <button
+            className="toolbar-btn"
+            onClick={(e) => { e.stopPropagation(); toggleMaximized(instanceId); }}
+            title={isMaximized ? 'Restore panel (show all)' : 'Maximize panel (hide the others)'}
+          >
+            {isMaximized ? (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <rect x="0.5" y="2.5" width="7" height="7" stroke="currentColor" />
+                <path d="M3.5 2.5V0.5H11.5V8.5H9.5" stroke="currentColor" fill="none" />
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="11" height="11" stroke="currentColor" />
+              </svg>
+            )}
+          </button>
           <button
             className="toolbar-btn close"
             onClick={handleClose}

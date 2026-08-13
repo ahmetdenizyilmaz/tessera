@@ -131,6 +131,11 @@ export default function App() {
         if (showResumeSession) { setShowResumeSession(false); return; }
         if (showSessionHistory) { setShowSessionHistory(false); return; }
         if (showNewLlm) { setShowNewLlm(null); return; }
+        // No dialog open: Escape leaves a maximized panel and brings the
+        // mosaic back.
+        if (useLayoutStore.getState().maximizedId) {
+          useLayoutStore.getState().toggleMaximized(useLayoutStore.getState().maximizedId!);
+        }
         return;
       }
 

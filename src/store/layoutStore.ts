@@ -569,6 +569,10 @@ interface LayoutState {
   tabOrder: string[];
   activeTabId: string | null;
   focusedId: string | null;
+  /** When set, only this panel is shown; the rest stay mounted but hidden and
+   *  are reached through the tab bar. Not persisted — a workspace reopens with
+   *  the full mosaic visible. */
+  maximizedId: string | null;
   layoutConfig: LayoutConfig | null;
   panelRects: Map<string, PanelRect>;
   stealFraction: StealFraction;
@@ -596,6 +600,7 @@ interface LayoutState {
   setActiveTab: (id: string | null) => void;
   setFocused: (id: string | null) => void;
   cycleFocus: (delta: 1 | -1) => void;
+  toggleMaximized: (id: string) => void;
   moveTab: (fromIndex: number, toIndex: number) => void;
   setPanelRect: (id: string, rect: PanelRect) => void;
   setRawPanelRects: (rects: Map<string, PanelRect>) => void;
@@ -623,6 +628,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   tabOrder: [],
   activeTabId: null,
   focusedId: null,
+  maximizedId: null,
   layoutConfig: null,
   panelRects: new Map(),
   stealFraction: { x: 0.5, y: 0.5 },
@@ -724,6 +730,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const newActive = state.activeTabId === id
       ? (newOrder[0] ?? null)
       : state.activeTabId;
+    // Closing the maximized panel drops back to the mosaic rather than
+    // silently maximizing whichever panel inherited focus.
+    const newMaximized = state.maximizedId === id ? null : state.maximizedId;
 
     if (newOrder.length === 0) {
       const newState = {
@@ -731,6 +740,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         tabOrder: [],
         activeTabId: null,
         focusedId: null,
+        maximizedId: null,
         layoutConfig: null,
         panelRects: new Map<string, PanelRect>(),
         // Keep panelTypes & widgetKinds — they hold type info for panels
@@ -754,6 +764,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       tabOrder: newOrder,
       activeTabId: newActive,
       focusedId: newFocused,
+      maximizedId: newMaximized,
       layoutConfig,
       panelRects,
       panelTypes: newTypes,
@@ -775,7 +786,25 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     });  },
 
   setActiveTab: (id: string | null) => {
+    // While maximized, picking a tab swaps which panel fills the area rather
+    // than dropping back to the mosaic — the tab bar is the navigation.
+    const { maximizedId } = get();
+    if (maximizedId && id) {
+      set({ activeTabId: id, maximizedId: id });
+      get().setFocused(id);
+      return;
+    }
     set({ activeTabId: id });
+  },
+
+  toggleMaximized: (id: string) => {
+    const state = get();
+    if (state.maximizedId === id) {
+      set({ maximizedId: null });
+      return;
+    }
+    set({ maximizedId: id, activeTabId: id });
+    state.setFocused(id);
   },
 
   /// Move focus to the next (+1) or previous (-1) panel in tab-strip order,

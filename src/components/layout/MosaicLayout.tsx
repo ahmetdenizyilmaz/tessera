@@ -27,6 +27,7 @@ export function MosaicLayout() {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabOrder = useLayoutStore((s) => s.tabOrder ?? EMPTY_TAB_ORDER);
   const focusedId = useLayoutStore((s) => s.focusedId);
+  const maximizedId = useLayoutStore((s) => s.maximizedId);
   const panelRects = useLayoutStore((s) => s.panelRects ?? EMPTY_RECTS);
   const layoutConfig = useLayoutStore((s) => s.layoutConfig);
   const stealFraction = useLayoutStore((s) => s.stealFraction);
@@ -195,9 +196,10 @@ export function MosaicLayout() {
 
   // Gutters (shared borders) for resize handles -- skip during drag or animation
   const gutters = useMemo(() => {
-    if (draggingId || isAnimating) return [];
+    // Nothing to resize against while one panel fills the area.
+    if (draggingId || isAnimating || maximizedId) return [];
     return computeGutters(displayRects);
-  }, [displayRects, draggingId, isAnimating]);
+  }, [displayRects, draggingId, isAnimating, maximizedId]);
 
   // Gutter resize start
   const handleGutterDown = useCallback((e: React.PointerEvent, gutter: Gutter) => {
@@ -423,8 +425,16 @@ export function MosaicLayout() {
     >
       {/* Panels */}
       {tabOrder.map((id) => {
-        const rect = animatedRects.get(id);
-        if (!rect) return null;
+        const rectFromLayout = animatedRects.get(id);
+        if (!rectFromLayout) return null;
+
+        // Maximized: the chosen panel fills the area and the others are hidden
+        // rather than unmounted — a terminal that unmounts loses its viewport,
+        // and re-mounting would refit every xterm on every toggle.
+        const isHidden = maximizedId !== null && maximizedId !== id;
+        const rect = maximizedId === id
+          ? { x: 0, y: 0, w: 100, h: 100 }
+          : rectFromLayout;
 
         const isFocused = focusedId === id;
         const isDrag = draggingId === id;
@@ -466,6 +476,10 @@ export function MosaicLayout() {
                 : '1px solid rgba(255, 255, 255, 0.06)',
               boxSizing: 'border-box',
               opacity: isShrinking ? 0 : 1,
+              // visibility, not display:none — a display:none xterm reports a
+              // zero-size viewport and its fit addon collapses the terminal.
+              visibility: isHidden ? 'hidden' : 'visible',
+              pointerEvents: isHidden ? 'none' : undefined,
             }}
           >
             {panelType === 'group'
