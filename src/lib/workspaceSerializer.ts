@@ -236,12 +236,30 @@ export function deserializeWorkspace(raw: unknown): void {
   // plugin panel ids are stable across restarts and map to themselves.
   const idMap = new Map<string, string>();
 
+  // Orphan purge. The store has been accumulating instances that nothing
+  // references — panels closed while the old panel-limit bug leaked them,
+  // stale entries re-saved by every autosave since. An instance is real only
+  // if the snapshot's layout or a group points at it; the rest are dead
+  // weight (~40 of them by now) and restoring them re-persists them forever.
+  const referenced = new Set<string>(snapshot.layout?.tabOrder ?? []);
+  for (const group of Object.values(snapshot.groups ?? {})) {
+    for (const childId of group.childIds ?? []) referenced.add(childId);
+  }
+  const liveInstances =
+    referenced.size > 0
+      ? snapshot.instances.filter((inst) => referenced.has(inst.id))
+      : snapshot.instances; // no layout info at all (legacy) — keep everything
+  const dropped = snapshot.instances.length - liveInstances.length;
+  if (dropped > 0) {
+    console.warn(`[restore] dropped ${dropped} orphaned instance(s) not referenced by any tab or group`);
+  }
+
   // Workspaces saved before session-id pinning can carry the same id on two
   // panels (the old newest-in-folder adoption). Restoring both would put two
   // processes on one JSONL, so only the first keeps the id.
   const seenSessionIds = new Set<string>();
 
-  for (const inst of snapshot.instances) {
+  for (const inst of liveInstances) {
     const newId = useInstanceStore.getState().addInstance(inst.config, inst.name);
     idMap.set(inst.id, newId);
 

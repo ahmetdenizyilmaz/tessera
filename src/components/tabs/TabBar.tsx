@@ -20,6 +20,8 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { TabItem } from './TabItem';
 import { TabContextMenu } from './TabContextMenu';
+import { SwitchSessionDialog } from '../dialogs/SwitchSessionDialog';
+import { startFreshSession } from '../../lib/sessionActions';
 import { GroupBreadcrumb } from '../groups/GroupBreadcrumb';
 import { NewPanelMenu } from '../plugins/NewPanelMenu';
 import { useInstanceStore } from '../../store/instanceStore';
@@ -113,6 +115,8 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
     y: number;
     tabId: string;
   } | null>(null);
+  // Panel whose session is being switched via the context menu
+  const [switchSessionFor, setSwitchSessionFor] = useState<string | null>(null);
 
   // Timer for "navigate up" hover zone
   const navigateUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -316,6 +320,16 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
     await closePanel(contextMenu.tabId);
   }, [contextMenu]);
 
+  const handleSwitchSession = useCallback(() => {
+    if (!contextMenu) return;
+    setSwitchSessionFor(contextMenu.tabId);
+  }, [contextMenu]);
+
+  const handleStartFresh = useCallback(() => {
+    if (!contextMenu) return;
+    void startFreshSession(contextMenu.tabId);
+  }, [contextMenu]);
+
   return (
     <div className="tab-bar">
       <DndContext
@@ -421,8 +435,18 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
           tabId={contextMenu.tabId}
           onRename={handleRename}
           onChangeColor={handleChangeColor}
+          onSwitchSession={handleSwitchSession}
+          onStartFresh={handleStartFresh}
           onClose={handleCloseTab}
           onDismiss={() => setContextMenu(null)}
+        />
+      )}
+
+      {switchSessionFor && (
+        <SwitchSessionDialog
+          isOpen={true}
+          instanceId={switchSessionFor}
+          onClose={() => setSwitchSessionFor(null)}
         />
       )}
     </div>

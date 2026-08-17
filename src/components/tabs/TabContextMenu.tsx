@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Folder, ChevronRight } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore } from '../../store/layoutStore';
+import { isClaudePanel } from '../../lib/sessionActions';
 
 interface TabContextMenuProps {
   x: number;
@@ -9,6 +10,8 @@ interface TabContextMenuProps {
   tabId: string;
   onRename: () => void;
   onChangeColor: () => void;
+  onSwitchSession: () => void;
+  onStartFresh: () => void;
   onClose: () => void;
   onDismiss: () => void;
 }
@@ -160,12 +163,16 @@ export function TabContextMenu({
   tabId,
   onRename,
   onChangeColor,
+  onSwitchSession,
+  onStartFresh,
   onClose,
   onDismiss,
 }: TabContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showMoveTo, setShowMoveTo] = useState(false);
   const groups = useGroupStore((s) => s.groups);
+  // Session actions only make sense on panels that host a Claude session
+  const claudePanel = isClaudePanel(tabId);
 
   // Determine if "Move to..." should be shown
   // Show when: groups exist OR panel is inside a group
@@ -237,6 +244,26 @@ export function TabContextMenu({
             <MoveToSubmenu tabId={tabId} onDismiss={onDismiss} />
           )}
         </div>
+      )}
+
+      {claudePanel && (
+        <>
+          <div className="context-menu-separator" />
+          <button
+            className="context-menu-item"
+            title="Point this panel at a different conversation — name, color and layout stay"
+            onClick={() => { onSwitchSession(); onDismiss(); }}
+          >
+            Switch session…
+          </button>
+          <button
+            className="context-menu-item"
+            title="Drop the current conversation and start empty in the same folder"
+            onClick={() => { onStartFresh(); onDismiss(); }}
+          >
+            Start fresh session
+          </button>
+        </>
       )}
 
       <div className="context-menu-separator" />

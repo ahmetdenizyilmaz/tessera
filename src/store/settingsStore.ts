@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultAgentMode: false,
   lastModel: '',
   lastPanelView: 'chat',
+  lastCwd: '',
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
   autoSave: true,

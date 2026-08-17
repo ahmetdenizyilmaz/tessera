@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { cleanupPty, restartPty } from '../../hooks/usePty';
+import { useEventBusStore } from '../../store/eventBusStore';
 import { destroyTerminal } from '../../hooks/useTerminal';
 import { invoke } from '@tauri-apps/api/core';
 import { XTermView, clearTerminalState } from './XTermView';
@@ -89,6 +90,18 @@ export function TerminalPanel({ instanceId }: TerminalPanelProps) {
 
   const [restartKey, setRestartKey] = useState(0);
   const [restarting, setRestarting] = useState(false);
+
+  // Session actions (tab context menu) restart the CLI from outside this
+  // component; the remount has to happen here where restartKey lives.
+  useEffect(() => {
+    if (panelView !== 'terminal') return;
+    return useEventBusStore.getState().subscribe('panel:restart', instanceId, (data) => {
+      const payload = data as { instanceId?: string } | undefined;
+      if (payload?.instanceId === instanceId) {
+        setRestartKey((k) => k + 1);
+      }
+    });
+  }, [instanceId, panelView]);
 
   // Restart the CLI in place. Used mainly to pick up MCP servers enabled after
   // this panel started — the CLI only reads --mcp-config at spawn.

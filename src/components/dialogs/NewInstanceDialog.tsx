@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { InstanceConfig } from '../../types/instance';
@@ -24,7 +24,9 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
   const [panelView, setPanelView] = useState<'chat' | 'terminal'>(
     settings.lastPanelView || 'chat',
   );
-  const [cwd, setCwd] = useState('');
+  // Prefill with the last-used folder — panels defaulting to the home
+  // directory is what kept mixing them into unrelated home-dir sessions.
+  const [cwd, setCwd] = useState(settings.lastCwd || '');
   const [model, setModel] = useState(settings.lastModel || settings.defaultModel);
   const [permissionMode, setPermissionMode] = useState(settings.defaultPermissionMode);
   const [skipPermissions, setSkipPermissions] = useState(settings.defaultSkipPermissions);
@@ -57,6 +59,7 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
   };
 
   const handleCreate = async () => {
+    if (!canAddPanel()) { notifyPanelLimit(); return; }
     const config: InstanceConfig = {
       cwd: cwd || (await homeDir().catch(() => '')),
       model,
@@ -72,10 +75,11 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
       panelView,
     };
 
-    // Remember this choice for the next time the dialog opens.
+    // Remember these choices for the next time the dialog opens.
     useSettingsStore.getState().updateSettings({
       lastModel: model,
       lastPanelView: panelView,
+      lastCwd: cwd,
     });
 
     const id = addInstance(config, name || undefined);

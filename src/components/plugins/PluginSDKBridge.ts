@@ -7,7 +7,7 @@ import { isPluginMessage, createResponse, SDK_INIT, SDK_DESTROY, SDK_EVENT } fro
 import { usePluginStore } from '../../store/pluginStore';
 import { useEventBusStore } from '../../store/eventBusStore';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { useChatStore } from '../../store/chatStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -68,6 +68,10 @@ export function createBridge(
       case 'instances:create': {
         const [config] = args as [{ name?: string; cwd?: string; model?: string; systemPrompt?: string; mcpConfigPath?: string }];
         try {
+          if (!canAddPanel()) {
+            notifyPanelLimit();
+            throw new Error('Panel limit reached');
+          }
           const settings = useSettingsStore.getState().settings;
           const newId = useInstanceStore.getState().addInstance({
             cwd: config.cwd || '.',

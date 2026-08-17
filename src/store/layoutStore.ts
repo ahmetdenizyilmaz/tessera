@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { notify } from '../lib/toast';
 import type { PanelRect, LayoutConfig, SnapZone, StealFraction } from '../types/session';
 
 // ─── Panel Type ──────────────────────────────────────────────────────────────
@@ -8,6 +9,18 @@ export type PanelType = 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | '
 // ─── Panel Limit ─────────────────────────────────────────────────────────────
 
 export const MAX_PANELS = 12;
+
+/** Check BEFORE creating an instance. Creation is two steps (addInstance,
+ *  then addPanel) — if only addPanel refuses, the instance is already in the
+ *  store with no tab and lives on invisibly. That is where the orphan pile
+ *  came from. */
+export function canAddPanel(): boolean {
+  return useLayoutStore.getState().tabOrder.length < MAX_PANELS;
+}
+
+export function notifyPanelLimit() {
+  notify(`Panel limit reached (${MAX_PANELS}). Close a panel first.`);
+}
 
 // ─── Sidebar Drag State (module-level, shared between Sidebar & MosaicLayout)
 // Anchored to globalThis so it survives Vite HMR module re-evaluation
@@ -646,6 +659,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (state.tabOrder.includes(id)) return;
     if (state.tabOrder.length >= MAX_PANELS) {
       console.warn(`Panel limit reached (${MAX_PANELS}); cannot add panel ${id}`);
+      notifyPanelLimit();
       return;
     }
 
@@ -683,6 +697,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     }
     if (state.tabOrder.length >= MAX_PANELS) {
       console.warn(`Panel limit reached (${MAX_PANELS}); cannot add widget ${kind}`);
+      notifyPanelLimit();
       return '';
     }
     const id = `widget-${kind}-${Date.now()}`;

@@ -49,6 +49,11 @@ export interface AppSettings {
    *  creating an instance never silently rewrites the configured defaults. */
   lastModel: string;
   lastPanelView: 'chat' | 'terminal';
+  /** Folder of the last instance the user created. New panels start here
+   *  rather than in the home directory — home is where every ad-hoc CLI
+   *  session lands, and panels defaulting there kept adopting foreign
+   *  conversations. */
+  lastCwd: string;
   fontSize: number;
   fontFamily: string;
   autoSave: boolean;

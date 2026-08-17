@@ -1,5 +1,5 @@
 import { useInstanceStore } from '../store/instanceStore';
-import { useLayoutStore } from '../store/layoutStore';
+import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../store/layoutStore';
 import { useGroupStore } from '../store/groupStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { InstanceConfig } from '../types/instance';
@@ -42,6 +42,12 @@ export function openSession({ cwd, sessionId, panelView, name }: OpenSessionArgs
       useLayoutStore.getState().setFocused(existing);
       return existing;
     }
+  }
+
+  // Before addInstance, or a refusal leaks an invisible instance.
+  if (!canAddPanel()) {
+    notifyPanelLimit();
+    return '';
   }
 
   const settings = useSettingsStore.getState().settings;

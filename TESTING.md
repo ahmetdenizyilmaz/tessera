@@ -204,6 +204,34 @@ namespaced `/claude-gui-panels:send`).
 
 ---
 
+## 8. Session repair & housekeeping  *(added with the cleanup pass)*
+
+### 8.1 ⏳ Switch session in place
+Right-click a Claude tab → **Switch session…** → pick a conversation.
+**Pass:** the panel keeps its name/color/position and now shows the picked
+conversation; sessions open in other panels are greyed "in use"; the panel's
+own is marked "current".
+
+### 8.2 ⏳ Start fresh session
+Right-click → **Start fresh session** on a chat panel and on a terminal panel.
+**Pass:** empty conversation in the same folder; terminal restarts visibly.
+Send `what did I just say?` — it must not know.
+
+### 8.3 ⏳ Panel limit is visible and leak-free
+Open panels up to 12, then try one more (any path: +, dialog, LLM, plugin).
+**Pass:** a toast appears; and after closing panels no ghost instances remain —
+`list_panels` from another panel should not show entries without tabs.
+
+### 8.4 ⏳ Orphan purge on restart
+Restart the app once. **Pass:** console shows `[restore] dropped N orphaned
+instance(s)` (N ≈ 40 the first time, 0 after), and the saved workspace stops
+carrying them.
+
+### 8.5 ⏳ New panels stop defaulting to home
+Create an instance in a project folder, then quick-create another (Ctrl+Shift+N).
+**Pass:** the second one opens in that same project folder, not `C:\Users\user`.
+The New Instance dialog prefills the last-used folder.
+
 ## Notes for whoever runs this
 
 - Rust builds need `C:\msys64\mingw64\bin` on `PATH` (for `windres`), and the stable

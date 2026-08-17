@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { LLM_PROVIDERS, type ProviderMeta } from '../../types/llmProviders';
@@ -122,6 +122,7 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
   }, [provider, meta]);
 
   const handleCreate = useCallback(async () => {
+    if (!canAddPanel()) { notifyPanelLimit(); return; }
     if (!model) {
       setError('Please select a model');
       return;

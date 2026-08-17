@@ -27,7 +27,8 @@ import { NewLlmDialog } from './components/dialogs/NewLlmDialog';
 import { SessionHistoryDialog } from './components/dialogs/SessionHistoryDialog';
 import { ClaudeMdDialog } from './components/dialogs/ClaudeMdDialog';
 import { useInstanceStore } from './store/instanceStore';
-import { useLayoutStore } from './store/layoutStore';
+import { useLayoutStore, canAddPanel, notifyPanelLimit } from './store/layoutStore';
+import { Toasts } from './lib/toast';
 import { useGroupStore } from './store/groupStore';
 import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
@@ -67,15 +68,21 @@ export default function App() {
   useFileDrop(handleFolderDropped);
 
   const handleNewInstance = useCallback(async (panelView: 'chat' | 'terminal' = 'chat') => {
+    // Refuse BEFORE addInstance — refusing only at addPanel leaves an
+    // invisible instance behind in the store.
+    if (!canAddPanel()) { notifyPanelLimit(); return; }
     const settings = useSettingsStore.getState().settings;
     // Real path, not '.' — encode_project_path('.') breaks session-file
     // resolution and usage polling on the Rust side
-    const home = await homeDir().catch(() => '');
+    // Prefer the folder of the last created instance: home is where every
+    // ad-hoc CLI session lands, and quick-created panels defaulting there is
+    // what kept tangling them with foreign conversations.
+    const cwd = settings.lastCwd || (await homeDir().catch(() => ''));
     // Picking chat or terminal here counts as choosing a type, so the New
     // Instance dialog opens on it next time.
     useSettingsStore.getState().updateSettings({ lastPanelView: panelView });
     const id = useInstanceStore.getState().addInstance({
-      cwd: home,
+      cwd,
       panelView,
       model: settings.lastModel || settings.defaultModel,
       dangerouslySkipPermissions: settings.defaultSkipPermissions,
@@ -94,6 +101,7 @@ export default function App() {
   }, []);
 
   const handleNewGroup = useCallback(() => {
+    if (!canAddPanel()) { notifyPanelLimit(); return; }
     // Determine current group context (null = root)
     const currentGroupId = useGroupStore.getState().getCurrentGroupId();
     // Create the group in groupStore
@@ -103,6 +111,7 @@ export default function App() {
   }, []);
 
   const handleNewPlugin = useCallback((pluginName: string) => {
+    if (!canAddPanel()) { notifyPanelLimit(); return; }
     const instanceId = usePluginStore.getState().createInstance(pluginName);
     if (instanceId) {
       useLayoutStore.getState().addPanel(instanceId, 'plugin');
@@ -209,6 +218,7 @@ export default function App() {
           onQuickInstance={handleNewInstance}
           onNewLlmChat={() => setShowNewLlm('openai')}
           onNewComputer={() => {
+            if (!canAddPanel()) { notifyPanelLimit(); return; }
             const id = useInstanceStore.getState().addInstance({
               cwd: '.',
               model: '',
@@ -310,6 +320,7 @@ export default function App() {
           isOpen={showClaudeMd}
           onClose={() => setShowClaudeMd(false)}
         />
+        <Toasts />
       </div>
     </ErrorBoundary>
   );
