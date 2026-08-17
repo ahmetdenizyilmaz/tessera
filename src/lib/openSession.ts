@@ -31,6 +31,19 @@ export function folderName(path: string): string {
  * same conversation with its full context.
  */
 export function openSession({ cwd, sessionId, panelView, name }: OpenSessionArgs): string {
+  // One conversation, one panel. Resuming a session that is already open
+  // would put two Claude processes on the same JSONL: the second loads the
+  // file as of its spawn (the conversation appears rewound) and both append
+  // to it (the tail interleaves). Focus the existing panel instead.
+  if (sessionId) {
+    const existing = findOpenPanelBySession(sessionId);
+    if (existing) {
+      useLayoutStore.getState().setActiveTab(existing);
+      useLayoutStore.getState().setFocused(existing);
+      return existing;
+    }
+  }
+
   const settings = useSettingsStore.getState().settings;
 
   const config: InstanceConfig = {
@@ -91,11 +104,23 @@ export function parseResumeCommand(text: string): ParsedResume | null {
   return { sessionId: idMatch[1], cwd: cdMatch?.[1] };
 }
 
-/** Session ids already open in a panel — used to hide them from "external" lists */
+/** The panel (with a tab) currently holding this session id, if any. */
+export function findOpenPanelBySession(sessionId: string): string | null {
+  const tabs = new Set(useLayoutStore.getState().tabOrder);
+  for (const inst of useInstanceStore.getState().instances.values()) {
+    if (inst.claudeSessionId === sessionId && tabs.has(inst.id)) return inst.id;
+  }
+  return null;
+}
+
+/** Session ids already open in a panel — used to hide them from "external" lists.
+ *  Only counts instances that actually have a tab: instanceStore accumulates
+ *  orphans, and an id held by an orphan is not "open" in any meaningful way. */
 export function openSessionIds(): Set<string> {
+  const tabs = new Set(useLayoutStore.getState().tabOrder);
   const ids = new Set<string>();
   for (const inst of useInstanceStore.getState().instances.values()) {
-    if (inst.claudeSessionId) ids.add(inst.claudeSessionId);
+    if (inst.claudeSessionId && tabs.has(inst.id)) ids.add(inst.claudeSessionId);
   }
   return ids;
 }

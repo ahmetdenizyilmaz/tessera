@@ -236,6 +236,11 @@ export function deserializeWorkspace(raw: unknown): void {
   // plugin panel ids are stable across restarts and map to themselves.
   const idMap = new Map<string, string>();
 
+  // Workspaces saved before session-id pinning can carry the same id on two
+  // panels (the old newest-in-folder adoption). Restoring both would put two
+  // processes on one JSONL, so only the first keeps the id.
+  const seenSessionIds = new Set<string>();
+
   for (const inst of snapshot.instances) {
     const newId = useInstanceStore.getState().addInstance(inst.config, inst.name);
     idMap.set(inst.id, newId);
@@ -243,6 +248,14 @@ export function deserializeWorkspace(raw: unknown): void {
     // Restore color and session ID
     if (inst.color) {
       useInstanceStore.getState().setColor(newId, inst.color);
+    }
+    if (inst.claudeSessionId && seenSessionIds.has(inst.claudeSessionId)) {
+      console.warn(
+        `[restore] panel "${inst.name}" shared session ${inst.claudeSessionId.slice(0, 8)}… with another panel — starting it fresh`,
+      );
+      inst.claudeSessionId = undefined;
+    } else if (inst.claudeSessionId) {
+      seenSessionIds.add(inst.claudeSessionId);
     }
     if (inst.claudeSessionId) {
       useInstanceStore.getState().setClaudeSessionId(newId, inst.claudeSessionId);

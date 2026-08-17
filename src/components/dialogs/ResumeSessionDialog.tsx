@@ -1,11 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
-import { useGroupStore } from '../../store/groupStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { openSession, openSessionIds } from '../../lib/openSession';
 import type { SessionInfo } from '../../types/session';
-import type { InstanceConfig } from '../../types/instance';
 
 interface ResumeSessionDialogProps {
   isOpen: boolean;
@@ -18,9 +15,12 @@ export const ResumeSessionDialog: React.FC<ResumeSessionDialogProps> = ({ isOpen
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { addInstance } = useInstanceStore();
-  const { addPanel, setActiveTab } = useLayoutStore();
-  const { settings } = useSettingsStore();
+  // Ids already open in a panel. Resuming one of those must focus the panel,
+  // not spawn a second process on the same session file — two writers rewind
+  // and interleave the conversation. Recomputed while the dialog is open so
+  // the badges are right even if panels changed underneath it.
+  const instances = useInstanceStore((s) => s.instances);
+  const alreadyOpen = useMemo(() => openSessionIds(), [instances, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -62,26 +62,14 @@ export const ResumeSessionDialog: React.FC<ResumeSessionDialogProps> = ({ isOpen
 
   const handleSelect = (session: SessionInfo) => {
     if (!session.project) return;
-    const config: InstanceConfig = {
+    // openSession dedupes: if this id is already open in a panel it focuses
+    // that panel instead of opening a duplicate.
+    openSession({
       cwd: session.project,
-      model: settings.defaultModel,
-      dangerouslySkipPermissions: settings.defaultSkipPermissions,
-      permissionMode: settings.defaultPermissionMode,
-      allowedTools: [],
-      maxBudget: 0,
-      systemPrompt: '',
-      agentMode: false,
-    };
-
-    const id = addInstance(config, session.display.slice(0, 40) || 'Resumed Session');
-    // Set the claude session ID for resumption
-    useInstanceStore.getState().setClaudeSessionId(id, session.sessionId);
-    addPanel(id);
-    setActiveTab(id);
-    const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-    if (currentGroupId) {
-      useGroupStore.getState().addToGroup(currentGroupId, id);
-    }
+      sessionId: session.sessionId,
+      panelView: 'chat',
+      name: session.display.slice(0, 40) || 'Resumed Session',
+    });
     onClose();
   };
 
@@ -140,8 +128,26 @@ export const ResumeSessionDialog: React.FC<ResumeSessionDialogProps> = ({ isOpen
                 (e.currentTarget as HTMLDivElement).style.borderColor = 'transparent';
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }} className="truncate">
-                {session.display || session.sessionId}
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="truncate" style={{ flex: 1 }}>
+                  {session.display || session.sessionId}
+                </span>
+                {alreadyOpen.has(session.sessionId) && (
+                  <span
+                    title="This conversation is already open — selecting it focuses that panel"
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                      background: 'rgba(74, 158, 255, 0.15)',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    open
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)' }}>
                 <span className="truncate" style={{ flex: 1, marginRight: 12 }}>{session.project}</span>
