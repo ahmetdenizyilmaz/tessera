@@ -80,26 +80,9 @@ pub fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
         "
     )?;
 
-    // Insert default desktop-control MCP server if not exists
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM mcp_servers WHERE name = 'desktop-control'",
-        [],
-        |row| row.get(0),
-    )?;
-    if count == 0 {
-        conn.execute(
-            "INSERT INTO mcp_servers (name, transport, command, args, is_default, enabled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![
-                "desktop-control",
-                "stdio",
-                "python",
-                r#"["mcp_server.py"]"#,
-                1,
-                0
-            ],
-        )?;
-    }
+    // (An earlier build seeded a 'desktop-control' MCP row here pointing at a
+    // bare "mcp_server.py" — a script this repo does not ship, so every fresh
+    // install started with a broken entry. Existing rows are left alone.)
 
     // Insert default agents if none exist
     let agent_count: i64 = conn.query_row(

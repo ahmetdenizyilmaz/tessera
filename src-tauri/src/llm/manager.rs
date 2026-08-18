@@ -12,6 +12,9 @@ pub struct LlmSession {
     pub base_url: String,
     pub api_key: Option<String>,
     pub system_prompt: String,
+    /// Forwarded to providers that accept it; the anthropic path ignores it
+    /// (current Claude models reject the parameter).
+    pub temperature: Option<f32>,
     pub cancel: Arc<tokio::sync::Notify>,
 }
 
@@ -47,6 +50,7 @@ pub async fn llm_create_session(
     base_url: String,
     api_key: Option<String>,
     system_prompt: String,
+    temperature: Option<f32>,
     state: tauri::State<'_, LlmManager>,
 ) -> Result<(), String> {
     let session = LlmSession {
@@ -55,6 +59,7 @@ pub async fn llm_create_session(
         base_url,
         api_key,
         system_prompt,
+        temperature,
         cancel: Arc::new(tokio::sync::Notify::new()),
     };
     state.sessions.lock().await.insert(id, session);
@@ -76,6 +81,7 @@ pub async fn llm_send_message(
     let base_url = session.base_url.clone();
     let api_key = session.api_key.clone();
     let system_prompt = session.system_prompt.clone();
+    let temperature = session.temperature;
     let cancel = session.cancel.clone();
 
     let request = providers::build_request(
@@ -86,6 +92,7 @@ pub async fn llm_send_message(
         &model,
         &messages_json,
         &system_prompt,
+        temperature,
     )?;
 
     drop(sessions);

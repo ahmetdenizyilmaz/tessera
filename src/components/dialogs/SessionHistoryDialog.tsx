@@ -1,5 +1,6 @@
 import React from 'react';
-import { useSessionStore } from '../../store/sessionStore';
+import { useSessionStore, type SavedSession } from '../../store/sessionStore';
+import { openSession } from '../../lib/openSession';
 
 interface SessionHistoryDialogProps {
   isOpen: boolean;
@@ -22,6 +23,21 @@ export const SessionHistoryDialog: React.FC<SessionHistoryDialogProps> = ({ isOp
   const getFilteredSessions = useSessionStore((s) => s.getFilteredSessions);
   const toggleFavorite = useSessionStore((s) => s.toggleFavorite);
   const deleteSession = useSessionStore((s) => s.deleteSession);
+
+  // Reopen a history row. With a recorded session id this resumes the exact
+  // conversation (openSession dedupes: if it is already open, that panel is
+  // focused). Rows written before the id was recorded can only reopen the
+  // folder with a fresh session.
+  const handleOpen = (session: SavedSession) => {
+    if (!session.projectPath) return;
+    openSession({
+      cwd: session.projectPath,
+      sessionId: session.claudeSessionId,
+      panelView: session.panelView ?? 'chat',
+      name: session.name || undefined,
+    });
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -104,6 +120,27 @@ export const SessionHistoryDialog: React.FC<SessionHistoryDialogProps> = ({ isOp
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>
                     {session.messageCount} msg
                   </div>
+
+                  <button
+                    onClick={() => handleOpen(session)}
+                    disabled={!session.projectPath}
+                    style={{
+                      background: 'rgba(74, 158, 255, 0.12)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '3px 10px',
+                      color: 'var(--accent)',
+                      borderRadius: 4,
+                      flexShrink: 0,
+                    }}
+                    title={session.claudeSessionId
+                      ? 'Reopen this conversation in a panel'
+                      : 'No session id recorded for this row — opens a fresh session in its folder'}
+                  >
+                    Open
+                  </button>
 
                   <button
                     onClick={() => deleteSession(session.id)}

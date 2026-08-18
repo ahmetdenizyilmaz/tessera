@@ -153,7 +153,9 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
       provider,
       model,
       systemPrompt,
-      temperature,
+      // Not stored for Claude either — session recreation after a restart
+      // rebuilds from this config and must not resend a rejected param.
+      temperature: provider === 'anthropic' ? undefined : temperature,
       baseUrl,
     };
 
@@ -182,6 +184,9 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
         baseUrl,
         apiKey: meta.requiresApiKey ? apiKey : null,
         systemPrompt,
+        // Claude rejects temperature on current models; don't store one so
+        // the panel doesn't pretend the slider did something.
+        temperature: provider === 'anthropic' ? null : temperature,
       });
     } catch (err) {
       console.error('Failed to create LLM session:', err);
@@ -383,7 +388,9 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
             />
           </div>
 
-          {/* Temperature */}
+          {/* Temperature — hidden for Claude: current Claude models reject
+              the parameter, so showing a slider would be a lie */}
+          {provider !== 'anthropic' && (
           <div>
             <label style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
               <span>Temperature</span>
@@ -399,6 +406,7 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
               style={{ width: '100%' }}
             />
           </div>
+          )}
 
           {error && (
             <div style={{ color: 'var(--error)', fontSize: 12 }}>{error}</div>

@@ -13,6 +13,7 @@ pub fn build_request(
     model: &str,
     messages_json: &str,
     system_prompt: &str,
+    temperature: Option<f32>,
 ) -> Result<reqwest::RequestBuilder, String> {
     let mut messages: Vec<Value> =
         serde_json::from_str(messages_json).map_err(|e| format!("Invalid messages JSON: {}", e))?;
@@ -33,11 +34,14 @@ pub fn build_request(
     match provider {
         "openai" => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let body = serde_json::json!({
+            let mut body = serde_json::json!({
                 "model": model,
                 "messages": messages,
                 "stream": true,
             });
+            if let Some(temp) = temperature {
+                body["temperature"] = serde_json::json!(temp);
+            }
             let mut req = client.post(&url).json(&body);
             if let Some(key) = api_key {
                 req = req.bearer_auth(key);
@@ -46,11 +50,14 @@ pub fn build_request(
         }
         "lmstudio" => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let body = serde_json::json!({
+            let mut body = serde_json::json!({
                 "model": model,
                 "messages": messages,
                 "stream": true,
             });
+            if let Some(temp) = temperature {
+                body["temperature"] = serde_json::json!(temp);
+            }
             Ok(client.post(&url).json(&body))
         }
         // Anthropic Messages API — the plain-chat path, distinct from the
@@ -79,7 +86,8 @@ pub fn build_request(
                 body["system"] = Value::String(system.join("\n\n"));
             }
 
-            // No temperature/top_p: current Claude models reject them.
+            // temperature is deliberately NOT forwarded here even when the
+            // caller set one: current Claude models reject the parameter.
             Ok(client
                 .post(&url)
                 .header("x-api-key", api_key.unwrap_or(""))
@@ -110,6 +118,9 @@ pub fn build_request(
                 })
                 .collect();
             let mut body = serde_json::json!({ "contents": contents });
+            if let Some(temp) = temperature {
+                body["generationConfig"] = serde_json::json!({ "temperature": temp });
+            }
             // Add system instruction if present
             if let Some(sys) = messages.iter().find(|m| m["role"].as_str() == Some("system")) {
                 if let Some(text) = sys["content"].as_str() {
@@ -122,11 +133,14 @@ pub fn build_request(
         }
         "ollama" => {
             let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
-            let body = serde_json::json!({
+            let mut body = serde_json::json!({
                 "model": model,
                 "messages": messages,
                 "stream": true,
             });
+            if let Some(temp) = temperature {
+                body["options"] = serde_json::json!({ "temperature": temp });
+            }
             Ok(client.post(&url).json(&body))
         }
         _ => Err(format!("Unknown provider: {}", provider)),

@@ -148,6 +148,7 @@ pub fn run() {
             stream::manager::stream_set_thinking,
             // MCP commands
             mcp::config::mcp_list_servers,
+            mcp::config::mcp_check_status,
             mcp::config::mcp_add_server,
             mcp::config::mcp_update_server,
             mcp::config::mcp_remove_server,

@@ -276,3 +276,91 @@ pub fn generate_mcp_config(db: &Database) -> Result<Option<String>, String> {
 
     Ok(Some(config_path.to_string_lossy().to_string()))
 }
+
+/// Best-effort reachability probe behind McpManager's "Test Connection"
+/// button. The button has invoked this command since the UI was built, but it
+/// never existed — every test reported disconnected.
+///
+/// Ok(()) = looks reachable, Err = why not. For url transports any HTTP
+/// answer counts (MCP endpoints routinely 4xx a bare GET); only a transport
+/// failure is a miss. For stdio the honest pre-flight is "does the command
+/// resolve" — actually speaking MCP would mean spawning the server.
+#[tauri::command]
+pub async fn mcp_check_status(id: i64, state: tauri::State<'_, Database>) -> Result<(), String> {
+    // Read what we need and drop the connection guard before any await —
+    // the rusqlite guard is not Send.
+    let (transport, command, url) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT transport, command, url FROM mcp_servers WHERE id = ?1",
+            [id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .map_err(|_| format!("No MCP server with id {}", id))?
+    };
+
+    match transport.as_str() {
+        "sse" | "http" | "streamable-http" => {
+            let url = url.trim();
+            if url.is_empty() {
+                return Err("No URL configured for this server".into());
+            }
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .map_err(|e| e.to_string())?;
+            match client.get(url).send().await {
+                Ok(_) => Ok(()), // any HTTP response means something is listening
+                Err(e) => Err(format!("Unreachable: {}", e)),
+            }
+        }
+        _ => {
+            let command = command.trim();
+            if command.is_empty() {
+                return Err("No command configured for this server".into());
+            }
+            if resolve_command(command) {
+                Ok(())
+            } else {
+                Err(format!("Command not found: {}", command))
+            }
+        }
+    }
+}
+
+/// `which` for the stdio probe: explicit paths are checked directly, bare
+/// names are searched on PATH (honouring PATHEXT on Windows, so `python`
+/// finds python.exe and `npx` finds npx.cmd).
+fn resolve_command(command: &str) -> bool {
+    use std::path::Path;
+
+    if command.contains('/') || command.contains(char::from(92u8)) {
+        return Path::new(command).exists();
+    }
+
+    let paths = std::env::var_os("PATH").unwrap_or_default();
+    let exts: Vec<String> = if cfg!(windows) {
+        let raw = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT;.COM".into());
+        let mut v: Vec<String> = raw.split(';').map(|s| s.to_lowercase()).collect();
+        v.insert(0, String::new()); // exact name too
+        v
+    } else {
+        vec![String::new()]
+    };
+
+    for dir in std::env::split_paths(&paths) {
+        for ext in &exts {
+            let candidate = dir.join(format!("{}{}", command, ext));
+            if candidate.is_file() {
+                return true;
+            }
+        }
+    }
+    false
+}

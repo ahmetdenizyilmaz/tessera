@@ -34,7 +34,12 @@ export function useAutoSave() {
       try {
         const instances = useInstanceStore.getState().instances;
         const sessionStore = useSessionStore.getState();
+        // Only panels that actually have a tab — instanceStore also holds
+        // orphans, and recording those filled Session History with junk.
+        // LLM/plugin panels are skipped too: they have no resumable session.
+        const tabs = new Set(useLayoutStore.getState().tabOrder);
         instances.forEach((inst) => {
+          if (!tabs.has(inst.id) || inst.config.llmConfig) return;
           sessionStore.addSession({
             instanceId: inst.id,
             name: inst.name,
@@ -42,6 +47,8 @@ export function useAutoSave() {
             messageCount: 0,
             startedAt: Date.now(),
             endedAt: Date.now(),
+            claudeSessionId: inst.claudeSessionId || undefined,
+            panelView: inst.config.panelView === 'terminal' ? 'terminal' : 'chat',
           });
         });
         if (useSettingsStore.getState().settings.autoSave) {

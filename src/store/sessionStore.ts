@@ -10,6 +10,10 @@ export interface SavedSession {
   startedAt: number;
   endedAt: number;
   isFavorite: boolean;
+  /** Claude session id, when the panel had one — what makes a history row
+   *  reopenable. Absent on rows written before this field existed. */
+  claudeSessionId?: string;
+  panelView?: 'chat' | 'terminal';
 }
 
 interface SessionState {
@@ -29,13 +33,23 @@ export const useSessionStore = create<SessionState>()(
       searchQuery: '',
 
       addSession: (session) => {
+        // One row per conversation: the close handler runs on every app
+        // close, and without dedupe each close appended another copy of
+        // every open panel.
+        const prior = session.claudeSessionId
+          ? get().sessions.find((s) => s.claudeSessionId === session.claudeSessionId)
+          : undefined;
         const newSession: SavedSession = {
           ...session,
+          startedAt: prior?.startedAt ?? session.startedAt,
           id: crypto.randomUUID(),
-          isFavorite: false,
+          isFavorite: prior?.isFavorite ?? false,
         };
         set((state) => ({
-          sessions: [newSession, ...state.sessions],
+          sessions: [
+            newSession,
+            ...state.sessions.filter((s) => s.id !== prior?.id),
+          ],
         }));
       },
 
