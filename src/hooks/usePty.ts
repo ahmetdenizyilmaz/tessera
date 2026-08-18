@@ -173,12 +173,25 @@ export async function restartPty(id: string) {
     cleanup();
     exitListeners.delete(id);
   }
-  // Drop the saved scrollback — it belongs to the process that just died, and
-  // the resumed session redraws its own history.
-  const buffers = (globalThis as Record<string, unknown>).__termBuffers as
-    | Map<string, string>
-    | undefined;
-  buffers?.delete(id);
+  // Don't delete the scrollback here: the OLD XTermView unmounts AFTER this
+  // returns and re-serializes the dead terminal back into the buffer, which the
+  // new mount would then replay — resurrecting exactly the scrollback we wanted
+  // gone. Mark the id instead; the next mount clears it after that re-save.
+  markFreshMount(id);
+}
+
+// Ids whose next XTermView mount should start clean (no scrollback replay).
+const freshMountIds: Set<string> =
+  ((globalThis as Record<string, unknown>).__freshMountIds as Set<string>) ??
+  ((globalThis as Record<string, unknown>).__freshMountIds = new Set<string>());
+
+export function markFreshMount(id: string) {
+  freshMountIds.add(id);
+}
+
+/** True (once) if this mount should skip restoring saved scrollback. */
+export function consumeFreshMount(id: string): boolean {
+  return freshMountIds.delete(id);
 }
 
 export function cleanupPty(id: string) {

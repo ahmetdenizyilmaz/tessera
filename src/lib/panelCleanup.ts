@@ -3,6 +3,7 @@ import { useGroupStore } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
 import { useEventBusStore } from '../store/eventBusStore';
 import { useLlmChatStore } from '../store/llmChatStore';
+import { useChatStore } from '../store/chatStore';
 import { useInstanceStore } from '../store/instanceStore';
 import { cleanupPty } from '../hooks/usePty';
 import { destroyTerminal } from '../hooks/useTerminal';
@@ -45,6 +46,9 @@ export async function closePanel(id: string): Promise<void> {
     } catch {
       // Stream may already be dead
     }
+    // Drop the in-memory transcript + accumulator; otherwise every closed chat
+    // panel's messages stay in chatStore for the life of the app.
+    useChatStore.getState().destroySession(id);
   }
 
   useLayoutStore.getState().removePanel(id);

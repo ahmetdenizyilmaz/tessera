@@ -38,7 +38,7 @@ pub fn write_for_panel(app: &AppHandle, panel_id: &str) -> Option<String> {
                 json!({
                     "type": "http",
                     "url": format!("http://127.0.0.1:{}/mcp/{}", port, panel_id),
-                    "headers": { "Authorization": format!("Bearer {}", bus.token) },
+                    "headers": { "Authorization": format!("Bearer {}", bus.token_for(panel_id)) },
                 }),
             );
         }
@@ -66,6 +66,18 @@ pub fn write_for_panel(app: &AppHandle, panel_id: &str) -> Option<String> {
 
 /// Tool names to pre-approve so cross-panel messaging doesn't raise a
 /// permission card on every call.
+/// Delete a panel's mcp-config file (called on close) so the directory — and
+/// the live token inside each file — doesn't accumulate for the app's life.
+pub fn remove_for_panel(panel_id: &str) {
+    if let Some(dir) = dirs::home_dir() {
+        let path = dir
+            .join(".claude-gui")
+            .join("panel-mcp")
+            .join(format!("{}.json", sanitize(panel_id)));
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 pub fn allowed_tool_pattern() -> String {
     format!("mcp__{}", SERVER_NAME)
 }

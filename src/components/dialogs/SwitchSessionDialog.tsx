@@ -45,6 +45,16 @@ export const SwitchSessionDialog: React.FC<SwitchSessionDialogProps> = ({
       .finally(() => setLoading(false));
   }, [isOpen]);
 
+  // Escape closes the dialog (it lives outside App's dialog chain).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   // Ids held by OTHER panels are not selectable — a second panel on the same
   // file rewinds and interleaves it. The panel's own current session is
   // marked instead.

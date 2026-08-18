@@ -59,6 +59,10 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
   const didInitialScrollRef = useRef(false);
   // After /clear, block the session rescan from resurrecting the old session
   const clearedRef = useRef(false);
+  // The session id the reseed effect last handled. When it changes (e.g.
+  // "Switch session"), a stale clearedRef from an earlier /clear must not keep
+  // blocking the reseed of the newly-pointed conversation.
+  const lastSeededSidRef = useRef<string | null>(null);
   const autoCheckpointRef = useRef(autoCheckpoint);
   const prevStreamingRef = useRef(false);
   autoCheckpointRef.current = autoCheckpoint;
@@ -144,6 +148,13 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
   // the conversation context — this brings back the chat the user can SEE.
   useEffect(() => {
     if (!claudeSessionId || !projectDir) return;
+    // A different session id than we last handled means this isn't the
+    // conversation /clear wiped — drop the stale guard so a switched session
+    // reseeds its history.
+    if (claudeSessionId !== lastSeededSidRef.current) {
+      clearedRef.current = false;
+      lastSeededSidRef.current = claudeSessionId;
+    }
     if (clearedRef.current) return;
     const session = useChatStore.getState().sessions.get(instanceId);
     if (session && session.messages.length > 0) return;

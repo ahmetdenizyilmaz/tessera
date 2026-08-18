@@ -76,23 +76,11 @@ function MoveToSubmenu({ tabId, onDismiss }: { tabId: string; onDismiss: () => v
   const items = buildMoveToList(tabId, currentGroupId);
 
   const handleMoveTo = (targetGroupId: string | null) => {
-    const panelTypes = useLayoutStore.getState().panelTypes;
-    const panelType = panelTypes[tabId] ?? 'terminal';
-
-    // Remove from current level
-    if (currentGroupId !== null) {
-      useGroupStore.getState().removeFromGroup(currentGroupId, tabId);
-    }
-    useLayoutStore.getState().removePanel(tabId);
-
-    // Add to target
-    if (targetGroupId !== null) {
-      useGroupStore.getState().addToGroup(targetGroupId, tabId);
-    } else {
-      // Add back to root
-      useLayoutStore.getState().addPanel(tabId, panelType);
-    }
-
+    // movePanelToLevel is the same primitive the breadcrumb-drop uses. The old
+    // remove+addPanel path added to the LIVE tabOrder, which inside a group is
+    // that group's own view — so "Move to Main" just re-added the panel to the
+    // current group and the exit-sync wrote it right back.
+    useGroupStore.getState().movePanelToLevel(tabId, targetGroupId);
     onDismiss();
   };
 

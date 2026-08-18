@@ -34,12 +34,18 @@ export function useAutoSave() {
       try {
         const instances = useInstanceStore.getState().instances;
         const sessionStore = useSessionStore.getState();
-        // Only panels that actually have a tab — instanceStore also holds
-        // orphans, and recording those filled Session History with junk.
-        // LLM/plugin panels are skipped too: they have no resumable session.
-        const tabs = new Set(useLayoutStore.getState().tabOrder);
+        // Every real panel — the tab strip AND panels inside groups (grouped
+        // panels were being missed). Skip orphans, LLM/plugin panels (no
+        // resumable session), and anything without a claudeSessionId (an
+        // id-less row can't be reopened and was just accumulating junk on
+        // every close).
+        const real = new Set<string>(useLayoutStore.getState().tabOrder);
+        for (const g of useGroupStore.getState().groups.values()) {
+          for (const c of g.childIds) real.add(c);
+        }
         instances.forEach((inst) => {
-          if (!tabs.has(inst.id) || inst.config.llmConfig) return;
+          if (!real.has(inst.id) || inst.config.llmConfig) return;
+          if (!inst.claudeSessionId) return;
           sessionStore.addSession({
             instanceId: inst.id,
             name: inst.name,
@@ -47,7 +53,7 @@ export function useAutoSave() {
             messageCount: 0,
             startedAt: Date.now(),
             endedAt: Date.now(),
-            claudeSessionId: inst.claudeSessionId || undefined,
+            claudeSessionId: inst.claudeSessionId,
             panelView: inst.config.panelView === 'terminal' ? 'terminal' : 'chat',
           });
         });

@@ -101,12 +101,15 @@ async fn handle(
 
     let bus = app.state::<PanelBus>();
 
+    // Per-panel token: the bearer must be the token minted for THIS path's
+    // panel id, so reading one panel's config file and POSTing to another
+    // panel's URL no longer authenticates.
     let authorized = req
         .headers()
         .get(hyper::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|t| t == bus.token)
+        .map(|t| bus.token_matches(&panel_id, t))
         .unwrap_or(false);
     if !authorized {
         return Ok(text_response(StatusCode::UNAUTHORIZED, "unauthorized"));

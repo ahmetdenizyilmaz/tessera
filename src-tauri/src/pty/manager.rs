@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::util::claude_paths;
 
@@ -472,12 +472,19 @@ pub async fn pty_resize(
 #[tauri::command]
 pub async fn pty_kill(
     id: String,
+    app: AppHandle,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
-    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-    if let Some(mut instance) = instances.remove(&id) {
-        kill_instance(&mut instance);
+    {
+        let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+        if let Some(mut instance) = instances.remove(&id) {
+            kill_instance(&mut instance);
+        }
     }
+    if let Some(bus) = app.try_state::<crate::panelbus::PanelBus>() {
+        bus.forget_panel(&id);
+    }
+    crate::panelbus::spawn_config::remove_for_panel(&id);
     Ok(())
 }
 

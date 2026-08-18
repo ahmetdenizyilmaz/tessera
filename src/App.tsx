@@ -129,6 +129,11 @@ export default function App() {
 
   // Global keyboard shortcuts
   useEffect(() => {
+    const anyDialogOpen =
+      showNewInstance || showSettings || !!showSaveLoad || showClaudeMd ||
+      showAbout || showResumeSession || showSessionHistory || !!showNewLlm ||
+      attachSession.open || showUsage;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Escape closes any open dialog
       if (e.key === 'Escape') {
@@ -140,6 +145,8 @@ export default function App() {
         if (showResumeSession) { setShowResumeSession(false); return; }
         if (showSessionHistory) { setShowSessionHistory(false); return; }
         if (showNewLlm) { setShowNewLlm(null); return; }
+        if (attachSession.open) { setAttachSession({ open: false, cwd: null }); return; }
+        if (showUsage) { setShowUsage(false); return; }
         // No dialog open: Escape leaves a maximized panel and brings the
         // mosaic back.
         if (useLayoutStore.getState().maximizedId) {
@@ -154,6 +161,9 @@ export default function App() {
       // Ctrl+Tab / Ctrl+Shift+Tab cycle panels. Handled before the switch
       // because preventDefault has to beat the webview's own focus traversal.
       if (e.key === 'Tab') {
+        // Not while a modal is up — it would cycle panels behind the dialog and
+        // yank focus out of the dialog's inputs.
+        if (anyDialogOpen) return;
         e.preventDefault();
         useLayoutStore.getState().cycleFocus(e.shiftKey ? -1 : 1);
         // Clicking a panel moves DOM focus as a side effect; a keyboard switch
@@ -207,7 +217,7 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleNewInstance, showNewInstance, showSettings, showSaveLoad, showClaudeMd, showAbout, showResumeSession, showSessionHistory, showNewLlm]);
+  }, [handleNewInstance, showNewInstance, showSettings, showSaveLoad, showClaudeMd, showAbout, showResumeSession, showSessionHistory, showNewLlm, attachSession.open, showUsage]);
 
   return (
     <ErrorBoundary>

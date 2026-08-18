@@ -110,23 +110,35 @@ export function parseResumeCommand(text: string): ParsedResume | null {
   return { sessionId: idMatch[1], cwd: cdMatch?.[1] };
 }
 
-/** The panel (with a tab) currently holding this session id, if any. */
+/** Every panel that is actually live somewhere — the current tab strip OR
+ *  inside any group. instanceStore also holds orphans (no tab, no group); those
+ *  don't count as "open". */
+function liveePanelIds(): Set<string> {
+  const ids = new Set<string>(useLayoutStore.getState().tabOrder);
+  for (const g of useGroupStore.getState().groups.values()) {
+    for (const c of g.childIds) ids.add(c);
+  }
+  return ids;
+}
+
+/** The panel currently holding this session id, if any — including one that
+ *  lives inside a collapsed group. Missing group panels here is how "Open"
+ *  could spawn a SECOND process on the same session file. */
 export function findOpenPanelBySession(sessionId: string): string | null {
-  const tabs = new Set(useLayoutStore.getState().tabOrder);
+  const live = liveePanelIds();
   for (const inst of useInstanceStore.getState().instances.values()) {
-    if (inst.claudeSessionId === sessionId && tabs.has(inst.id)) return inst.id;
+    if (inst.claudeSessionId === sessionId && live.has(inst.id)) return inst.id;
   }
   return null;
 }
 
-/** Session ids already open in a panel — used to hide them from "external" lists.
- *  Only counts instances that actually have a tab: instanceStore accumulates
- *  orphans, and an id held by an orphan is not "open" in any meaningful way. */
+/** Session ids already open in a panel (tab strip or inside a group) — used to
+ *  hide them from "external" lists and badge them "open". */
 export function openSessionIds(): Set<string> {
-  const tabs = new Set(useLayoutStore.getState().tabOrder);
+  const live = liveePanelIds();
   const ids = new Set<string>();
   for (const inst of useInstanceStore.getState().instances.values()) {
-    if (inst.claudeSessionId && tabs.has(inst.id)) ids.add(inst.claudeSessionId);
+    if (inst.claudeSessionId && live.has(inst.id)) ids.add(inst.claudeSessionId);
   }
   return ids;
 }

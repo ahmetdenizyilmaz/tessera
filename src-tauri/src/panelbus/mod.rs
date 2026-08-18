@@ -40,11 +40,19 @@ pub struct PanelBus {
     /// `None` when the listener could not bind — the feature degrades to off
     /// and the app still starts.
     pub port: Option<u16>,
+    /// Kept only for the CLAUDE_GUI_PANELBUS_DEBUG print; auth uses per-panel
+    /// tokens below so a panel can't POST as another by swapping the URL id.
     pub token: String,
     pub enabled: AtomicBool,
     registry: Mutex<PanelRegistry>,
-    /// Hop depth of the most recent injection *received* by each panel.
-    inbound_hop: Mutex<HashMap<String, u32>>,
+    /// One token per panel id. A panel only ever receives its own (in its own
+    /// mcp-config file); the server checks the bearer matches the id in the
+    /// path, so a stolen token authenticates only as its rightful panel.
+    tokens: Mutex<HashMap<String, String>>,
+    /// Hop depth of the most recent injection a panel *received*, with when.
+    /// The timestamp lets a stale entry decay so a panel that once received a
+    /// deep message isn't bricked from ever initiating a send again.
+    inbound_hop: Mutex<HashMap<String, (u32, Instant)>>,
     /// Sliding window of injection timestamps per sending panel.
     sends: Mutex<HashMap<String, VecDeque<Instant>>>,
 }
@@ -56,6 +64,7 @@ impl PanelBus {
             token,
             enabled: AtomicBool::new(true),
             registry: Mutex::new(PanelRegistry::default()),
+            tokens: Mutex::new(HashMap::new()),
             inbound_hop: Mutex::new(HashMap::new()),
             sends: Mutex::new(HashMap::new()),
         }
@@ -76,14 +85,49 @@ impl PanelBus {
     }
 
     /// Hop number a message sent *by* `sender` should carry.
+    /// The hop a message *from* `sender` should carry. If the sender received a
+    /// message recently, this is a likely relay (received + 1); otherwise it's
+    /// a fresh, user-initiated send and starts at 1. Loops bounce in
+    /// milliseconds, so a short freshness window still catches them while
+    /// never permanently blocking a panel.
     pub fn next_hop(&self, sender: &str) -> u32 {
+        const RELAY_WINDOW_SECS: u64 = 120;
         let guard = self.inbound_hop.lock().unwrap_or_else(|e| e.into_inner());
-        guard.get(sender).copied().unwrap_or(0) + 1
+        match guard.get(sender) {
+            Some((hop, at)) if at.elapsed().as_secs() < RELAY_WINDOW_SECS => hop + 1,
+            _ => 1,
+        }
     }
 
     pub fn record_inbound_hop(&self, target: &str, hop: u32) {
         let mut guard = self.inbound_hop.lock().unwrap_or_else(|e| e.into_inner());
-        guard.insert(target.to_string(), hop);
+        guard.insert(target.to_string(), (hop, Instant::now()));
+    }
+
+    /// This panel's bearer token, minting one on first use. Written into the
+    /// panel's mcp-config file and checked against the URL path server-side.
+    pub fn token_for(&self, panel_id: &str) -> String {
+        let mut guard = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .entry(panel_id.to_string())
+            .or_insert_with(|| {
+                format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4()).replace('-', "")
+            })
+            .clone()
+    }
+
+    /// Does `bearer` authenticate as exactly `panel_id`?
+    pub fn token_matches(&self, panel_id: &str, bearer: &str) -> bool {
+        let guard = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        guard.get(panel_id).map(|t| t == bearer).unwrap_or(false)
+    }
+
+    /// Drop all per-panel state when a panel closes, so the maps don't grow
+    /// for the life of the app.
+    pub fn forget_panel(&self, panel_id: &str) {
+        self.tokens.lock().unwrap_or_else(|e| e.into_inner()).remove(panel_id);
+        self.inbound_hop.lock().unwrap_or_else(|e| e.into_inner()).remove(panel_id);
+        self.sends.lock().unwrap_or_else(|e| e.into_inner()).remove(panel_id);
     }
 
     pub fn hop_exceeded(hop: u32) -> bool {

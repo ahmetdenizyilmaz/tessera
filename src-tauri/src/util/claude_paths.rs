@@ -67,9 +67,20 @@ pub fn projects_dir() -> PathBuf {
 /// Encode a project path for use as a directory name.
 /// Replaces non-alphanumeric characters with '-'.
 pub fn encode_project_path(path: &str) -> String {
-    path.chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect()
+    // The CLI encodes with the ASCII regex /[^a-zA-Z0-9]/g -> "-". Rust's
+    // char::is_alphanumeric() is Unicode-aware, so it KEEPS letters like the
+    // Turkish 'ı' that the CLI replaces — the two then disagree and every
+    // resume/history lookup for a non-ASCII path misses the file the CLI
+    // actually wrote. Match the CLI byte for byte.
+    let encoded: String = path
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+
+    // The CLI also caps long names at 200 chars + "-" + a hash of the rest.
+    // We can't reproduce its exact hash, so only the <=200 case is guaranteed
+    // to match; longer paths were already unsupported (no cap at all before).
+    encoded
 }
 
 /// Returns the path to a session file:
@@ -89,6 +100,10 @@ pub fn resolve_work_dir(cwd: &str) -> String {
     if trimmed.is_empty() || trimmed == "." {
         return home.to_string_lossy().to_string();
     }
+    // Strip trailing separators: the CLI encodes process.cwd() (already
+    // normalized), so a hand-typed "C:\proj\\" must not encode to
+    // "C--proj-" when the CLI wrote "C--proj".
+    let trimmed = trimmed.trim_end_matches(|c| c == '/' || c == char::from(92u8));
     let p = PathBuf::from(trimmed);
     if p.is_absolute() {
         trimmed.to_string()

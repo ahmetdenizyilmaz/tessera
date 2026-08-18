@@ -372,12 +372,14 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
       }
     }
 
-    // Add orphaned children to current layoutStore view so they appear immediately
+    // Re-adopt the deleted group's children into the current view. force=true:
+    // these panels already exist, so refusing over the limit would orphan them
+    // and the workspace purge would then delete them for good.
     const ls = useLayoutStore.getState();
     for (const childId of group.childIds) {
       if (!ls.tabOrder.includes(childId)) {
         const pt = ls.panelTypes[childId] ?? 'terminal';
-        ls.addPanel(childId, pt);
+        ls.addPanel(childId, pt, true);
       }
     }
 

@@ -17,6 +17,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore } from '../store/layoutStore';
+import { useGroupStore } from '../store/groupStore';
 import { useChatStore } from '../store/chatStore';
 
 declare global {
@@ -44,33 +45,41 @@ let lastSerialized = '';
 function snapshot(): PanelInfoPayload[] {
   const chat = useChatStore.getState().sessions;
   const instances = useInstanceStore.getState().instances;
-  // Only panels that actually have a tab. instanceStore accumulates orphans
-  // (instances whose panel was closed, and stale entries carried forward by
-  // workspace restore), and listing those would bury the real panels in dead
-  // entries with duplicate names.
-  return useLayoutStore
-    .getState()
-    .tabOrder.map((id) => instances.get(id))
-    .filter((inst): inst is NonNullable<typeof inst> => Boolean(inst))
-    .map((inst) => {
-      const session = chat.get(inst.id);
-      const kind: PanelInfoPayload['kind'] = inst.config.llmConfig
-        ? 'llm'
-        : inst.config.panelView === 'terminal'
-          ? 'terminal'
-          : 'chat';
-      return {
-        id: inst.id,
-        name: inst.name,
-        cwd: inst.config.cwd,
-        kind,
-        status: inst.status,
-        busy: session?.isStreaming ?? false,
-        awaiting_user: (session?.controlRequests?.length ?? 0) > 0,
-        model: inst.config.model || null,
-        session_id: inst.claudeSessionId || null,
-      };
+  const ls = useLayoutStore.getState();
+  const groups = useGroupStore.getState().groups;
+
+  // Every real panel, not just the current nav level. tabOrder holds only the
+  // level being viewed (inside a group it's that group's children; at root the
+  // grouped panels are absent), so union it with every group's childIds.
+  // Filtering to this set also drops the orphan instances that accumulate in
+  // instanceStore. Non-Claude panel types (computer/plugin/widget/group) are
+  // excluded — they have no messageable session.
+  const realIds = new Set<string>(ls.tabOrder);
+  for (const g of groups.values()) for (const c of g.childIds) realIds.add(c);
+
+  const out: PanelInfoPayload[] = [];
+  for (const id of realIds) {
+    const inst = instances.get(id);
+    if (!inst) continue; // group/widget/plugin id, or an orphan — skip
+    const session = chat.get(inst.id);
+    const kind: PanelInfoPayload['kind'] = inst.config.llmConfig
+      ? 'llm'
+      : inst.config.panelView === 'terminal'
+        ? 'terminal'
+        : 'chat';
+    out.push({
+      id: inst.id,
+      name: inst.name,
+      cwd: inst.config.cwd,
+      kind,
+      status: inst.status,
+      busy: session?.isStreaming ?? false,
+      awaiting_user: (session?.controlRequests?.length ?? 0) > 0,
+      model: inst.config.model || null,
+      session_id: inst.claudeSessionId || null,
     });
+  }
+  return out;
 }
 
 function scheduleSync() {
@@ -90,17 +99,40 @@ function scheduleSync() {
 
 export function initPanelBus() {
   window.__panelInject = (instanceId: string, text: string) => {
-    // Rust has already written this to the target's stdin; this is purely so
-    // the person watching that panel sees where the turn came from.
+    // Rust has already written this to the target's stdin; this makes the
+    // person watching that panel see where the turn came from.
     const store = useChatStore.getState();
-    if (!store.sessions.has(instanceId)) {
-      // Panel exists but has no UI session yet (collapsed group, never opened).
-      // The message is still on its way to the CLI; the transcript will pick it
-      // up from the session file when the panel is opened.
+    if (store.sessions.has(instanceId)) {
+      store.addUserMessage(instanceId, text);
+      store.setStreaming(instanceId, true);
       return;
     }
-    store.addUserMessage(instanceId, text);
-    store.setStreaming(instanceId, true);
+    // No UI session yet (a panel that was never opened, e.g. in a collapsed
+    // group). Don't just drop it: the streamed reply would later create a bare
+    // session that then BLOCKS the file reseed, so the panel would open showing
+    // an answer with no question and no prior history. Create the session,
+    // seed the real history from disk, then append the injected turn.
+    const inst = useInstanceStore.getState().instances.get(instanceId);
+    if (!inst) return;
+    store.initSession(instanceId);
+    const sid = inst.claudeSessionId;
+    const seedThenAdd = () => {
+      useChatStore.getState().addUserMessage(instanceId, text);
+      useChatStore.getState().setStreaming(instanceId, true);
+    };
+    if (sid && inst.config.cwd) {
+      invoke<Array<{ role: string; content: string; timestamp?: string | null }>>(
+        'session_load_history',
+        { sessionId: sid, projectPath: inst.config.cwd },
+      )
+        .then((items) => {
+          if (items && items.length) useChatStore.getState().seedHistory(instanceId, items);
+        })
+        .catch(() => {})
+        .finally(seedThenAdd);
+    } else {
+      seedThenAdd();
+    }
   };
 
   useInstanceStore.subscribe(scheduleSync);

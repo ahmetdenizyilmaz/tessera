@@ -597,7 +597,7 @@ interface LayoutState {
 
   setSidebarDrag: (dragging: boolean, snap: SnapZone | null) => void;
   setDragReturnToSidebar: (returning: boolean) => void;
-  addPanel: (id: string, type?: PanelType) => void;
+  addPanel: (id: string, type?: PanelType, force?: boolean) => void;
   addWidgetPanel: (kind: string, zone?: SnapZone) => string;
   removePanel: (id: string) => void;
   restoreLayout: (
@@ -654,10 +654,13 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   setSidebarDrag: (dragging, snap) => set({ sidebarDragging: dragging, sidebarDragSnap: snap }),
   setDragReturnToSidebar: (returning) => set({ dragReturnToSidebar: returning }),
 
-  addPanel: (id: string, type: PanelType = 'terminal') => {
+  addPanel: (id: string, type: PanelType = 'terminal', force = false) => {
     const state = get();
     if (state.tabOrder.includes(id)) return;
-    if (state.tabOrder.length >= MAX_PANELS) {
+    // `force` re-adopts an already-existing panel (e.g. children of a deleted
+    // group) even past the limit — refusing would strand them with no tab, and
+    // the orphan purge would then delete them permanently.
+    if (!force && state.tabOrder.length >= MAX_PANELS) {
       console.warn(`Panel limit reached (${MAX_PANELS}); cannot add panel ${id}`);
       notifyPanelLimit();
       return;
@@ -793,6 +796,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       tabOrder,
       activeTabId,
       focusedId,
+      // Any layout swap (group enter/exit, jump, workspace load) leaves the
+      // old maximizedId pointing at an id that isn't in this tabOrder, which
+      // hides EVERY tile → blank workspace. Always drop back to the mosaic.
+      maximizedId: null,
       layoutConfig,
       panelRects,
       stealFraction,
@@ -839,7 +846,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         : (currentIdx + delta + order.length) % order.length;
 
     const nextId = order[nextIdx];
-    set({ activeTabId: nextId });
+    // Route through setActiveTab so that while maximized, Ctrl+Tab swaps which
+    // panel FILLS the area instead of focusing a hidden tile (raw set() would
+    // leave the maximized panel showing while focus/keyboard went nowhere).
+    get().setActiveTab(nextId);
     get().setFocused(nextId);
   },
 

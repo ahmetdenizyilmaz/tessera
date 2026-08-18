@@ -3,6 +3,7 @@ import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore, getDefaultConfig, computeRects, type PanelType } from '../store/layoutStore';
 import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
+import { useLlmChatStore } from '../store/llmChatStore';
 import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
 
@@ -232,6 +233,23 @@ export function deserializeWorkspace(raw: unknown): void {
   const snapshot = normalizeSnapshot(raw);
   if (!snapshot) return;
 
+  // Mid-session load (SaveLoadDialog): kill the processes of whatever is open
+  // and clear the stores first. Without this, old instances linger as
+  // invisible orphans, old groups merge in, and the old panels' CLI processes
+  // are never killed (zombie claude.exe). On initial boot the workspace is
+  // empty, so this is a no-op.
+  const openIds = useLayoutStore.getState().tabOrder;
+  if (openIds.length > 0) {
+    for (const id of openIds) {
+      invoke('stream_kill', { id }).catch(() => {});
+      invoke('pty_kill', { id }).catch(() => {});
+      invoke('llm_destroy_session', { id }).catch(() => {});
+    }
+    useLlmChatStore.setState({ conversations: {} });
+    useInstanceStore.setState({ instances: new Map() });
+    useGroupStore.setState({ groups: new Map(), groupStack: [] });
+  }
+
   // ONE id map: old instance id → freshly minted id. Widget, group and
   // plugin panel ids are stable across restarts and map to themselves.
   const idMap = new Map<string, string>();
@@ -424,6 +442,13 @@ export function deserializeWorkspace(raw: unknown): void {
       }
     }
   }
+
+  // LLM panel transcripts are persisted by instance id, but restore mints new
+  // ids — without re-keying, every LLM panel comes back blank and the old
+  // conversations pile up in localStorage. Re-key to the new ids and drop any
+  // that no longer map to a live instance.
+  const liveIds = new Set(useInstanceStore.getState().instances.keys());
+  useLlmChatStore.getState().remapConversations(idMap, liveIds);
 }
 
 // ─── Restore (once per app lifetime) ─────────────────────────────────────────

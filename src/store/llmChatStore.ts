@@ -26,6 +26,9 @@ interface LlmChatState {
   setError: (id: string, error: string) => void;
   clearConversation: (id: string) => void;
   removeConversation: (id: string) => void;
+  /** Re-key conversations old id → new id after a workspace restore, and drop
+   *  any conversation whose id no longer belongs to a live panel. */
+  remapConversations: (idMap: Map<string, string>, liveIds: Set<string>) => void;
 }
 
 const EMPTY_CONVERSATION: ConversationState = {
@@ -158,6 +161,17 @@ export const useLlmChatStore = create<LlmChatState>()(
             [id]: { ...EMPTY_CONVERSATION },
           },
         }));
+      },
+
+      remapConversations: (idMap, liveIds) => {
+        set((state) => {
+          const next: Record<string, ConversationState> = {};
+          for (const [oldId, conv] of Object.entries(state.conversations)) {
+            const newId = idMap.get(oldId) ?? oldId;
+            if (liveIds.has(newId)) next[newId] = conv;
+          }
+          return { conversations: next };
+        });
       },
 
       removeConversation: (id: string) => {

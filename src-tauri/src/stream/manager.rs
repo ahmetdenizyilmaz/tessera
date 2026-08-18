@@ -67,9 +67,20 @@ pub struct StreamInstance {
     /// they were spawned with and stop pumping when it no longer matches.
     generation: u64,
     request_counter: u64,
-    /// Parties waiting for the current turn to finish (panel-bus injections
-    /// sent with `wait_for_reply`). Drained on the first terminal outcome.
-    turn_watchers: Vec<tokio::sync::oneshot::Sender<TurnOutcome>>,
+    /// Parties waiting for a specific injected turn to finish (panel-bus
+    /// `wait_for_reply`). Each carries how many `result` events must still
+    /// pass before its own turn completes — so a reply in flight when the
+    /// message arrived doesn't get mis-attributed.
+    turn_watchers: Vec<TurnWatcher>,
+    /// User turns written but not yet terminated by a `result`. A watcher
+    /// registered now must let this many results pass before claiming one.
+    pending_turns: u32,
+}
+
+struct TurnWatcher {
+    sender: tokio::sync::oneshot::Sender<TurnOutcome>,
+    /// Results remaining before this watcher's own turn is the one that ends.
+    remaining: u32,
 }
 
 pub struct StreamJsonManager {
@@ -103,6 +114,13 @@ impl StreamJsonManager {
 /// and gives the CLI 3 s to exit on its own before the tree-kill.
 fn teardown_process(instance: &mut StreamInstance, graceful: bool) {
     instance.generation += 1;
+    // Release any panel-bus waiters now. The reader's EOF path can't — it runs
+    // at the pre-bump generation and its notify becomes a no-op — so without
+    // this a `wait_for_reply` sender hangs until its own timeout.
+    for w in std::mem::take(&mut instance.turn_watchers) {
+        let _ = w.sender.send(TurnOutcome::ProcessDied);
+    }
+    instance.pending_turns = 0;
     let stdin = instance.stdin.take();
     let child = instance.child.take();
     drop(stdin); // closes the pipe → CLI sees EOF and exits cleanly
@@ -163,7 +181,41 @@ fn write_line(stdin: &Arc<Mutex<ChildStdin>>, value: &serde_json::Value) -> Resu
 /// Resolve every party waiting on this instance's current turn. A no-op when
 /// the generation has moved on (the process was cleared or respawned) or when
 /// nobody is waiting, which is the common case.
-fn notify_turn_watchers(
+/// A `result` line: one user turn ended. Decrement the in-flight count and
+/// resolve only the watchers whose own turn is the one that just finished.
+fn on_turn_result(
+    instances: &Arc<Mutex<HashMap<String, StreamInstance>>>,
+    id: &str,
+    generation: u64,
+    outcome: TurnOutcome,
+) {
+    let mut to_resolve = Vec::new();
+    if let Ok(mut map) = instances.lock() {
+        if let Some(inst) = map.get_mut(id) {
+            if inst.generation != generation {
+                return;
+            }
+            inst.pending_turns = inst.pending_turns.saturating_sub(1);
+            let mut kept = Vec::with_capacity(inst.turn_watchers.len());
+            for mut w in std::mem::take(&mut inst.turn_watchers) {
+                w.remaining = w.remaining.saturating_sub(1);
+                if w.remaining == 0 {
+                    to_resolve.push(w.sender);
+                } else {
+                    kept.push(w);
+                }
+            }
+            inst.turn_watchers = kept;
+        }
+    }
+    for s in to_resolve {
+        let _ = s.send(outcome.clone());
+    }
+}
+
+/// The panel is blocked on the user, or its process died — nothing further
+/// will progress, so every waiter is released regardless of countdown.
+fn resolve_all_watchers(
     instances: &Arc<Mutex<HashMap<String, StreamInstance>>>,
     id: &str,
     generation: u64,
@@ -179,7 +231,7 @@ fn notify_turn_watchers(
         Err(_) => return,
     };
     for w in watchers {
-        let _ = w.send(outcome.clone());
+        let _ = w.sender.send(outcome.clone());
     }
 }
 
@@ -194,7 +246,9 @@ pub fn watch_turn(
     let inst = instances
         .get_mut(id)
         .ok_or_else(|| format!("Stream instance '{}' not found", id))?;
-    inst.turn_watchers.push(tx);
+    // Let every turn already in flight finish first; ours is the next one.
+    let remaining = inst.pending_turns + 1;
+    inst.turn_watchers.push(TurnWatcher { sender: tx, remaining });
     Ok(rx)
 }
 
@@ -237,6 +291,7 @@ pub fn ensure_configured(
             generation: 0,
             request_counter: 0,
             turn_watchers: Vec::new(),
+            pending_turns: 0,
         },
     );
     Ok(())
@@ -527,23 +582,40 @@ fn ensure_process(
 
                 // Turn-completion signal for panel-bus waiters. Cheap substring
                 // prefilter first — most lines are content deltas and parsing
-                // every one of them would be wasteful.
-                let terminal = if text.contains("\"type\":\"result\"") {
-                    serde_json::from_str::<serde_json::Value>(&text)
+                // every one of them would be wasteful. A `result` ends one
+                // turn (countdown); a real `control_request` blocks the panel
+                // (release everyone). Parse fully before trusting either so a
+                // matching substring inside streamed assistant text can't fake
+                // a terminal event.
+                if text.contains("\"type\":\"result\"") {
+                    if let Some(m) = serde_json::from_str::<serde_json::Value>(&text)
                         .ok()
                         .filter(|m| m["type"] == "result")
-                        .map(|m| TurnOutcome::Done {
-                            is_error: m["is_error"].as_bool().unwrap_or(false),
-                            subtype: m["subtype"].as_str().unwrap_or("").to_string(),
-                            text: m["result"].as_str().map(|s| s.to_string()),
-                        })
+                    {
+                        on_turn_result(
+                            &instances_arc,
+                            &reader_id,
+                            my_gen,
+                            TurnOutcome::Done {
+                                is_error: m["is_error"].as_bool().unwrap_or(false),
+                                subtype: m["subtype"].as_str().unwrap_or("").to_string(),
+                                text: m["result"].as_str().map(|s| s.to_string()),
+                            },
+                        );
+                    }
                 } else if text.contains("\"type\":\"control_request\"") {
-                    Some(TurnOutcome::BlockedOnUser)
-                } else {
-                    None
-                };
-                if let Some(outcome) = terminal {
-                    notify_turn_watchers(&instances_arc, &reader_id, my_gen, outcome);
+                    let is_ctrl = serde_json::from_str::<serde_json::Value>(&text)
+                        .ok()
+                        .map(|m| m["type"] == "control_request")
+                        .unwrap_or(false);
+                    if is_ctrl {
+                        resolve_all_watchers(
+                            &instances_arc,
+                            &reader_id,
+                            my_gen,
+                            TurnOutcome::BlockedOnUser,
+                        );
+                    }
                 }
 
                 if tx.send(text).is_err() {
@@ -553,7 +625,7 @@ fn ensure_process(
 
             // stdout closed: release anyone still waiting rather than letting
             // them sit until their timeout.
-            notify_turn_watchers(&instances_arc, &reader_id, my_gen, TurnOutcome::ProcessDied);
+            resolve_all_watchers(&instances_arc, &reader_id, my_gen, TurnOutcome::ProcessDied);
 
             // EOF (or stale): if still the current generation, take the child
             // out and reap it WITHOUT holding the map lock.
@@ -673,6 +745,7 @@ pub async fn stream_configure(
                 generation: 0,
                 request_counter: 0,
                 turn_watchers: Vec::new(),
+                pending_turns: 0,
             },
         );
     }
@@ -765,6 +838,13 @@ pub fn send_user_turn(
         let stdin = get_stdin(state, id)?;
         write_line(&stdin, &payload)?;
     }
+    // The line is in — count the turn so a watcher registered before it knows
+    // how many results to let pass before claiming one.
+    if let Ok(mut instances) = state.instances.lock() {
+        if let Some(inst) = instances.get_mut(id) {
+            inst.pending_turns += 1;
+        }
+    }
     Ok(())
 }
 
@@ -846,12 +926,21 @@ pub async fn stream_clear(
 #[tauri::command]
 pub async fn stream_kill(
     id: String,
+    app: AppHandle,
     state: tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
-    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-    if let Some(mut instance) = instances.remove(&id) {
-        teardown_process(&mut instance, false);
+    {
+        let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+        if let Some(mut instance) = instances.remove(&id) {
+            teardown_process(&mut instance, false);
+        }
     }
+    // Panel closed: drop its per-panel bus state and config file so nothing
+    // accumulates and the token stops living on disk.
+    if let Some(bus) = app.try_state::<crate::panelbus::PanelBus>() {
+        bus.forget_panel(&id);
+    }
+    crate::panelbus::spawn_config::remove_for_panel(&id);
     Ok(())
 }
 

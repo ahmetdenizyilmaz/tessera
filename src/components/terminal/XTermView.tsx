@@ -5,7 +5,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
-import { usePty, isPtySpawned } from '../../hooks/usePty';
+import { usePty, isPtySpawned, consumeFreshMount } from '../../hooks/usePty';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { listen } from '@tauri-apps/api/event';
@@ -262,10 +262,17 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
     // ─── Restore saved state from previous mount (group move) ──────────
 
-    const savedBuffer = terminalBuffers.get(instanceId);
-    if (savedBuffer) {
-      terminal.write(savedBuffer);
+    // A restart/fresh-start marks this id so we DON'T replay the previous
+    // conversation's scrollback (the old view's unmount re-saved it after
+    // restartPty ran). Clear it and start clean.
+    if (consumeFreshMount(instanceId)) {
       terminalBuffers.delete(instanceId);
+    } else {
+      const savedBuffer = terminalBuffers.get(instanceId);
+      if (savedBuffer) {
+        terminal.write(savedBuffer);
+        terminalBuffers.delete(instanceId);
+      }
     }
 
     // Replay any PTY output buffered while component was unmounted
