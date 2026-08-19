@@ -23,32 +23,8 @@ const TIMER_MANIFEST: PluginManifest = {
   accentColor: '#3b82f6',
 };
 
-const MESSENGER_MANIFEST: PluginManifest = {
-  name: 'messenger',
-  version: '1.0.0',
-  description: 'Test inter-plugin messaging (direct & broadcast)',
-  entry: 'index.html',
-  icon: 'MessageSquare',
-  defaultTitle: 'Messenger',
-  builtin: true,
-  accentColor: '#a6e3a1',
-};
-
-const DEVSTUDIO_MANIFEST: PluginManifest = {
-  name: 'devstudio',
-  version: '1.0.0',
-  description: 'Autonomous multi-agent development studio',
-  entry: 'index.html',
-  icon: 'Code2',
-  defaultTitle: 'DevStudio',
-  builtin: true,
-  accentColor: '#f97316',
-};
-
 export function registerBuiltins(): void {
   const { registerBuiltin } = usePluginStore.getState();
   registerBuiltin('notepad', NOTEPAD_MANIFEST);
   registerBuiltin('timer', TIMER_MANIFEST);
-  registerBuiltin('messenger', MESSENGER_MANIFEST);
-  registerBuiltin('devstudio', DEVSTUDIO_MANIFEST);
 }

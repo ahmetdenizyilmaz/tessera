@@ -16,8 +16,6 @@ interface MenuBarProps {
   onClaudeMd?: () => void;
   onNewNotepad?: () => void;
   onNewTimer?: () => void;
-  onNewMessenger?: () => void;
-  onNewDevStudio?: () => void;
 }
 
 interface MenuItem {
@@ -50,8 +48,6 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onClaudeMd,
   onNewNotepad,
   onNewTimer,
-  onNewMessenger,
-  onNewDevStudio,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -85,8 +81,6 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   const pluginItems: MenuEntry[] = [
     { label: 'Notepad', action: () => onNewNotepad?.() },
     { label: 'Timer', action: () => onNewTimer?.() },
-    { label: 'Messenger', action: () => onNewMessenger?.() },
-    { label: 'DevStudio', action: () => onNewDevStudio?.() },
   ];
 
   const helpItems: MenuEntry[] = [

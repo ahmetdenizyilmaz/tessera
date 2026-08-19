@@ -252,8 +252,6 @@ export default function App() {
           onClaudeMd={() => setShowClaudeMd(true)}
           onNewNotepad={() => handleNewPlugin('notepad')}
           onNewTimer={() => handleNewPlugin('timer')}
-          onNewMessenger={() => handleNewPlugin('messenger')}
-          onNewDevStudio={() => handleNewPlugin('devstudio')}
         />
 
         {viewMode === 'panels' ? (
