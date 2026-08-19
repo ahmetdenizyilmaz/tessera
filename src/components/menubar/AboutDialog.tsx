@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { BUILD_LABEL, buildDateLabel } from '../../lib/buildInfo';
 
 interface AboutDialogProps {
   isOpen: boolean;
@@ -40,7 +41,10 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => 
             Claude GUI
           </div>
           <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-            Version 0.0.2-beta
+            {BUILD_LABEL}
+            <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>
+              built {buildDateLabel()}
+            </span>
           </div>
           <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, fontSize: 14 }}>
             A native desktop application for running multiple Claude Code CLI

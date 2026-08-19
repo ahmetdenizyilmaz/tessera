@@ -2123,3 +2123,18 @@ body,
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Build version in the status bar — glance to confirm you're on the live build */
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-bar-version {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  cursor: default;
+  white-space: nowrap;
+}
