@@ -46,7 +46,7 @@ Get-ChildItem -Path $srcDir -Filter '*.dll' | ForEach-Object {
 
 # Install the `cgui` CLI launcher into ~/.local/bin (already on PATH, where
 # `claude` lives) so `cgui` works from any directory.
-$binDir = Join-Path $env:USERPROFILE '.localin'
+$binDir = Join-Path (Join-Path $env:USERPROFILE '.local') 'bin'
 $cguiSrc = Join-Path $PSScriptRoot 'cgui.cmd'
 if (Test-Path $cguiSrc) {
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
