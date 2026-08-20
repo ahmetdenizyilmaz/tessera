@@ -44,6 +44,16 @@ Get-ChildItem -Path $srcDir -Filter '*.dll' | ForEach-Object {
     Write-Host ("  + " + $_.Name)
 }
 
+# Install the `cgui` CLI launcher into ~/.local/bin (already on PATH, where
+# `claude` lives) so `cgui` works from any directory.
+$binDir = Join-Path $env:USERPROFILE '.localin'
+$cguiSrc = Join-Path $PSScriptRoot 'cgui.cmd'
+if (Test-Path $cguiSrc) {
+    New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+    Copy-Item $cguiSrc -Destination (Join-Path $binDir 'cgui.cmd') -Force
+    Write-Host '  + cgui.cmd -> ~/.local/bin'
+}
+
 $info = Get-Item $target
 Write-Host ("Promoted: {0:N0} MB, built {1}" -f ($info.Length / 1MB), $info.LastWriteTime)
 Write-Host "Launch it from the 'Claude GUI' desktop shortcut."

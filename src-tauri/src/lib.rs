@@ -14,6 +14,7 @@ pub mod mcp;
 pub mod analytics;
 pub mod llm;
 pub mod panelbus;
+pub mod launch;
 
 use db::Database;
 use pty::manager::PtyManager;
@@ -25,7 +26,17 @@ pub fn run() {
     let database = Database::new().expect("Failed to initialize database");
 
     tauri::Builder::default()
+        // Single instance MUST be the first plugin. A second `cgui` launch
+        // forwards its argv here and exits; we queue its directory + focus.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            launch::on_second_instance(app, argv);
+        }))
+        .manage(launch::LaunchQueue::default())
         .setup(|app| {
+            // First launch: `cgui <dir>` passes the directory in our own argv.
+            if let Some(dir) = launch::dir_from_argv(&std::env::args().collect::<Vec<_>>()) {
+                app.state::<launch::LaunchQueue>().push(dir);
+            }
             // Failsafe: the main window starts hidden and the frontend shows
             // it once painted. If the frontend crashes before that, reveal
             // the window anyway so the app isn't invisibly stuck.
@@ -191,6 +202,8 @@ pub fn run() {
             llm::keystore::llm_get_api_key,
             llm::keystore::llm_set_api_key,
             llm::keystore::llm_delete_api_key,
+            // CLI launcher (cgui)
+            launch::take_launch_dirs,
             // Panel bus (cross-panel messaging)
             panelbus::panel_registry_sync,
             panelbus::panel_bus_set_enabled,

@@ -36,6 +36,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
 zstd = "0.13"
 ignore = "0.4"
 # Loopback MCP server for panel-to-panel messaging. All three are already in
