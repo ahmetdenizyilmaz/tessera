@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 
 $repo   = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $repo 'src-tauri\target\release\claude-gui.exe'
-$dest   = 'C:\Users\user\Apps\ClaudeGUI'
+$dest   = (Join-Path $env:USERPROFILE 'Apps\ClaudeGUI')
 $target = Join-Path $dest 'Claude GUI.exe'
 
 if (-not (Test-Path $source)) {

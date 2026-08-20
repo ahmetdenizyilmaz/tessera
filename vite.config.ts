@@ -45,7 +45,7 @@ export default defineConfig({
         manualChunks: {
           pixi: ['pixi.js'],
           recharts: ['recharts'],
-          highlight: ['react-syntax-highlighter', 'highlight.js'],
+          highlight: ['react-syntax-highlighter'],
           xterm: [
             '@xterm/xterm',
             '@xterm/addon-fit',

@@ -1,5 +1,24 @@
+# Dependencies / build output
 node_modules/
 dist/
 src-tauri/target/
+
+# Logs
 *.log
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Secrets — never commit credentials
+.env
+.env.*
+*.pem
+
+# Local app image cache (written at runtime)
+.claude-gui-images/
+
+# Throwaway dev screenshots
+/crop_*.png
+/screenshot_*.png
+/screenshot_*.txt

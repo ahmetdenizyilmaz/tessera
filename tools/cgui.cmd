@@ -8,5 +8,5 @@ rem If the app is already running, the single-instance handler adds the tab to
 rem the existing window instead of launching a second copy.
 setlocal
 if "%~1"=="" ( set "TARGET=%CD%" ) else ( set "TARGET=%~f1" )
-start "" "C:\Users\user\Apps\ClaudeGUI\Claude GUI.exe" "%TARGET%"
+start "" "%USERPROFILE%\Apps\ClaudeGUI\Claude GUI.exe" "%TARGET%"
 endlocal
