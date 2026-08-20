@@ -53,7 +53,13 @@ pub fn take_launch_dirs(state: tauri::State<'_, LaunchQueue>) -> Vec<String> {
 pub fn notify_frontend(window: &WebviewWindow) {
     let _ = window.unminimize();
     let _ = window.show();
+    // Windows suppresses focus-stealing from a background process, so a plain
+    // set_focus() often just flashes the taskbar. Toggling always-on-top forces
+    // the window to the foreground; we drop it again immediately so it doesn't
+    // actually stay pinned.
+    let _ = window.set_always_on_top(true);
     let _ = window.set_focus();
+    let _ = window.set_always_on_top(false);
     let _ = window.eval("window.__drainLaunchDirs && window.__drainLaunchDirs()");
 }
 
