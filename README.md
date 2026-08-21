@@ -48,19 +48,6 @@ even message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + Re
 
 ---
 
-## The name & the mark
-
-<img src="src-tauri/icons/128x128.png" align="right" width="104" alt="Tessera mark">
-
-A **tessera** is a single tile in a mosaic. The mark is exactly that — mosaic tiles with grout gaps,
-arranged as Tessera's own main-plus-sidebar layout, with the **focused panel lit gold**. So the icon
-is a small picture of what the app does: many tiles, one in focus.
-
-The palette is **lapis** `#4C6EF5` and **mosaic gold** `#E8B04B` on **slate** `#191B25` — the classic
-Byzantine-mosaic pairing, chosen to stand on its own rather than echo any other tool.
-
----
-
 ## Requirements
 
 - **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** installed and on your `PATH`
