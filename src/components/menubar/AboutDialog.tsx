@@ -35,10 +35,10 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => 
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-        <h2>About Claude GUI</h2>
+        <h2>About Tessera</h2>
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
-            Claude GUI
+            Tessera
           </div>
           <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
             {BUILD_LABEL}
@@ -50,6 +50,10 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => 
             A native desktop application for running multiple Claude Code CLI
             instances in a tiled, split-screen layout with a dual chat and
             terminal interface.
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 10 }}>
+            Not affiliated with Anthropic. Claude and Claude Code are trademarks
+            of Anthropic.
           </p>
         </div>
 

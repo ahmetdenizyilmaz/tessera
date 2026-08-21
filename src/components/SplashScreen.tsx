@@ -35,7 +35,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         <div className="splash-icon">
           <ClaudeIcon size={64} />
         </div>
-        <div className="splash-title">Claude GUI</div>
+        <div className="splash-title">Tessera</div>
         <div className="splash-subtitle">Multi-instance Claude Code IDE</div>
       </div>
       <div className="splash-shimmer" />

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickel-org/nickel.rs/master/schema/tauri.conf.json",
-  "productName": "Claude GUI",
+  "productName": "Tessera",
   "version": "0.0.2-beta",
   "identifier": "com.claude.gui",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Claude GUI",
+        "title": "Tessera",
         "width": 1400,
         "height": 900,
         "resizable": true,

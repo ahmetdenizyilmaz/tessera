@@ -16,8 +16,8 @@ $ErrorActionPreference = 'Stop'
 
 $repo   = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $repo 'src-tauri\target\release\claude-gui.exe'
-$dest   = (Join-Path $env:USERPROFILE 'Apps\ClaudeGUI')
-$target = Join-Path $dest 'Claude GUI.exe'
+$dest   = (Join-Path $env:USERPROFILE 'Apps\Tessera')
+$target = Join-Path $dest 'Tessera.exe'
 
 if (-not (Test-Path $source)) {
     throw "No release build found at $source. Build it first with: npx tauri build --config src-tauri/tauri.stable.conf.json"
@@ -26,7 +26,7 @@ if (-not (Test-Path $source)) {
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 # The stable app must not be running, or the copy is denied
-$running = Get-Process -Name 'Claude GUI' -ErrorAction SilentlyContinue
+$running = Get-Process -Name 'Tessera','Claude GUI' -ErrorAction SilentlyContinue
 if ($running) {
     Write-Host 'Stable app is running - closing it first.'
     $running | Stop-Process -Force
@@ -56,4 +56,4 @@ if (Test-Path $cguiSrc) {
 
 $info = Get-Item $target
 Write-Host ("Promoted: {0:N0} MB, built {1}" -f ($info.Length / 1MB), $info.LastWriteTime)
-Write-Host "Launch it from the 'Claude GUI' desktop shortcut."
+Write-Host "Launch it from the 'Tessera' desktop shortcut."

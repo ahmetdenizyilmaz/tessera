@@ -20,7 +20,7 @@ pub fn definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "list_panels",
-            "description": "List the other Claude panels open in this Claude GUI window, including \
+            "description": "List the other Claude panels open in this Tessera window, including \
 their name, working directory and whether they are currently busy. Use this before messaging \
 another panel so you address it correctly.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }

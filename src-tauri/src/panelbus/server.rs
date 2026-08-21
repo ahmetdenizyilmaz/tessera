@@ -164,7 +164,7 @@ async fn handle(
                         "name": "claude-gui-panels",
                         "version": env!("CARGO_PKG_VERSION"),
                     },
-                    "instructions": "Tools for seeing and messaging the other Claude panels open in this Claude GUI window.",
+                    "instructions": "Tools for seeing and messaging the other Claude panels open in this Tessera window.",
                 }),
             )))
         }

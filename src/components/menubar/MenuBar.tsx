@@ -85,7 +85,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 
   const helpItems: MenuEntry[] = [
     { label: 'Keyboard Shortcuts', action: onAbout },
-    { label: 'About Claude GUI', action: onAbout },
+    { label: 'About Tessera', action: onAbout },
   ];
 
   const menus: { label: string; key: string; items: MenuEntry[] }[] = [
@@ -124,7 +124,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 
   return (
     <div className="menu-bar" ref={barRef}>
-      <span className="menu-bar-logo">{'\u2726'} Claude GUI</span>
+      <span className="menu-bar-logo">{'\u2726'} Tessera</span>
 
       <div className="menu-bar-menus">
         {menus.map((menu) => (

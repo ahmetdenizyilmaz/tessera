@@ -1,6 +1,6 @@
 {
   "name": "claude-gui-panels",
-  "description": "See and message the other Claude panels open in this Claude GUI window.",
+  "description": "See and message the other Claude panels open in this Tessera window.",
   "version": "1.0.0",
-  "author": { "name": "Claude GUI" }
+  "author": { "name": "Tessera" }
 }

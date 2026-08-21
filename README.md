@@ -1,6 +1,6 @@
-# Claude GUI
+# Tessera
 
-A native desktop app that runs **multiple Claude Code sessions side by side** in a
+**Tessera** is a native desktop app that runs **multiple Claude Code sessions side by side** in a
 tiling, resizable mosaic — each session as its own chat or terminal panel, all in
 one window.
 
@@ -82,7 +82,7 @@ The production build and NSIS installer land under
 
 ## The `cgui` launcher
 
-After a build is promoted, `cgui` behaves like `code .` for Claude GUI:
+After a build is promoted, `cgui` behaves like `code .` for Tessera:
 
 ```bash
 cd path/to/project
@@ -133,6 +133,14 @@ tools/                    CLI launcher + release/promote scripts
 
 Tauri 2 · Rust · React 19 · TypeScript · zustand · Vite · xterm.js · dnd-kit ·
 recharts · PixiJS
+
+---
+
+## Trademark
+
+Not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and
+"Claude Code" are trademarks of Anthropic. Tessera is an independent, unofficial
+desktop client for the Claude Code CLI.
 
 ---
 

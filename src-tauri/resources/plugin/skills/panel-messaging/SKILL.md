@@ -1,11 +1,11 @@
 ---
 name: panel-messaging
-description: Talk to the other Claude sessions running beside you in Claude GUI. Use when the user refers to another panel, when work belongs in a different directory than yours, or when another session already has the context you would otherwise rebuild.
+description: Talk to the other Claude sessions running beside you in Tessera. Use when the user refers to another panel, when work belongs in a different directory than yours, or when another session already has the context you would otherwise rebuild.
 ---
 
 # Messaging other panels
 
-You are one of several Claude sessions running side by side in a Claude GUI
+You are one of several Claude sessions running side by side in a Tessera
 window. Each panel is a separate conversation with its own working directory,
 its own history, and its own model. They cannot see each other's context.
 

@@ -17,7 +17,7 @@ interface HookTemplate {
 const HOOK_TEMPLATES: HookTemplate[] = [
   { name: 'Log Tool Use', type: 'PostToolUse', command: 'echo "$(date): $TOOL_NAME" >> ~/.claude/tool_log.txt', description: 'Log all tool uses to a file' },
   { name: 'Block rm -rf', type: 'PreToolUse', matcher: 'Bash', command: 'if echo "$TOOL_INPUT" | grep -q "rm -rf"; then exit 1; fi', description: 'Prevent dangerous rm -rf commands' },
-  { name: 'Notify on Complete', type: 'Stop', command: 'echo "Claude finished!" | notify-send "Claude GUI" 2>/dev/null || true', description: 'Desktop notification when Claude finishes' },
+  { name: 'Notify on Complete', type: 'Stop', command: 'echo "Claude finished!" | notify-send "Tessera" 2>/dev/null || true', description: 'Desktop notification when Claude finishes' },
   { name: 'Block sudo', type: 'PreToolUse', matcher: 'Bash', command: 'if echo "$TOOL_INPUT" | grep -q "sudo"; then exit 1; fi', description: 'Prevent sudo commands' },
   { name: 'Auto-format on Write', type: 'PostToolUse', matcher: 'Write', command: 'npx prettier --write "$FILE_PATH" 2>/dev/null || true', description: 'Auto-format files after writing' },
 ];
