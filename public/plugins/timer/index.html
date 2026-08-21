@@ -365,9 +365,9 @@
     pauseTimer();
     state = 'idle';
     playBeep();
-    if (window.ClaudeGUI) {
-      window.ClaudeGUI.ui.showNotification('Timer complete!');
-      window.ClaudeGUI.ui.setBadge(null);
+    if (window.Tessera) {
+      window.Tessera.ui.showNotification('Timer complete!');
+      window.Tessera.ui.setBadge(null);
     }
     render();
   }
@@ -393,15 +393,15 @@
 
   // ── Badge ──
   function updateBadge() {
-    if (!window.ClaudeGUI) return;
+    if (!window.Tessera) return;
     if (mode === 'countdown' && state === 'running') {
       var mins = Math.ceil(remaining / 60);
-      window.ClaudeGUI.ui.setBadge(mins > 0 ? mins : null);
+      window.Tessera.ui.setBadge(mins > 0 ? mins : null);
     } else if (mode === 'stopwatch' && state === 'running') {
       var mins = Math.floor(stopwatchElapsed / 60000);
-      window.ClaudeGUI.ui.setBadge(mins > 0 ? mins : null);
+      window.Tessera.ui.setBadge(mins > 0 ? mins : null);
     } else {
-      window.ClaudeGUI.ui.setBadge(null);
+      window.Tessera.ui.setBadge(null);
     }
   }
 
@@ -444,20 +444,20 @@
 
   // ── SDK ──
   function initSdk() {
-    if (!window.ClaudeGUI) {
+    if (!window.Tessera) {
       setTimeout(initSdk, 100);
       return;
     }
 
-    window.ClaudeGUI.on('init', function(data) {
+    window.Tessera.on('init', function(data) {
       if (data.theme) applyTheme(data.theme);
     });
 
-    window.ClaudeGUI.theme.onChange(function(theme) {
+    window.Tessera.theme.onChange(function(theme) {
       applyTheme(theme);
     });
 
-    window.ClaudeGUI.onDestroy(function() {
+    window.Tessera.onDestroy(function() {
       if (intervalId) clearInterval(intervalId);
     });
   }

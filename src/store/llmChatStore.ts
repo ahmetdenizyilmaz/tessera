@@ -182,7 +182,7 @@ export const useLlmChatStore = create<LlmChatState>()(
       },
     }),
     {
-      name: 'claude-gui-llm-chats',
+      name: 'tessera-llm-chats',
       partialize: (state) => ({
         // Only persist conversations (not streaming state)
         conversations: Object.fromEntries(

@@ -31,7 +31,7 @@ const EMPTY_BREADCRUMB: BreadcrumbSegment[] = [];
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 // Group persistence is owned by lib/workspaceSerializer.ts (the single source
-// of truth for the whole workspace). The legacy 'claude-gui-groups' key is
+// of truth for the whole workspace). The legacy 'tessera-groups' key is
 // read there once for migration.
 
 // ─── Layout Sync (swap layout state when entering/exiting groups) ────────────

@@ -1,6 +1,6 @@
 use keyring::Entry;
 
-const SERVICE_NAME: &str = "claude-gui-llm";
+const SERVICE_NAME: &str = "tessera-llm";
 
 fn get_entry(provider: &str) -> Result<Entry, String> {
     Entry::new(SERVICE_NAME, provider).map_err(|e| format!("Keyring error: {}", e))

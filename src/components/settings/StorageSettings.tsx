@@ -34,7 +34,7 @@ export function StorageSettings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `claude-gui-usage-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `tessera-usage-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -47,7 +47,7 @@ export function StorageSettings() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="form-group">
         <label className="form-label">Database Storage</label>
-        <p className="form-hint">SQLite database at ~/.claude-gui/claude_gui.db</p>
+        <p className="form-hint">SQLite database at ~/.tessera/tessera.db</p>
       </div>
 
       {dbStats && (

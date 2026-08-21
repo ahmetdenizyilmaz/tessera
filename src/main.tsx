@@ -1,3 +1,4 @@
+import './lib/brandMigration'; // must run before any store hydrates
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AuthGate } from './auth/AuthGate';

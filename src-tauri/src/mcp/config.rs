@@ -266,7 +266,7 @@ pub fn generate_mcp_config(db: &Database) -> Result<Option<String>, String> {
 
     let dir = dirs::home_dir()
         .ok_or("Could not find home directory")?
-        .join(".claude-gui");
+        .join(".tessera");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let config_path = dir.join("mcp_config.json");
 

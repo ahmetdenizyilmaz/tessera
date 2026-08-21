@@ -15,7 +15,7 @@
 $ErrorActionPreference = 'Stop'
 
 $repo   = Split-Path -Parent $PSScriptRoot
-$source = Join-Path $repo 'src-tauri\target\release\claude-gui.exe'
+$source = Join-Path $repo 'src-tauri\target\release\tessera.exe'
 $dest   = (Join-Path $env:USERPROFILE 'Apps\Tessera')
 $target = Join-Path $dest 'Tessera.exe'
 

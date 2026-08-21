@@ -1,7 +1,7 @@
 //! Ships a Claude Code plugin (skill + slash commands) to every session the
 //! app spawns, via `--plugin-dir`.
 //!
-//! The files are embedded in the binary and written to `~/.claude-gui/plugin/`
+//! The files are embedded in the binary and written to `~/.tessera/plugin/`
 //! at startup rather than bundled as Tauri resources: `tauri.conf.json`
 //! declares no `resources`, and runtime-writing behaves identically in dev and
 //! in the packaged app. They are rewritten unconditionally — five small files,
@@ -21,7 +21,7 @@ const CMD_ASK: &str = include_str!("../../resources/plugin/commands/ask-panel.md
 /// Absolute path of the installed plugin directory, or `None` if it could not
 /// be written (in which case sessions simply spawn without it).
 pub fn ensure_installed() -> Option<PathBuf> {
-    let root = dirs::home_dir()?.join(".claude-gui").join("plugin");
+    let root = dirs::home_dir()?.join(".tessera").join("plugin");
 
     let files: [(&str, &str); 5] = [
         (".claude-plugin/plugin.json", PLUGIN_JSON),
@@ -50,10 +50,10 @@ pub fn ensure_installed() -> Option<PathBuf> {
 
 /// Where the plugin's slash commands live, for the app's own command popup.
 pub fn commands_dir() -> Option<PathBuf> {
-    Some(dirs::home_dir()?.join(".claude-gui").join("plugin").join("commands"))
+    Some(dirs::home_dir()?.join(".tessera").join("plugin").join("commands"))
 }
 
 pub fn plugin_dir() -> Option<PathBuf> {
-    let dir = dirs::home_dir()?.join(".claude-gui").join("plugin");
+    let dir = dirs::home_dir()?.join(".tessera").join("plugin");
     dir.exists().then_some(dir)
 }

@@ -1,7 +1,7 @@
 // ─── Plugin SDK Source Code ──────────────────────────────────────────────────
 // This module exports the SDK source as a string constant.
 // The string is injected into plugin iframes as a <script> tag.
-// It creates window.ClaudeGUI — the global API available to plugins.
+// It creates window.Tessera — the global API available to plugins.
 //
 // IMPORTANT: This is self-contained JavaScript. No imports, no TypeScript types
 // at runtime. It must run standalone in an iframe context.
@@ -380,6 +380,6 @@ export const PLUGIN_SDK_SOURCE = `
   setupEventRouting();
 
   // Expose globally
-  window.ClaudeGUI = sdk;
+  window.Tessera = sdk;
 })();
 `;

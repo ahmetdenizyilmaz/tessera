@@ -121,7 +121,7 @@ tools/                    CLI launcher + release/promote scripts
 ## Data & privacy
 
 - App data (local SQLite DB, generated MCP config, the bundled plugin) lives in
-  `~/.claude-gui/`.
+  `~/.tessera/`.
 - API keys entered in **Settings → LLM Providers** are stored in the OS keychain
   via the system keyring — never in the repo or plaintext config.
 - Product analytics are **off unless an analytics key is provided at runtime**;

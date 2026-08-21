@@ -11,12 +11,12 @@ impl Database {
     pub fn new() -> Result<Self, String> {
         let db_dir = dirs::home_dir()
             .ok_or("Could not find home directory")?
-            .join(".claude-gui");
+            .join(".tessera");
 
         std::fs::create_dir_all(&db_dir)
             .map_err(|e| format!("Failed to create database directory: {}", e))?;
 
-        let db_path = db_dir.join("claude_gui.db");
+        let db_path = db_dir.join("tessera.db");
 
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open database: {}", e))?;

@@ -48,7 +48,7 @@ pub fn write_for_panel(app: &AppHandle, panel_id: &str) -> Option<String> {
         return None;
     }
 
-    let dir = dirs::home_dir()?.join(".claude-gui").join("panel-mcp");
+    let dir = dirs::home_dir()?.join(".tessera").join("panel-mcp");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         eprintln!("[panelbus] could not create config dir: {}", e);
         return None;
@@ -71,7 +71,7 @@ pub fn write_for_panel(app: &AppHandle, panel_id: &str) -> Option<String> {
 pub fn remove_for_panel(panel_id: &str) {
     if let Some(dir) = dirs::home_dir() {
         let path = dir
-            .join(".claude-gui")
+            .join(".tessera")
             .join("panel-mcp")
             .join(format!("{}.json", sanitize(panel_id)));
         let _ = std::fs::remove_file(path);

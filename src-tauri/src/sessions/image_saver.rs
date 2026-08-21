@@ -12,7 +12,7 @@ pub async fn save_chat_image(
         return Err("Invalid image extension: must contain only alphanumeric characters".to_string());
     }
 
-    let images_dir = PathBuf::from(&project_dir).join(".claude-gui-images");
+    let images_dir = PathBuf::from(&project_dir).join(".tessera-images");
 
     // Create directory if it doesn't exist
     std::fs::create_dir_all(&images_dir)

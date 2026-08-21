@@ -16,7 +16,7 @@ Thumbs.db
 *.pem
 
 # Local app image cache (written at runtime)
-.claude-gui-images/
+.tessera-images/
 
 # Throwaway dev screenshots
 /crop_*.png

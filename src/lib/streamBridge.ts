@@ -138,7 +138,7 @@ export function initStreamBridge() {
 
 /**
  * Listen for 'chat:send' events on the event bus.
- * When a plugin calls ClaudeGUI.chat.send(targetId, message),
+ * When a plugin calls Tessera.chat.send(targetId, message),
  * the bridge dispatches 'chat:send'. We pick it up here, add
  * the user message to the target chat session, and invoke the
  * Rust stream_send_message command.

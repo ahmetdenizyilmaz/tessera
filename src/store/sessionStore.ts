@@ -83,7 +83,7 @@ export const useSessionStore = create<SessionState>()(
       },
     }),
     {
-      name: 'claude-gui-sessions',
+      name: 'tessera-sessions',
     },
   ),
 );

@@ -50,7 +50,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
     }),
     {
-      name: 'claude-gui-settings',
+      name: 'tessera-settings',
       version: 1,
       // v0 → v1: new instances defaulted to sonnet with permissions bypassed.
       // Persisted settings shadow the defaults above, so without this the new

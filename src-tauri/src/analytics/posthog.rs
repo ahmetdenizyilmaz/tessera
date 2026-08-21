@@ -150,7 +150,7 @@ async fn flush_events(
             );
             props.insert(
                 "$lib".to_string(),
-                serde_json::Value::String("claude-gui".to_string()),
+                serde_json::Value::String("tessera".to_string()),
             );
 
             serde_json::json!({

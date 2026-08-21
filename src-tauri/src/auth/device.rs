@@ -1,7 +1,7 @@
 use keyring::Entry;
 use serde::Deserialize;
 
-const SERVICE_NAME: &str = "claude-gui";
+const SERVICE_NAME: &str = "tessera";
 const DEVICE_ID_KEY: &str = "device_id";
 
 fn get_entry(key: &str) -> Result<Entry, String> {

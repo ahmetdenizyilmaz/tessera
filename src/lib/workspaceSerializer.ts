@@ -10,9 +10,9 @@ import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
 // Same key the legacy v2 auto-save used so existing users' workspaces survive
-export const AUTOSAVE_KEY = 'claude-gui-autosave';
+export const AUTOSAVE_KEY = 'tessera-autosave';
 // Legacy key groupStore used to persist itself; read once for v2 migration
-const LEGACY_GROUPS_KEY = 'claude-gui-groups';
+const LEGACY_GROUPS_KEY = 'tessera-groups';
 
 const SAVE_DEBOUNCE_MS = 300;
 
@@ -161,7 +161,7 @@ function readLegacyGroups(): Record<string, SerializedGroup> {
 
 /**
  * Migrate the legacy v2 `SavedWorkspace` shape:
- * - groups were persisted separately under 'claude-gui-groups'
+ * - groups were persisted separately under 'tessera-groups'
  * - plugin instances were never persisted; recover the plugin name from the
  *   stable panel id ('plugin-<name>-<timestamp>') so panels aren't ghosts
  */

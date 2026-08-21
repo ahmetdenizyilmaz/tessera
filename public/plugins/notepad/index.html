@@ -352,8 +352,8 @@
   }
 
   function updateSdkTitle(title) {
-    if (window.ClaudeGUI) {
-      window.ClaudeGUI.ui.setTitle(title || 'Notepad');
+    if (window.Tessera) {
+      window.Tessera.ui.setTitle(title || 'Notepad');
     }
   }
 
@@ -370,13 +370,13 @@
 
   // ── SDK Integration ──
   function initSdk() {
-    if (!window.ClaudeGUI) {
+    if (!window.Tessera) {
       // SDK not loaded yet, try again shortly
       setTimeout(initSdk, 100);
       return;
     }
 
-    window.ClaudeGUI.on('init', function(data) {
+    window.Tessera.on('init', function(data) {
       instanceId = data.instanceId;
       loadNotes();
       // Auto-select first note
@@ -389,11 +389,11 @@
       if (data.theme) applyTheme(data.theme);
     });
 
-    window.ClaudeGUI.theme.onChange(function(theme) {
+    window.Tessera.theme.onChange(function(theme) {
       applyTheme(theme);
     });
 
-    window.ClaudeGUI.onDestroy(function() {
+    window.Tessera.onDestroy(function() {
       if (saveTimer) clearTimeout(saveTimer);
       saveNotes();
     });

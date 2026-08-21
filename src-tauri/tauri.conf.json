@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/nickel-org/nickel.rs/master/schema/tauri.conf.json",
   "productName": "Tessera",
   "version": "0.0.2-beta",
-  "identifier": "com.claude.gui",
+  "identifier": "com.tessera.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

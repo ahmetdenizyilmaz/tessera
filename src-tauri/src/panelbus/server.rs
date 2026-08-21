@@ -161,7 +161,7 @@ async fn handle(
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false } },
                     "serverInfo": {
-                        "name": "claude-gui-panels",
+                        "name": "tessera-panels",
                         "version": env!("CARGO_PKG_VERSION"),
                     },
                     "instructions": "Tools for seeing and messaging the other Claude panels open in this Tessera window.",

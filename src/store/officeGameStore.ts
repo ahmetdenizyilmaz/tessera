@@ -191,7 +191,7 @@ export const useOfficeGameStore = create<OfficeGameState>()(
       },
     }),
     {
-      name: 'claude-gui-office',
+      name: 'tessera-office',
       partialize: (state) => ({
         layout: state.layout,
         currency: state.currency,
