@@ -17,6 +17,8 @@ interface SpawnOptions {
   permissionMode?: string;
   allowedTools?: string[];
   dangerouslySkipPermissions?: boolean;
+  /** Per-panel routing env (e.g. ANTHROPIC_BASE_URL → OpenRouter). */
+  env?: Record<string, string> | null;
 }
 
 interface UseStreamJsonReturn {
@@ -70,6 +72,7 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
       permissionMode: options?.permissionMode || null,
       allowedTools: options?.allowedTools && options.allowedTools.length > 0 ? options.allowedTools : null,
       dangerouslySkipPermissions: options?.dangerouslySkipPermissions ?? false,
+      env: options?.env ?? null,
     });
   }, [instanceId, initSession]);
 

@@ -35,6 +35,10 @@ pub struct StreamConfig {
     pub allowed_tools: Option<Vec<String>>,
     pub dangerously_skip_permissions: bool,
     pub thinking_budget_tokens: Option<u32>,
+    /// Extra env vars for the spawned `claude` process (per-panel routing,
+    /// e.g. ANTHROPIC_BASE_URL → OpenRouter). Applied after the allowlist,
+    /// so they are the only non-whitelisted vars the child ever sees.
+    pub env: Option<std::collections::HashMap<String, String>>,
 }
 
 /// How a turn ended, as seen on the child's stdout. This is the authoritative
@@ -450,6 +454,13 @@ fn ensure_process(
         }
     }
 
+    // Per-panel routing env (set last so it wins over anything inherited).
+    if let Some(extra) = &cfg.env {
+        for (key, value) in extra {
+            cmd.env(key, value);
+        }
+    }
+
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -708,6 +719,7 @@ pub async fn stream_configure(
     permission_mode: Option<String>,
     allowed_tools: Option<Vec<String>>,
     dangerously_skip_permissions: Option<bool>,
+    env: Option<std::collections::HashMap<String, String>>,
     state: tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
     let work_dir = claude_paths::resolve_work_dir(&cwd);
@@ -722,6 +734,7 @@ pub async fn stream_configure(
         instance.config.allowed_tools = allowed_tools;
         instance.config.dangerously_skip_permissions =
             dangerously_skip_permissions.unwrap_or(false);
+        instance.config.env = env;
         if instance.session_id.is_none() {
             instance.session_id = session_id.filter(|s| !s.is_empty());
         }
@@ -738,6 +751,7 @@ pub async fn stream_configure(
                     allowed_tools,
                     dangerously_skip_permissions: dangerously_skip_permissions.unwrap_or(false),
                     thinking_budget_tokens: None,
+                    env,
                 },
                 session_id: session_id.filter(|s| !s.is_empty()),
                 child: None,

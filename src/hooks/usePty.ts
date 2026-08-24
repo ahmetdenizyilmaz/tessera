@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useInstanceStore } from '../store/instanceStore';
+import { buildRoutingEnv } from '../lib/routingEnv';
 
 type PtyState = 'spawning' | 'running' | 'killing';
 
@@ -78,6 +79,7 @@ export function usePty(instanceId: string) {
     }
 
     try {
+      const env = await buildRoutingEnv(instance.config.routing);
       await invoke('pty_spawn', {
         id: instanceId,
         cwd: instance.config.cwd,
@@ -89,6 +91,7 @@ export function usePty(instanceId: string) {
         permissionMode: instance.config.permissionMode || null,
         allowedTools: instance.config.allowedTools.length > 0 ? instance.config.allowedTools : null,
         systemPrompt: instance.config.systemPrompt || null,
+        env,
       });
       spawnedPtys.set(instanceId, 'running');
     } catch (err) {

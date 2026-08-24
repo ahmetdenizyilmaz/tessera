@@ -10,6 +10,7 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ControlRequestArea } from './ControlRequestArea';
 import { isUserMessage } from '../../types/stream';
+import { buildRoutingEnv } from '../../lib/routingEnv';
 import { ClaudeIcon } from '../icons/ProviderIcons';
 import type { SessionInfo } from '../../types/session';
 
@@ -86,14 +87,18 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     const model = instance?.config?.model;
     const systemPrompt = instance?.config?.systemPrompt;
 
-    spawn(projectDir, {
-      model: model || undefined,
-      systemPrompt: systemPrompt || undefined,
-      sessionId: claudeSessionId || undefined,
-      permissionMode: instance?.config?.permissionMode || undefined,
-      allowedTools: instance?.config?.allowedTools,
-      dangerouslySkipPermissions: instance?.config?.dangerouslySkipPermissions ?? false,
-    })
+    buildRoutingEnv(instance?.config?.routing)
+      .then((env) =>
+        spawn(projectDir, {
+          model: model || undefined,
+          systemPrompt: systemPrompt || undefined,
+          sessionId: claudeSessionId || undefined,
+          permissionMode: instance?.config?.permissionMode || undefined,
+          allowedTools: instance?.config?.allowedTools,
+          dangerouslySkipPermissions: instance?.config?.dangerouslySkipPermissions ?? false,
+          env,
+        }),
+      )
       .then(() => setIsReady(true))
       .catch((err) => {
         console.error(`[ChatView ${instanceId}] configure failed:`, err);

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
+import { invoke } from '@tauri-apps/api/core';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { LLM_PROVIDERS } from '../../types/llmProviders';
 import type { InstanceConfig } from '../../types/instance';
 
 interface NewInstanceDialogProps {
@@ -33,6 +35,40 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
   const [allowedTools, setAllowedTools] = useState('');
   const [maxBudget, setMaxBudget] = useState(0);
   const [systemPrompt, setSystemPrompt] = useState('');
+
+  // Claude Code gateway routing. 'anthropic' = the CLI's normal login path,
+  // completely untouched; 'openrouter' injects routing env into this panel's
+  // process only.
+  const [gateway, setGateway] = useState<'anthropic' | 'openrouter'>('anthropic');
+  const [routeModel, setRouteModel] = useState('');
+  const [freeOnly, setFreeOnly] = useState(true);
+  const [orModels, setOrModels] = useState<string[]>([]);
+  const [orHasKey, setOrHasKey] = useState<boolean | null>(null);
+  const [orLoading, setOrLoading] = useState(false);
+
+  // On first switch to OpenRouter: check for a saved key and pull the catalog.
+  useEffect(() => {
+    if (gateway !== 'openrouter' || orHasKey !== null) return;
+    invoke<string | null>('llm_get_api_key', { provider: 'openrouter' })
+      .then((k) => setOrHasKey(!!k))
+      .catch(() => setOrHasKey(false));
+    setOrLoading(true);
+    invoke<string[]>('llm_list_models', {
+      provider: 'openrouter',
+      baseUrl: LLM_PROVIDERS.openrouter.defaultBaseUrl,
+      apiKey: null,
+    })
+      .then((models) => setOrModels(models))
+      .catch(() => setOrModels([]))
+      .finally(() => setOrLoading(false));
+  }, [gateway, orHasKey]);
+
+  const orVisibleModels = (() => {
+    const source = orModels.length > 0 ? orModels : LLM_PROVIDERS.openrouter.models;
+    const filtered = freeOnly ? source.filter((m) => m.endsWith(':free')) : source;
+    return filtered.length > 0 ? filtered : source;
+  })();
+  const effectiveRouteModel = routeModel || orVisibleModels[0] || '';
 
   // BUG-1: Close dialog on Escape key
   useEffect(() => {
@@ -73,6 +109,10 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
       systemPrompt,
       agentMode: false,
       panelView,
+      routing:
+        gateway === 'openrouter'
+          ? { gateway: 'openrouter', model: effectiveRouteModel || undefined }
+          : undefined,
     };
 
     // Remember these choices for the next time the dialog opens.
@@ -169,6 +209,49 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
               <option value="fable">Fable</option>
               <option value="haiku">Haiku</option>
             </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Route Through</label>
+            <select
+              className="form-select"
+              value={gateway}
+              onChange={(e) => setGateway(e.target.value as 'anthropic' | 'openrouter')}
+            >
+              <option value="anthropic">Anthropic (normal Claude Code)</option>
+              <option value="openrouter">OpenRouter gateway</option>
+            </select>
+            {gateway === 'openrouter' && (
+              <>
+                <div className="form-row" style={{ marginTop: 8, alignItems: 'center', gap: 8 }}>
+                  <select
+                    className="form-select form-input-grow"
+                    value={effectiveRouteModel}
+                    onChange={(e) => setRouteModel(e.target.value)}
+                  >
+                    {orVisibleModels.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <label className="form-checkbox-label" style={{ whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox"
+                      checked={freeOnly}
+                      onChange={() => setFreeOnly(!freeOnly)}
+                    />
+                    Free only
+                  </label>
+                </div>
+                <span className="form-hint">
+                  {orLoading
+                    ? 'Loading OpenRouter catalog…'
+                    : `This panel's Claude Code talks to OpenRouter; the model above serves every tier. Other panels are unaffected.`}
+                  {orHasKey === false && (
+                    <strong> No OpenRouter API key saved — add one in Settings → LLM Providers first.</strong>
+                  )}
+                </span>
+              </>
+            )}
           </div>
 
           <div className="form-group">

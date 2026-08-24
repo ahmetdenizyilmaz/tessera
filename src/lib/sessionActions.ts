@@ -15,6 +15,7 @@ import { useChatStore } from '../store/chatStore';
 import { useEventBusStore } from '../store/eventBusStore';
 import { isPtySpawned, restartPty } from '../hooks/usePty';
 import { findOpenPanelBySession } from './openSession';
+import { buildRoutingEnv } from './routingEnv';
 import { notify } from './toast';
 
 function panelKind(instanceId: string): 'chat' | 'terminal' | null {
@@ -107,6 +108,7 @@ export async function switchSession(
         permissionMode: inst.config.permissionMode || null,
         allowedTools: inst.config.allowedTools.length > 0 ? inst.config.allowedTools : null,
         dangerouslySkipPermissions: inst.config.dangerouslySkipPermissions,
+        env: await buildRoutingEnv(inst.config.routing),
       });
     } catch (err) {
       console.error(`[sessionActions] stream_configure failed for ${instanceId}:`, err);

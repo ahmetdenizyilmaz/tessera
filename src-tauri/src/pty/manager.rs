@@ -159,6 +159,7 @@ pub async fn pty_spawn(
     system_prompt: Option<String>,
     claude_session_id: Option<String>,
     mcp_config_path: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
     app: AppHandle,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
@@ -244,6 +245,14 @@ pub async fn pty_spawn(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("FORCE_COLOR", "3");
+
+    // Per-panel routing env (e.g. ANTHROPIC_BASE_URL → OpenRouter). Set last
+    // so it wins over anything inherited from the host environment.
+    if let Some(extra) = &env {
+        for (key, value) in extra {
+            cmd.env(key, value);
+        }
+    }
 
     let child = pair
         .slave
