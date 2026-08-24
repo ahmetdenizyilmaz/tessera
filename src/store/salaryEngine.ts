@@ -8,6 +8,7 @@ const PROVIDER_BASE_RATES: Record<LlmProvider, number> = {
   claude: 22.5,
   anthropic: 20,
   openai: 12,
+  openrouter: 6,
   gemini: 10,
   ollama: 8,
   lmstudio: 8,

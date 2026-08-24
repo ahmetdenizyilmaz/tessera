@@ -206,7 +206,7 @@ pub async fn llm_list_models(
     let url = providers::list_models_url(&provider, &base_url);
     let mut req = state.client.get(&url);
     if let Some(key) = &api_key {
-        if provider == "openai" {
+        if provider == "openai" || provider == "openrouter" {
             req = req.bearer_auth(key);
         } else if provider == "anthropic" {
             req = req
@@ -240,7 +240,7 @@ pub async fn llm_check_connection(
     state: tauri::State<'_, LlmManager>,
 ) -> Result<bool, String> {
     let url = match provider.as_str() {
-        "openai" | "lmstudio" | "anthropic" => {
+        "openai" | "openrouter" | "lmstudio" | "anthropic" => {
             format!("{}/v1/models", base_url.trim_end_matches('/'))
         }
         "gemini" => format!("{}/v1beta/models", base_url.trim_end_matches('/')),

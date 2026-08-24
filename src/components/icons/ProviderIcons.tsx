@@ -54,10 +54,27 @@ export function LmStudioIcon({ size = 36, className, style }: IconProps) {
   );
 }
 
+// OpenRouter: crossing routes glyph
+export function OpenRouterIcon({ size = 36, className, style }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" className={className} style={style}>
+      <g fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 15 h9 c5 0 7 3 10 7 c3 4 5 7 10 7 h3" />
+        <path d="M6 33 h9 c5 0 7 -3 10 -7 c3 -4 5 -7 10 -7 h3" />
+      </g>
+      <g fill="currentColor">
+        <path d="M37 10 l8 5 -8 5 z" />
+        <path d="M37 28 l8 5 -8 5 z" />
+      </g>
+    </svg>
+  );
+}
+
 const PROVIDER_ICON_MAP: Record<string, React.FC<IconProps>> = {
   claude: ClaudeIcon,
   anthropic: ClaudeIcon,
   openai: OpenAiIcon,
+  openrouter: OpenRouterIcon,
   gemini: GeminiIcon,
   ollama: OllamaIcon,
   lmstudio: LmStudioIcon,

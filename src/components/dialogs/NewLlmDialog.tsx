@@ -11,10 +11,12 @@ import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
+import openrouterIcon from '../../assets/openrouter-icon.svg';
 
 const PROVIDER_ICONS: Record<string, string> = {
   anthropic: claudeIcon,
   openai: openaiIcon,
+  openrouter: openrouterIcon,
   gemini: geminiIcon,
   ollama: ollamaIcon,
   lmstudio: lmstudioIcon,
@@ -51,6 +53,15 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
 
   const meta = LLM_PROVIDERS[provider];
 
+  // Per-provider base URL: local providers have a settings override; cloud
+  // providers (openai/openrouter/…) use their canonical endpoint.
+  const resolveBaseUrl = useCallback(() => {
+    const settings = useSettingsStore.getState().settings;
+    if (provider === 'ollama') return settings.ollamaBaseUrl || meta.defaultBaseUrl;
+    if (provider === 'lmstudio') return settings.lmstudioBaseUrl || meta.defaultBaseUrl;
+    return meta.defaultBaseUrl;
+  }, [provider, meta]);
+
   // Load saved API key when provider changes
   useEffect(() => {
     if (!isOpen) return;
@@ -79,14 +90,14 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
     setDiscovering(true);
     setError('');
     try {
-      const settings = useSettingsStore.getState().settings;
-      const baseUrl = provider === 'ollama'
-        ? settings.ollamaBaseUrl || meta.defaultBaseUrl
-        : settings.lmstudioBaseUrl || meta.defaultBaseUrl;
-
-      const models = await invoke<string[]>('llm_list_models', { provider, baseUrl, apiKey: null });
+      const baseUrl = resolveBaseUrl();
+      const models = await invoke<string[]>('llm_list_models', {
+        provider,
+        baseUrl,
+        apiKey: apiKey || null,
+      });
       setDiscoveredModels(models);
-      if (models.length > 0 && !model) {
+      if (models.length > 0 && (!model || !models.includes(model))) {
         setModel(models[0]);
       }
       setConnectionStatus('ok');
@@ -95,7 +106,7 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
       setConnectionStatus('fail');
     }
     setDiscovering(false);
-  }, [provider, meta, model]);
+  }, [provider, meta, model, apiKey, resolveBaseUrl]);
 
   // Auto-discover on mount for local providers
   useEffect(() => {
@@ -108,18 +119,17 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
     setConnectionStatus('checking');
     setError('');
     try {
-      const settings = useSettingsStore.getState().settings;
-      const baseUrl = provider === 'ollama'
-        ? settings.ollamaBaseUrl || meta.defaultBaseUrl
-        : settings.lmstudioBaseUrl || meta.defaultBaseUrl;
-
-      await invoke('llm_check_connection', { provider, baseUrl });
-      setConnectionStatus('ok');
+      const baseUrl = resolveBaseUrl();
+      // llm_check_connection resolves Ok(false) on a failed connection —
+      // the returned bool is the verdict, not the promise settling.
+      const ok = await invoke<boolean>('llm_check_connection', { provider, baseUrl });
+      setConnectionStatus(ok ? 'ok' : 'fail');
+      if (!ok) setError('Connection failed');
     } catch (err) {
       setConnectionStatus('fail');
       setError(`Connection failed: ${err}`);
     }
-  }, [provider, meta]);
+  }, [provider, resolveBaseUrl]);
 
   const handleCreate = useCallback(async () => {
     if (!canAddPanel()) { notifyPanelLimit(); return; }
@@ -142,12 +152,7 @@ export const NewLlmDialog: React.FC<NewLlmDialogProps> = ({ isOpen, initialProvi
       }
     }
 
-    const settings = useSettingsStore.getState().settings;
-    const baseUrl = meta.requiresApiKey
-      ? meta.defaultBaseUrl
-      : provider === 'ollama'
-        ? settings.ollamaBaseUrl || meta.defaultBaseUrl
-        : settings.lmstudioBaseUrl || meta.defaultBaseUrl;
+    const baseUrl = resolveBaseUrl();
 
     const llmConfig: LlmConfig = {
       provider,

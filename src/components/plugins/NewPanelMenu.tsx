@@ -6,6 +6,7 @@ import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
+import openrouterIcon from '../../assets/openrouter-icon.svg';
 import type { LlmProvider } from '../../types/instance';
 
 // ─── Menu Item Definitions ──────────────────────────────────────────────────
@@ -13,6 +14,7 @@ import type { LlmProvider } from '../../types/instance';
 const LLM_MENU_ITEMS: { id: 'claude' | LlmProvider; label: string; icon: string }[] = [
   { id: 'anthropic', label: 'Claude', icon: claudeIcon },
   { id: 'openai', label: 'ChatGPT', icon: openaiIcon },
+  { id: 'openrouter', label: 'OpenRouter', icon: openrouterIcon },
   { id: 'gemini', label: 'Gemini', icon: geminiIcon },
   { id: 'ollama', label: 'Ollama', icon: ollamaIcon },
   { id: 'lmstudio', label: 'LM Studio', icon: lmstudioIcon },

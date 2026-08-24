@@ -6,6 +6,7 @@ export const PROVIDER_COLORS: Record<LlmProvider, number> = {
   claude: 0xFF8C00,    // orange
   anthropic: 0xD97757, // terracotta
   openai: 0x10A37F,    // green
+  openrouter: 0x8B7CF6, // violet
   gemini: 0x4285F4,    // blue
   ollama: 0xCCCCCC,    // light gray
   lmstudio: 0x9B59B6,  // purple

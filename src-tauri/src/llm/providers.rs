@@ -32,7 +32,9 @@ pub fn build_request(
     }
 
     match provider {
-        "openai" => {
+        // OpenRouter speaks the OpenAI chat-completions wire format; it only
+        // adds optional attribution headers on top.
+        "openai" | "openrouter" => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
             let mut body = serde_json::json!({
                 "model": model,
@@ -43,6 +45,11 @@ pub fn build_request(
                 body["temperature"] = serde_json::json!(temp);
             }
             let mut req = client.post(&url).json(&body);
+            if provider == "openrouter" {
+                req = req
+                    .header("HTTP-Referer", "https://github.com/ahmetdenizyilmaz/tessera")
+                    .header("X-Title", "Tessera");
+            }
             if let Some(key) = api_key {
                 req = req.bearer_auth(key);
             }
@@ -149,7 +156,7 @@ pub fn build_request(
 
 pub fn parse_sse_chunk(provider: &str, line: &str) -> Option<String> {
     match provider {
-        "openai" | "lmstudio" => {
+        "openai" | "openrouter" | "lmstudio" => {
             let data = line.strip_prefix("data: ")?;
             if data == "[DONE]" {
                 return None;
@@ -216,7 +223,7 @@ pub fn parse_sse_chunk(provider: &str, line: &str) -> Option<String> {
 pub fn list_models_url(provider: &str, base_url: &str) -> String {
     let base = base_url.trim_end_matches('/');
     match provider {
-        "openai" | "lmstudio" | "anthropic" => format!("{}/v1/models", base),
+        "openai" | "openrouter" | "lmstudio" | "anthropic" => format!("{}/v1/models", base),
         "gemini" => format!("{}/v1beta/models", base),
         "ollama" => format!("{}/api/tags", base),
         _ => format!("{}/v1/models", base),
@@ -225,6 +232,24 @@ pub fn list_models_url(provider: &str, base_url: &str) -> String {
 
 pub fn parse_model_list(provider: &str, body_json: &Value) -> Vec<String> {
     match provider {
+        // OpenRouter's catalog is huge; surface the zero-cost ":free" routes
+        // first so they're one click away, each group alphabetical.
+        "openrouter" => {
+            let mut ids: Vec<String> = body_json["data"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            ids.sort_by(|a, b| {
+                let fa = a.ends_with(":free");
+                let fb = b.ends_with(":free");
+                fb.cmp(&fa).then_with(|| a.cmp(b))
+            });
+            ids
+        }
         "openai" | "lmstudio" | "anthropic" => body_json["data"]
             .as_array()
             .map(|arr| {

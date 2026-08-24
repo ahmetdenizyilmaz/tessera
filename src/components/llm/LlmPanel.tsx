@@ -12,10 +12,12 @@ import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
+import openrouterIcon from '../../assets/openrouter-icon.svg';
 
 const PROVIDER_IMAGES: Record<string, string> = {
   anthropic: claudeIcon,
   openai: openaiIcon,
+  openrouter: openrouterIcon,
   gemini: geminiIcon,
   ollama: ollamaIcon,
   lmstudio: lmstudioIcon,

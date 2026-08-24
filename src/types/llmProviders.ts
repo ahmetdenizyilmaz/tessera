@@ -35,6 +35,21 @@ export const LLM_PROVIDERS: Record<Exclude<LlmProvider, 'claude'>, ProviderMeta>
     supportsModelDiscovery: false,
     icon: '\u{1F916}',
   },
+  openrouter: {
+    id: 'openrouter',
+    displayName: 'OpenRouter',
+    defaultBaseUrl: 'https://openrouter.ai/api',
+    // Fallbacks only — discovery replaces these with the live catalog,
+    // free (":free") routes sorted first.
+    models: [
+      'deepseek/deepseek-chat-v3.1:free',
+      'qwen/qwen3-coder:free',
+      'openrouter/auto',
+    ],
+    requiresApiKey: true,
+    supportsModelDiscovery: true,
+    icon: '\u{1F500}',
+  },
   gemini: {
     id: 'gemini',
     displayName: 'Gemini',

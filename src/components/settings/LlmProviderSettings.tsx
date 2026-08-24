@@ -10,9 +10,11 @@ export const LlmProviderSettings: React.FC = () => {
   // API key states (masked display)
   const [anthropicKey, setAnthropicKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
+  const [openrouterKey, setOpenrouterKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [anthropicHasKey, setAnthropicHasKey] = useState(false);
   const [openaiHasKey, setOpenaiHasKey] = useState(false);
+  const [openrouterHasKey, setOpenrouterHasKey] = useState(false);
   const [geminiHasKey, setGeminiHasKey] = useState(false);
 
   // Connection test states
@@ -26,6 +28,9 @@ export const LlmProviderSettings: React.FC = () => {
     }).catch(() => {});
     invoke<string | null>('llm_get_api_key', { provider: 'openai' }).then((key) => {
       if (key) setOpenaiHasKey(true);
+    }).catch(() => {});
+    invoke<string | null>('llm_get_api_key', { provider: 'openrouter' }).then((key) => {
+      if (key) setOpenrouterHasKey(true);
     }).catch(() => {});
     invoke<string | null>('llm_get_api_key', { provider: 'gemini' }).then((key) => {
       if (key) setGeminiHasKey(true);
@@ -59,8 +64,10 @@ export const LlmProviderSettings: React.FC = () => {
   ) => {
     setStatus('checking');
     try {
-      await invoke('llm_check_connection', { provider, baseUrl });
-      setStatus('ok');
+      // The command resolves Ok(false) on a failed connection — the bool is
+      // the verdict, not the promise settling.
+      const ok = await invoke<boolean>('llm_check_connection', { provider, baseUrl });
+      setStatus(ok ? 'ok' : 'fail');
     } catch {
       setStatus('fail');
     }
@@ -144,6 +151,42 @@ export const LlmProviderSettings: React.FC = () => {
               className="btn btn-secondary"
               style={{ fontSize: 11 }}
               onClick={() => deleteApiKey('openai', setOpenaiHasKey, setOpenaiKey)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* OpenRouter */}
+      <div style={sty.section}>
+        <div style={sty.heading}>{LLM_PROVIDERS.openrouter.icon} OpenRouter</div>
+        <div style={{ ...sty.label, marginBottom: 6 }}>
+          One key for hundreds of models, including free ":free" routes. Also used
+          when a Claude Code panel is routed through OpenRouter.
+        </div>
+        <label style={sty.label}>API Key</label>
+        <div style={sty.row}>
+          <input
+            type="password"
+            value={openrouterKey}
+            onChange={(e) => setOpenrouterKey(e.target.value)}
+            placeholder={openrouterHasKey ? '•••• (saved)' : 'sk-or-...'}
+            style={{ ...sty.input, flex: 1 }}
+          />
+          <button
+            className="btn btn-secondary"
+            style={{ fontSize: 11 }}
+            onClick={() => saveApiKey('openrouter', openrouterKey, setOpenrouterHasKey)}
+            disabled={!openrouterKey.trim()}
+          >
+            Save
+          </button>
+          {openrouterHasKey && (
+            <button
+              className="btn btn-secondary"
+              style={{ fontSize: 11 }}
+              onClick={() => deleteApiKey('openrouter', setOpenrouterHasKey, setOpenrouterKey)}
             >
               Delete
             </button>

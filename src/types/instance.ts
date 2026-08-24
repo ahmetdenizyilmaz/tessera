@@ -1,6 +1,17 @@
 /** 'claude' is the Claude Code CLI (subscription login, tools, agentic).
  *  'anthropic' is the Messages API with your own key — plain chat only. */
-export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'lmstudio';
+export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'openrouter' | 'gemini' | 'ollama' | 'lmstudio';
+
+/** Where a Claude Code panel's CLI traffic goes. 'anthropic' = the CLI's
+ *  normal path (subscription login), untouched. 'openrouter' injects
+ *  ANTHROPIC_BASE_URL/AUTH_TOKEN into that panel's process only. */
+export interface ClaudeRouting {
+  gateway: 'anthropic' | 'openrouter';
+  /** OpenRouter model id mapped onto the sonnet/opus tiers (e.g. "qwen/qwen3-coder:free"). */
+  model?: string;
+  /** OpenRouter model id for the haiku tier (background/fast tasks); falls back to `model`. */
+  smallModel?: string;
+}
 
 export type ThinkingMode = 'auto' | 'think' | 'think_hard' | 'think_harder' | 'ultrathink';
 
@@ -25,6 +36,8 @@ export interface InstanceConfig {
   /** Chosen at creation and fixed for the session's lifetime — chat and
    *  terminal are separate Claude sessions. Legacy instances default to chat. */
   panelView?: 'chat' | 'terminal';
+  /** Per-panel Claude Code gateway routing. Absent = normal Anthropic path. */
+  routing?: ClaudeRouting;
 }
 
 export interface ClaudeInstance {
