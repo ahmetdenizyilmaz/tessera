@@ -1,0 +1,56 @@
+
+# Build the Windows installer in CI and attach it to a GitHub Release, so
+# users download a ready-made setup.exe instead of installing Rust + Node
+# and sitting through a cold tauri build.
+#
+#   Cut a release:   git tag v0.1.0 && git push origin v0.1.0
+#   Test the build:  Actions tab -> Release -> Run workflow (artifact only)
+#
+# The release is created as a DRAFT - review the notes, then publish.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Caches ~/.cargo and src-tauri/target between runs: the first CI build
+      # is a cold ~15 min, later ones drop to a few minutes.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # On a tag: builds, creates a draft release for that tag, uploads the
+      # NSIS installer to it. On workflow_dispatch: build only (no release).
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Tessera {0}', github.ref_name) || '' }}
+          releaseDraft: true
+          prerelease: false
+
+      # Manual runs still hand you the installer as a workflow artifact.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        with:
+          name: tessera-windows-installer
+          path: src-tauri/target/release/bundle/nsis/*.exe

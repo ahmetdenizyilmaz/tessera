@@ -48,15 +48,30 @@ even message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + Re
 
 ---
 
-## Requirements
+## Install
 
-- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** installed and on your `PATH`
-  (or at `~/.local/bin`). Tessera spawns `claude` for every session — it won't work without it.
+**Grab the installer from the [Releases page](../../releases/latest)** — no Rust, no Node, no build.
+Run `Tessera_x.y.z_x64-setup.exe` and you're done.
+
+The only thing Tessera needs on your machine is the
+**[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** on your `PATH`
+(or at `~/.local/bin`) — every panel spawns a real `claude` session.
+
+> Windows may show a SmartScreen prompt because the installer isn't code-signed yet —
+> click **More info → Run anyway**.
+
+---
+
+## Building from source
+
+Only needed if you want to hack on Tessera itself:
+
 - **[Node.js](https://nodejs.org/)** 18+ and npm.
 - **[Rust](https://www.rust-lang.org/tools/install)** (stable) with the
   [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
-- **Windows:** GNU `windres` on `PATH` to compile app resources. With
-  [MSYS2](https://www.msys2.org/), add `C:\msys64\mingw64\bin` to `PATH` before building.
+  On Windows the MSVC toolchain (VS Build Tools C++) is all you need.
+- Using the GNU toolchain instead? Then `windres` must be on `PATH` — with
+  [MSYS2](https://www.msys2.org/), add `C:\msys64\mingw64\bin` before building.
 
 ---
 
