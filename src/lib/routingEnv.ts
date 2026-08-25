@@ -57,6 +57,21 @@ export async function buildRoutingEnv(
     ANTHROPIC_API_KEY: '',
   };
 
+  if (routing.gateway === 'ollama' || routing.gateway === 'custom') {
+    // Local prefill of Claude Code's ~17k-token prompt can sit silent for
+    // 5+ minutes on big dense models. Without these, the CLI's idle
+    // watchdogs (default 3-5 min) kill and retry requests that are in
+    // fact still working.
+    env.API_TIMEOUT_MS = '1800000';
+    env.CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS = '1200000';
+    env.CLAUDE_STREAM_IDLE_TIMEOUT_MS = '1200000';
+    env.API_FORCE_IDLE_TIMEOUT = '0';
+  } else {
+    // OpenRouter free routes can queue; a milder bump avoids spurious
+    // retries without hiding a genuinely dead connection for long.
+    env.CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS = '600000';
+  }
+
   const model = routing.model?.trim();
   const small = routing.smallModel?.trim() || model;
   if (model) {
