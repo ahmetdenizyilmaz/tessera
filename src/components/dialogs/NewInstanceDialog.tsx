@@ -37,14 +37,47 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
   const [systemPrompt, setSystemPrompt] = useState('');
 
   // Claude Code gateway routing. 'anthropic' = the CLI's normal login path,
-  // completely untouched; 'openrouter' injects routing env into this panel's
-  // process only.
-  const [gateway, setGateway] = useState<'anthropic' | 'openrouter'>('anthropic');
+  // completely untouched; anything else injects routing env into this
+  // panel's process only.
+  type Gateway = 'anthropic' | 'openrouter' | 'ollama' | 'custom';
+  const [gateway, setGatewayRaw] = useState<Gateway>('anthropic');
   const [routeModel, setRouteModel] = useState('');
   const [freeOnly, setFreeOnly] = useState(true);
+  const [customUrl, setCustomUrl] = useState('http://localhost:8080');
   const [orModels, setOrModels] = useState<string[]>([]);
+  const [olModels, setOlModels] = useState<string[]>([]);
   const [orHasKey, setOrHasKey] = useState<boolean | null>(null);
-  const [orLoading, setOrLoading] = useState(false);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const setGateway = (g: Gateway) => {
+    setGatewayRaw(g);
+    setRouteModel(''); // model ids don't transfer between gateways
+  };
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+
+  // Pick a .gguf from disk and register it into Ollama, so it appears in the
+  // dropdown like any pulled model. Hashing a multi-GB file takes a while.
+  const handleImportGguf = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'GGUF model', extensions: ['gguf'] }],
+      });
+      if (!selected) return;
+      const path = selected as string;
+      const base = path.split(/[\\/]/).pop() || 'model';
+      const name = base.replace(/\.gguf$/i, '');
+      setImporting(true);
+      setImportError('');
+      const created = await invoke<string>('ollama_import_gguf', { ggufPath: path, name });
+      setOlModels([]); // retriggers discovery, which now includes the import
+      setRouteModel(created);
+    } catch (err) {
+      setImportError(String(err));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // On first switch to OpenRouter: check for a saved key and pull the catalog.
   useEffect(() => {
@@ -52,7 +85,7 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
     invoke<string | null>('llm_get_api_key', { provider: 'openrouter' })
       .then((k) => setOrHasKey(!!k))
       .catch(() => setOrHasKey(false));
-    setOrLoading(true);
+    setRouteLoading(true);
     invoke<string[]>('llm_list_models', {
       provider: 'openrouter',
       baseUrl: LLM_PROVIDERS.openrouter.defaultBaseUrl,
@@ -60,15 +93,30 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
     })
       .then((models) => setOrModels(models))
       .catch(() => setOrModels([]))
-      .finally(() => setOrLoading(false));
+      .finally(() => setRouteLoading(false));
   }, [gateway, orHasKey]);
 
-  const orVisibleModels = (() => {
+  // On first switch to Ollama: list the locally pulled models.
+  useEffect(() => {
+    if (gateway !== 'ollama' || olModels.length > 0) return;
+    setRouteLoading(true);
+    invoke<string[]>('llm_list_models', {
+      provider: 'ollama',
+      baseUrl: settings.ollamaBaseUrl || LLM_PROVIDERS.ollama.defaultBaseUrl,
+      apiKey: null,
+    })
+      .then((models) => setOlModels(models))
+      .catch(() => setOlModels([]))
+      .finally(() => setRouteLoading(false));
+  }, [gateway, olModels.length, settings.ollamaBaseUrl]);
+
+  const routeVisibleModels = (() => {
+    if (gateway === 'ollama') return olModels;
     const source = orModels.length > 0 ? orModels : LLM_PROVIDERS.openrouter.models;
     const filtered = freeOnly ? source.filter((m) => m.endsWith(':free')) : source;
     return filtered.length > 0 ? filtered : source;
   })();
-  const effectiveRouteModel = routeModel || orVisibleModels[0] || '';
+  const effectiveRouteModel = routeModel || routeVisibleModels[0] || '';
 
   // BUG-1: Close dialog on Escape key
   useEffect(() => {
@@ -110,9 +158,13 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
       agentMode: false,
       panelView,
       routing:
-        gateway === 'openrouter'
-          ? { gateway: 'openrouter', model: effectiveRouteModel || undefined }
-          : undefined,
+        gateway === 'anthropic'
+          ? undefined
+          : {
+              gateway,
+              model: (gateway === 'custom' ? routeModel : effectiveRouteModel) || undefined,
+              customBaseUrl: gateway === 'custom' ? customUrl.trim() || undefined : undefined,
+            },
     };
 
     // Remember these choices for the next time the dialog opens.
@@ -216,12 +268,14 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
             <select
               className="form-select"
               value={gateway}
-              onChange={(e) => setGateway(e.target.value as 'anthropic' | 'openrouter')}
+              onChange={(e) => setGateway(e.target.value as typeof gateway)}
             >
               <option value="anthropic">Anthropic (normal Claude Code)</option>
               <option value="openrouter">OpenRouter gateway</option>
+              <option value="ollama">Ollama (local models)</option>
+              <option value="custom">Custom Anthropic-compatible URL</option>
             </select>
-            {gateway === 'openrouter' && (
+            {(gateway === 'openrouter' || gateway === 'ollama') && (
               <>
                 <div className="form-row" style={{ marginTop: 8, alignItems: 'center', gap: 8 }}>
                   <select
@@ -229,26 +283,74 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
                     value={effectiveRouteModel}
                     onChange={(e) => setRouteModel(e.target.value)}
                   >
-                    {orVisibleModels.map((m) => (
+                    {routeVisibleModels.map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
-                  <label className="form-checkbox-label" style={{ whiteSpace: 'nowrap' }}>
-                    <input
-                      type="checkbox"
-                      checked={freeOnly}
-                      onChange={() => setFreeOnly(!freeOnly)}
-                    />
-                    Free only
-                  </label>
+                  {gateway === 'openrouter' && (
+                    <label className="form-checkbox-label" style={{ whiteSpace: 'nowrap' }}>
+                      <input
+                        type="checkbox"
+                        checked={freeOnly}
+                        onChange={() => setFreeOnly(!freeOnly)}
+                      />
+                      Free only
+                    </label>
+                  )}
+                  {gateway === 'ollama' && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleImportGguf}
+                      disabled={importing}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      {importing ? 'Importing…' : 'Import GGUF…'}
+                    </button>
+                  )}
                 </div>
+                {gateway === 'ollama' && importing && (
+                  <span className="form-hint">
+                    Registering the file with Ollama — large models take a few minutes.
+                  </span>
+                )}
+                {gateway === 'ollama' && importError && (
+                  <span className="form-hint" style={{ color: 'var(--error)' }}>{importError}</span>
+                )}
                 <span className="form-hint">
-                  {orLoading
-                    ? 'Loading OpenRouter catalog…'
-                    : `This panel's Claude Code talks to OpenRouter; the model above serves every tier. Other panels are unaffected.`}
-                  {orHasKey === false && (
+                  {routeLoading
+                    ? 'Loading model list…'
+                    : gateway === 'ollama'
+                      ? olModels.length === 0
+                        ? 'No local models found — is Ollama running? (ollama serve)'
+                        : `This panel's Claude Code runs fully local via Ollama; the model above serves every tier. Other panels are unaffected.`
+                      : `This panel's Claude Code talks to OpenRouter; the model above serves every tier. Other panels are unaffected.`}
+                  {gateway === 'openrouter' && orHasKey === false && (
                     <strong> No OpenRouter API key saved — add one in Settings → LLM Providers first.</strong>
                   )}
+                </span>
+              </>
+            )}
+            {gateway === 'custom' && (
+              <>
+                <div className="form-row" style={{ marginTop: 8, gap: 8 }}>
+                  <input
+                    className="form-input form-input-grow"
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="http://localhost:8080"
+                  />
+                  <input
+                    className="form-input form-input-grow"
+                    type="text"
+                    value={routeModel}
+                    onChange={(e) => setRouteModel(e.target.value)}
+                    placeholder="model id (optional)"
+                  />
+                </div>
+                <span className="form-hint">
+                  Any server speaking the Anthropic Messages API — llama.cpp server,
+                  LiteLLM proxy, etc. Leave model empty to use the server's default.
                 </span>
               </>
             )}

@@ -3,14 +3,20 @@
 export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'openrouter' | 'gemini' | 'ollama' | 'lmstudio';
 
 /** Where a Claude Code panel's CLI traffic goes. 'anthropic' = the CLI's
- *  normal path (subscription login), untouched. 'openrouter' injects
- *  ANTHROPIC_BASE_URL/AUTH_TOKEN into that panel's process only. */
+ *  normal path (subscription login), untouched. Every other gateway injects
+ *  ANTHROPIC_BASE_URL/AUTH_TOKEN into that panel's process only:
+ *  'openrouter' = openrouter.ai, 'ollama' = the local Ollama server
+ *  (Anthropic-compatible since v0.14), 'custom' = any other
+ *  Anthropic-compatible URL (llama.cpp server, LiteLLM, …). */
 export interface ClaudeRouting {
-  gateway: 'anthropic' | 'openrouter';
-  /** OpenRouter model id mapped onto the sonnet/opus tiers (e.g. "qwen/qwen3-coder:free"). */
+  gateway: 'anthropic' | 'openrouter' | 'ollama' | 'custom';
+  /** Gateway-side model id mapped onto the sonnet/opus tiers
+   *  (e.g. "qwen/qwen3-coder:free" or "qwen3:30b-a3b-q8_0"). */
   model?: string;
-  /** OpenRouter model id for the haiku tier (background/fast tasks); falls back to `model`. */
+  /** Model id for the haiku tier (background/fast tasks); falls back to `model`. */
   smallModel?: string;
+  /** Base URL for gateway 'custom' (must speak the Anthropic Messages API). */
+  customBaseUrl?: string;
 }
 
 export type ThinkingMode = 'auto' | 'think' | 'think_hard' | 'think_harder' | 'ultrathink';

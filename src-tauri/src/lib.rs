@@ -199,6 +199,7 @@ pub fn run() {
             llm::manager::llm_destroy_session,
             llm::manager::llm_list_models,
             llm::manager::llm_check_connection,
+            llm::ollama::ollama_import_gguf,
             llm::keystore::llm_get_api_key,
             llm::keystore::llm_set_api_key,
             llm::keystore::llm_delete_api_key,

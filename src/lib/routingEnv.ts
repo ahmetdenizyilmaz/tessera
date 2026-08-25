@@ -16,19 +16,43 @@ export const OPENROUTER_GATEWAY_URL = 'https://openrouter.ai/api';
 export async function buildRoutingEnv(
   routing?: ClaudeRouting,
 ): Promise<Record<string, string> | null> {
-  if (!routing || routing.gateway !== 'openrouter') return null;
+  if (!routing || routing.gateway === 'anthropic') return null;
 
-  let key = '';
-  try {
-    key = (await invoke<string | null>('llm_get_api_key', { provider: 'openrouter' })) ?? '';
-  } catch {
-    // No key in the keyring — still inject the base URL so the panel fails
-    // loudly against OpenRouter instead of silently billing Anthropic.
+  let baseUrl: string;
+  let token: string;
+  switch (routing.gateway) {
+    case 'openrouter': {
+      baseUrl = OPENROUTER_GATEWAY_URL;
+      token = '';
+      try {
+        token = (await invoke<string | null>('llm_get_api_key', { provider: 'openrouter' })) ?? '';
+      } catch {
+        // No key in the keyring — still inject the base URL so the panel
+        // fails loudly against OpenRouter instead of silently billing Anthropic.
+      }
+      break;
+    }
+    case 'ollama': {
+      // Local server — auth is ignored, but the CLI wants a non-empty token
+      // so it doesn't fall back to interactive login.
+      const { useSettingsStore } = await import('../store/settingsStore');
+      baseUrl = useSettingsStore.getState().settings.ollamaBaseUrl || 'http://localhost:11434';
+      token = 'ollama';
+      break;
+    }
+    case 'custom': {
+      if (!routing.customBaseUrl?.trim()) return null;
+      baseUrl = routing.customBaseUrl.trim();
+      token = 'local';
+      break;
+    }
+    default:
+      return null;
   }
 
   const env: Record<string, string> = {
-    ANTHROPIC_BASE_URL: OPENROUTER_GATEWAY_URL,
-    ANTHROPIC_AUTH_TOKEN: key,
+    ANTHROPIC_BASE_URL: baseUrl,
+    ANTHROPIC_AUTH_TOKEN: token,
     // Must be explicitly blank so a host-level Anthropic key can't win.
     ANTHROPIC_API_KEY: '',
   };
