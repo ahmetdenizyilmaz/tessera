@@ -10,7 +10,7 @@ interface ProjectBrowserProps {
 }
 
 export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
-  const { loading, fetchProjects, searchQuery, setSearchQuery, favorites, pinned, toggleFavorite, togglePin, getFilteredProjects } = useProjectStore();
+  const { loading, error, fetchProjects, searchQuery, setSearchQuery, favorites, pinned, toggleFavorite, togglePin, getFilteredProjects } = useProjectStore();
 
   useEffect(() => {
     fetchProjects();
@@ -77,7 +77,13 @@ export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
           </div>
         )}
 
-        {!loading && filteredProjects.length === 0 && (
+        {!loading && error && (
+          <div style={{ padding: 16, textAlign: 'center', color: 'var(--error)', fontSize: 12 }}>
+            Failed to scan projects: {error}
+          </div>
+        )}
+
+        {!loading && !error && filteredProjects.length === 0 && (
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
             {searchQuery ? 'No matching projects' : 'No projects found in ~/.claude/projects/'}
           </div>
@@ -103,6 +109,9 @@ export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
               <FolderOpen size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {project.path.split(/[/\\]/).pop() || project.path}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {project.path}
                 </div>
               </div>
@@ -127,9 +136,9 @@ export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
                 >
                   <Star size={13} fill={isFav ? 'currentColor' : 'none'} />
                 </button>
-                {project.hasClaudeMd && (
+                {project.hasClaudeMd && onEditClaudeMd && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); onEditClaudeMd?.(project); }}
+                    onClick={(e) => { e.stopPropagation(); onEditClaudeMd(project); }}
                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
                     title="Edit CLAUDE.md"
                   >
