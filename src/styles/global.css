@@ -2145,9 +2145,14 @@ body,
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 12px;
+  padding: 16px 12px;
   outline: none;
+  width: 100%;
   max-width: 560px;
+  /* Centered column; full height so the More row can sit at the bottom */
+  margin: 0 auto;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .nsw-step { display: flex; flex-direction: column; gap: 6px; }
@@ -2223,7 +2228,12 @@ body,
   flex-wrap: wrap;
   padding-top: 10px;
   border-top: 1px solid var(--border);
+  /* Out of the way: pinned to the panel bottom, quiet until hovered */
+  margin-top: auto;
+  opacity: 0.55;
+  transition: opacity 0.15s;
 }
+.nsw-more:hover { opacity: 1; }
 .nsw-more__label {
   font-size: 10px;
   font-weight: 600;

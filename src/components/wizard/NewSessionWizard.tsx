@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { KeyRound, BadgeCheck, MessageSquare, SquareTerminal, Folder as FolderIcon, Puzzle } from 'lucide-react';
+import { KeyRound, BadgeCheck, MessageSquare, SquareTerminal, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -406,8 +406,12 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       {/* Footer: Advanced + Add */}
       {s.route && meta && (
         <div className="nsw-step">
-          <button className="btn btn-secondary btn-sm" onClick={() => s.set({ showAdvanced: !s.showAdvanced })}>
-            Advanced {s.showAdvanced ? '⌃' : '⌄'}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => s.set({ showAdvanced: !s.showAdvanced })}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            Advanced {s.showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           {s.showAdvanced && meta.branch === 'claude' && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
