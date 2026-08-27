@@ -212,8 +212,15 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       const free = list.filter((m) => m.endsWith(':free'));
       if (free.length > 0) list = free;
     }
-    const q = modelSearch.trim().toLowerCase();
-    if (q) list = list.filter((m) => m.toLowerCase().includes(q));
+    // Tokenized: "ox alpha" matches "openrouter/ox-alpha" — every word must
+    // appear somewhere in the id, order-independent.
+    const tokens = modelSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length) {
+      list = list.filter((m) => {
+        const id = m.toLowerCase();
+        return tokens.every((t) => id.includes(t));
+      });
+    }
     return list;
   })();
 
@@ -347,17 +354,28 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           ) : (
             <>
               {models.length > 12 && (
-                <input
-                  className="form-input"
-                  value={modelSearch}
-                  onChange={(e) => {
-                    setModelSearch(e.target.value);
-                    // Keep the selection in sync with what's visible
-                    s.set({ routeModel: '' });
-                  }}
-                  placeholder={`Search ${models.length} models…`}
-                  style={{ marginBottom: 6 }}
-                />
+                <div className="form-row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                  <input
+                    className="form-input form-input-grow"
+                    value={modelSearch}
+                    onChange={(e) => {
+                      setModelSearch(e.target.value);
+                      // Keep the selection in sync with what's visible
+                      s.set({ routeModel: '' });
+                    }}
+                    placeholder={`Search ${models.length} models…`}
+                  />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {visibleModels.length} / {models.length}
+                  </span>
+                </div>
               )}
               <div className="form-row" style={{ gap: 8, alignItems: 'center' }}>
                 {visibleModels.length > 0 ? (
