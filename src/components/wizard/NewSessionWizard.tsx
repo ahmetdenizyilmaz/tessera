@@ -208,9 +208,17 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   const visibleModels = (() => {
     let list = models;
-    if (s.route === 'gw-openrouter' && s.freeOnly) {
-      const free = list.filter((m) => m.endsWith(':free'));
-      if (free.length > 0) list = free;
+    if (s.route === 'gw-openrouter') {
+      // openrouter/free is the zero-cost auto-router (picks an available free
+      // model for you) — it doesn't carry the :free suffix but IS free.
+      const isFree = (m: string) => m.endsWith(':free') || m === 'openrouter/free';
+      if (s.freeOnly) {
+        const free = list.filter(isFree);
+        if (free.length > 0) list = free;
+      }
+      if (list.includes('openrouter/free')) {
+        list = ['openrouter/free', ...list.filter((m) => m !== 'openrouter/free')];
+      }
     }
     // Tokenized: "ox alpha" matches "openrouter/ox-alpha" — every word must
     // appear somewhere in the id, order-independent.
