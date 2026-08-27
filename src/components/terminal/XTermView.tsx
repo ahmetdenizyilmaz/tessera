@@ -396,11 +396,24 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       });
     }
 
-    // ResizeObserver -> fit immediately (visual feel), but debounce the
-    // pty_resize IPC 100ms trailing — a gutter drag fires the observer every
-    // pointer-move frame, and each ConPTY resize makes the CLI redraw its
-    // whole TUI, feeding back into the output event storm.
+    // ResizeObserver -> fit immediately (visual feel). The pty_resize IPC is
+    // leading + trailing debounced: a DISCRETE jump (focus change — the
+    // content wrapper snaps to final size in one step) reaches ConPTY at
+    // once, so the CLI redraws its TUI during the tile animation instead of
+    // after it. Rapid sequences (gutter drags fire the observer every
+    // pointer-move frame) still coalesce on the 100ms trailing edge — each
+    // ConPTY resize makes the CLI redraw its whole TUI, feeding back into
+    // the output event storm.
     let resizeDebounce: number | null = null;
+    let lastPtyResize = 0;
+    const sendPtyResize = () => {
+      const c = terminal.cols;
+      const r = terminal.rows;
+      if (c > 0 && r > 0) {
+        lastPtyResize = Date.now();
+        resize(c, r);
+      }
+    };
     const resizeObserver = new ResizeObserver(() => {
       if (!isMountedRef.current) return;
       try {
@@ -408,15 +421,15 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       } catch {
         // Ignore fit errors
       }
+      if (resizeDebounce === null && Date.now() - lastPtyResize > 150) {
+        sendPtyResize();
+        return;
+      }
       if (resizeDebounce !== null) clearTimeout(resizeDebounce);
       resizeDebounce = window.setTimeout(() => {
         resizeDebounce = null;
         if (!isMountedRef.current) return;
-        const c = terminal.cols;
-        const r = terminal.rows;
-        if (c > 0 && r > 0) {
-          resize(c, r);
-        }
+        sendPtyResize();
       }, 100);
     });
     resizeObserver.observe(container);
