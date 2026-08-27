@@ -51,11 +51,17 @@ export const UsageModal: React.FC<UsageModalProps> = ({ isOpen, onClose }) => {
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ minWidth: 520 }}>
-        <h2>Session usage</h2>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-6px 0 12px' }}>
-          Live totals for the panels in this workspace
+        <div className="dialog-header">
+          <div>
+            <h3 className="dialog-title">Session usage</h3>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              Live totals for the panels in this workspace
+            </div>
+          </div>
+          <button className="dialog-close-btn" onClick={onClose}>{'×'}</button>
         </div>
 
+        <div className="dialog-body">
         {entries.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 24 }}>
             No usage data available yet.
@@ -108,14 +114,17 @@ export const UsageModal: React.FC<UsageModalProps> = ({ isOpen, onClose }) => {
                       </div>
                       <div style={numCol}>{formatTokens(e.inputTokens)}</div>
                       <div style={numCol}>{formatTokens(e.outputTokens)}</div>
-                      <div style={{ ...numCol, color: 'var(--text-primary)', fontWeight: 600 }}>
-                        {formatCost(e.totalCostUsd)}
+                      <div style={{ ...numCol, color: e.totalCostUsd > 0 ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+                        {e.totalCostUsd > 0 ? formatCost(e.totalCostUsd) : '—'}
                       </div>
                     </div>
-                    {/* cost share vs the most expensive session — one hue, data-end rounded */}
-                    <div style={{ height: 3, marginTop: 6, background: 'rgba(61, 135, 224, 0.12)', borderRadius: '0 2px 2px 0' }}>
-                      <div style={{ height: '100%', width: `${share}%`, background: MAGNITUDE, borderRadius: '0 2px 2px 0' }} />
-                    </div>
+                    {/* cost share vs the most expensive session — one hue, data-end
+                        rounded; sessions that haven't spent yet get no bar */}
+                    {e.totalCostUsd > 0 && (
+                      <div style={{ height: 3, marginTop: 6, background: 'rgba(61, 135, 224, 0.12)', borderRadius: '0 2px 2px 0' }}>
+                        <div style={{ height: '100%', width: `${share}%`, background: MAGNITUDE, borderRadius: '0 2px 2px 0' }} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -141,8 +150,9 @@ export const UsageModal: React.FC<UsageModalProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
         )}
+        </div>
 
-        <div className="dialog-actions" style={{ justifyContent: 'space-between' }}>
+        <div className="dialog-footer">
           <button className="btn btn-secondary" onClick={openAnalytics}>
             Open analytics
           </button>
