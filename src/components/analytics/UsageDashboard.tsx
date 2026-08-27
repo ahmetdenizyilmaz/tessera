@@ -5,7 +5,7 @@ import TokenChart from './TokenChart';
 import CostBreakdown from './CostBreakdown';
 import { TimelineChart } from './TimelineChart';
 import { ProjectBreakdown } from './ProjectBreakdown';
-import { AnalyticsSummaryCards } from './AnalyticsSummaryCards';
+import { AnalyticsSummaryCards, type SummaryDeltas } from './AnalyticsSummaryCards';
 
 interface AnalyticsSummary {
   total_cost_usd: number;
@@ -46,6 +46,7 @@ export default function UsageDashboard() {
   const [startDate, setStartDate] = useState(thirtyDaysAgo);
   const [endDate, setEndDate] = useState(today);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [deltas, setDeltas] = useState<SummaryDeltas | undefined>(undefined);
   const [projectData, setProjectData] = useState<ProjectCost[]>([]);
   const [timelineData, setTimelineData] = useState<TimeCost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,6 +62,33 @@ export default function UsageDashboard() {
         startDate, endDate,
       });
       setSummary(data);
+
+      // Period-over-period deltas: compare against the previous window of the
+      // same length. Skip for open-ended "All Time" ranges.
+      const startMs = new Date(startDate).getTime();
+      const endMs = new Date(endDate).getTime();
+      const lenDays = Math.round((endMs - startMs) / 86400000) + 1;
+      if (lenDays > 0 && lenDays <= 92) {
+        const prevEnd = new Date(startMs - 86400000).toISOString().slice(0, 10);
+        const prevStart = new Date(startMs - lenDays * 86400000).toISOString().slice(0, 10);
+        try {
+          const prev = await invoke<AnalyticsSummary>('analytics_summary', {
+            startDate: prevStart, endDate: prevEnd,
+          });
+          const pct = (cur: number, before: number) =>
+            before > 0 ? ((cur - before) / before) * 100 : null;
+          setDeltas({
+            cost: pct(data.total_cost_usd, prev.total_cost_usd),
+            inputTokens: pct(data.total_input_tokens, prev.total_input_tokens),
+            outputTokens: pct(data.total_output_tokens, prev.total_output_tokens),
+            sessions: pct(data.records_count, prev.records_count),
+          });
+        } catch {
+          setDeltas(undefined);
+        }
+      } else {
+        setDeltas(undefined);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -223,6 +251,7 @@ export default function UsageDashboard() {
               totalInputTokens={summary.total_input_tokens}
               totalOutputTokens={summary.total_output_tokens}
               sessionsCount={summary.records_count}
+              deltas={deltas}
             />
 
             {/* Token chart */}

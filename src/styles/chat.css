@@ -3019,7 +3019,9 @@
 .analytics-summary-card__value {
   font-size: 20px;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  /* Values wear ink, not series colors; proportional figures — tabular digits
+     look loose at display sizes and these numbers never need to column-align */
+  color: var(--text-primary);
 }
 
 .analytics-summary-card__label {

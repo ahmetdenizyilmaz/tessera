@@ -1,5 +1,6 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { SERIES, MAGNITUDE, GRID, AXIS_TICK, TOOLTIP_STYLE, formatAxisTokens, formatShortDate } from './chartTheme';
 
 interface TimelineChartProps {
   data: Array<{ period: string; input_tokens: number; output_tokens: number; cost_usd: number }>;
@@ -14,20 +15,45 @@ export const TimelineChart: React.FC<TimelineChartProps> = ({ data, mode }) => {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-        <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis
+          dataKey="period"
+          tick={AXIS_TICK}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={formatShortDate}
+        />
+        <YAxis
+          tick={AXIS_TICK}
+          axisLine={false}
+          tickLine={false}
+          width={44}
+          tickFormatter={mode === 'tokens' ? formatAxisTokens : (v: number) => `$${v}`}
+        />
         <Tooltip
-          contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}
-          labelStyle={{ color: 'var(--text-primary)' }}
+          contentStyle={TOOLTIP_STYLE}
+          labelStyle={{ color: 'var(--text-secondary)' }}
+          cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
+          formatter={(value: number, name: string) => [
+            mode === 'cost' ? `$${value.toFixed(4)}` : value.toLocaleString(),
+            name,
+          ]}
         />
         {mode === 'tokens' ? (
           <>
-            <Area type="monotone" dataKey="input_tokens" stackId="1" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3} name="Input" />
-            <Area type="monotone" dataKey="output_tokens" stackId="1" stroke="var(--success)" fill="var(--success)" fillOpacity={0.3} name="Output" />
+            {/* two stacked series: legend is mandatory; fills are a ~10% wash
+                so the 2px strokes stay the data marks */}
+            <Legend
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize: 11, color: 'var(--text-secondary)' }}
+            />
+            <Area type="monotone" dataKey="input_tokens" stackId="1" stroke={SERIES.input} strokeWidth={2} fill={SERIES.input} fillOpacity={0.12} name="Input" />
+            <Area type="monotone" dataKey="output_tokens" stackId="1" stroke={SERIES.output} strokeWidth={2} fill={SERIES.output} fillOpacity={0.12} name="Output" />
           </>
         ) : (
-          <Area type="monotone" dataKey="cost_usd" stroke="var(--warning)" fill="var(--warning)" fillOpacity={0.3} name="Cost ($)" />
+          // single series: the mode toggle names it, no legend box
+          <Area type="monotone" dataKey="cost_usd" stroke={MAGNITUDE} strokeWidth={2} fill={MAGNITUDE} fillOpacity={0.12} name="Cost" />
         )}
       </AreaChart>
     </ResponsiveContainer>
