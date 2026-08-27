@@ -49,6 +49,9 @@ export interface SavedLayout {
   stealFraction: StealFraction;
   panelTypes: Record<string, PanelType>;
   widgetKinds: Record<string, string>;
+  /** Per-slot heights for the 5+ layout's sidebar stack. Optional — older
+   *  snapshots simply restore with equal slots. */
+  sidebarSlotFractions?: number[];
 }
 
 export interface SavedPlugin {
@@ -124,6 +127,8 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
       // inside groups), so always take the live values
       panelTypes: { ...ls.panelTypes },
       widgetKinds: { ...ls.widgetKinds },
+      // Sidebar slot sizes are a user preference shared across layouts
+      sidebarSlotFractions: [...ls.sidebarSlotFractions],
     },
     groups: serializedGroups,
     plugins: Array.from(pluginInstances.values()).map((p) => ({
@@ -400,6 +405,10 @@ export function deserializeWorkspace(raw: unknown): void {
       if (keepId(nid)) newPanelRects.set(nid, rect);
     }
 
+    const slotFractions = Array.isArray(layout.sidebarSlotFractions)
+      ? layout.sidebarSlotFractions.filter((f) => Number.isFinite(f) && f > 0)
+      : [];
+
     // Guard: if the saved config/rects no longer cover the tab set (e.g. a
     // panel was moved to root while inside a group), fall back to a default
     if (newTabOrder.length > 0) {
@@ -407,7 +416,7 @@ export function deserializeWorkspace(raw: unknown): void {
         newLayoutConfig = getDefaultConfig(newTabOrder, newFocusedId);
       }
       if (newPanelRects.size !== newTabOrder.length) {
-        newPanelRects = computeRects(newLayoutConfig, newFocusedId, stealFraction);
+        newPanelRects = computeRects(newLayoutConfig, newFocusedId, stealFraction, slotFractions);
       }
     }
 
@@ -432,6 +441,7 @@ export function deserializeWorkspace(raw: unknown): void {
       stealFraction,
       newPanelTypes,
       newWidgetKinds,
+      slotFractions,
     );
   } else {
     // No saved layout: add panels for each instance

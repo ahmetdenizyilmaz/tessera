@@ -70,10 +70,32 @@ export function focusAxis(
 
 // ─── Compute Rects ──────────────────────────────────────────────────────────
 
+/** Normalize saved per-slot sidebar fractions to n slots summing to 100.
+ *  Empty/missing/degenerate input falls back to equal heights; every slot is
+ *  floored at 5% so none can collapse invisible. */
+export function normalizeSideFractions(
+  fractions: number[] | undefined | null,
+  n: number,
+): number[] {
+  if (n <= 0) return [];
+  const equal = Array(n).fill(100 / n);
+  if (!fractions || fractions.length === 0) return equal;
+  const take = fractions
+    .slice(0, n)
+    .map((f) => (Number.isFinite(f) && f > 0 ? f : 1 / n));
+  while (take.length < n) take.push(1 / n);
+  const sum = take.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return equal;
+  const floored = take.map((f) => Math.max(5, (f / sum) * 100));
+  const fsum = floored.reduce((a, b) => a + b, 0);
+  return floored.map((p) => (p / fsum) * 100);
+}
+
 export function computeRects(
   config: LayoutConfig,
   focusedId: string | null,
   stealFraction: StealFraction,
+  sideFractions?: number[] | null,
 ): Map<string, PanelRect> {
   const rects = new Map<string, PanelRect>();
   const order = config.panelOrder;
@@ -255,10 +277,14 @@ export function computeRects(
       // Main panel (top-left area)
       rects.set(mainId, { x: 0, y: 0, w: 100 - SIDE, h: mainH });
 
-      // Sidebar panels (stacked vertically in the right 20%, always full height)
-      const sideH = 100 / sideIds.length;
+      // Sidebar panels (stacked vertically in the right 20%, always full
+      // height). Heights are per-SLOT: a resized slot keeps its fraction no
+      // matter which panel rotates into it on reorder/focus changes.
+      const sideFracs = normalizeSideFractions(sideFractions, sideIds.length);
+      let sideY = 0;
       sideIds.forEach((id, i) => {
-        rects.set(id, { x: 100 - SIDE, y: i * sideH, w: SIDE, h: sideH });
+        rects.set(id, { x: 100 - SIDE, y: sideY, w: SIDE, h: sideFracs[i] });
+        sideY += sideFracs[i];
       });
 
       // Bottom panels (equal widths, spanning only the main area width)
@@ -589,6 +615,10 @@ interface LayoutState {
   layoutConfig: LayoutConfig | null;
   panelRects: Map<string, PanelRect>;
   stealFraction: StealFraction;
+  /** Per-slot height fractions for the 5+ layout's sidebar stack (top to
+   *  bottom, normalized at use). Empty = equal split. Sizes belong to the
+   *  SLOT, not the panel — reordering keeps the stack shape. */
+  sidebarSlotFractions: number[];
   panelTypes: Record<string, PanelType>;
   widgetKinds: Record<string, string>;
   sidebarDragging: boolean;
@@ -609,6 +639,7 @@ interface LayoutState {
     stealFraction: StealFraction,
     panelTypes?: Record<string, PanelType>,
     widgetKinds?: Record<string, string>,
+    sidebarSlotFractions?: number[],
   ) => void;
   setActiveTab: (id: string | null) => void;
   setFocused: (id: string | null) => void;
@@ -628,11 +659,12 @@ function recompute(
   focusedId: string | null,
   stealFraction: StealFraction,
   currentConfig: LayoutConfig | null,
+  sideFractions?: number[],
 ): { layoutConfig: LayoutConfig; panelRects: Map<string, PanelRect> } {
   const config = currentConfig && currentConfig.panelOrder.length === tabOrder.length
     ? { ...currentConfig, panelOrder: [...tabOrder] }
     : getDefaultConfig(tabOrder, focusedId);
-  const rects = computeRects(config, focusedId, stealFraction);
+  const rects = computeRects(config, focusedId, stealFraction, sideFractions);
   return { layoutConfig: config, panelRects: rects };
 }
 
@@ -645,6 +677,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   layoutConfig: null,
   panelRects: new Map(),
   stealFraction: { x: 0.5, y: 0.5 },
+  sidebarSlotFractions: [],
   panelTypes: {},
   widgetKinds: {},
   sidebarDragging: false,
@@ -673,6 +706,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       id,
       state.stealFraction,
       null, // Force new default config when panel count changes
+      state.sidebarSlotFractions,
     );
 
     const newState = {
@@ -714,9 +748,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
     if (zone && newOrder.length >= 2) {
       layoutConfig = buildSnapConfig(newOrder, id, zone, null);
-      panelRects = computeRects(layoutConfig, id, state.stealFraction);
+      panelRects = computeRects(layoutConfig, id, state.stealFraction, state.sidebarSlotFractions);
     } else {
-      const result = recompute(newOrder, id, state.stealFraction, null);
+      const result = recompute(newOrder, id, state.stealFraction, null, state.sidebarSlotFractions);
       layoutConfig = result.layoutConfig;
       panelRects = result.panelRects;
     }
@@ -775,6 +809,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       newFocused,
       state.stealFraction,
       null,
+      state.sidebarSlotFractions,
     );
 
     const newState = {
@@ -790,8 +825,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     };
     set(newState);  },
 
-  restoreLayout: (tabOrder, activeTabId, focusedId, layoutConfig, panelRects, stealFraction, panelTypes, widgetKinds) => {
-    set({
+  restoreLayout: (tabOrder, activeTabId, focusedId, layoutConfig, panelRects, stealFraction, panelTypes, widgetKinds, sidebarSlotFractions) => {
+    set((state) => ({
       layout: tabOrder[0] ?? null,
       tabOrder,
       activeTabId,
@@ -805,7 +840,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       stealFraction,
       panelTypes: panelTypes ?? {},
       widgetKinds: widgetKinds ?? {},
-    });  },
+      // Callers that don't know about slot fractions keep the current ones.
+      sidebarSlotFractions: sidebarSlotFractions ?? state.sidebarSlotFractions,
+    }));  },
 
   setActiveTab: (id: string | null) => {
     // While maximized, picking a tab swaps which panel fills the area rather
@@ -870,7 +907,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }
     }
 
-    const rects = computeRects(config, id, state.stealFraction);
+    const rects = computeRects(config, id, state.stealFraction, state.sidebarSlotFractions);
     set({ focusedId: id, layoutConfig: config, panelRects: rects });  },
 
   moveTab: (fromIndex: number, toIndex: number) => {
@@ -900,6 +937,20 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const state = get();
     if (!state.layoutConfig) return;
 
+    // Main+sidebar layout: a y-drag is a sidebar-slot divider. Capture the
+    // dragged heights as per-SLOT fractions and leave stealFraction alone —
+    // deriveStealFraction reads the main panel here and would corrupt the
+    // fraction used by the 2-4 panel layouts.
+    const type = state.layoutConfig.type;
+    if ((type === 'main' || type === 'grid') && gutterAxis === 'y') {
+      const sideIds = state.layoutConfig.panelOrder.slice(1, 5);
+      const heights = sideIds.map((id) => state.panelRects.get(id)?.h ?? 0);
+      if (heights.every((h) => h > 0)) {
+        set({ sidebarSlotFractions: heights });
+      }
+      return;
+    }
+
     const newFraction = deriveStealFraction(
       state.layoutConfig,
       state.focusedId,
@@ -915,8 +966,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (!state.layoutConfig) return;
 
     const reset = { x: 0.5, y: 0.5 };
-    const rects = computeRects(state.layoutConfig, state.focusedId, reset);
-    set({ stealFraction: reset, panelRects: rects });  },
+    // Gutter double-click resets sidebar slots to equal heights too.
+    const rects = computeRects(state.layoutConfig, state.focusedId, reset, []);
+    set({ stealFraction: reset, sidebarSlotFractions: [], panelRects: rects });  },
 
   clearPanelRects: () => {
     set({ panelRects: new Map() });
@@ -925,7 +977,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   applySnap: (snappedId: string, zone: SnapZone) => {
     const state = get();
     const config = buildSnapConfig(state.tabOrder, snappedId, zone, state.layoutConfig);
-    const rects = computeRects(config, state.focusedId, state.stealFraction);
+    const rects = computeRects(config, state.focusedId, state.stealFraction, state.sidebarSlotFractions);
 
     set({ layoutConfig: config, panelRects: rects });  },
 }));

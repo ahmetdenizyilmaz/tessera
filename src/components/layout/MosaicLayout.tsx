@@ -145,16 +145,17 @@ export function MosaicLayout() {
   }, []);
 
   // Display rects: preview snap layout during drag
+  const sidebarSlotFractions = useLayoutStore((s) => s.sidebarSlotFractions);
   const displayRects = useMemo((): Map<string, PanelRect> => {
     if (draggingId && layoutConfig) {
       if (activeSnap) {
         const preview = buildSnapConfig(tabOrder, draggingId, activeSnap, layoutConfig);
-        return computeRects(preview, focusedId, stealFraction);
+        return computeRects(preview, focusedId, stealFraction, sidebarSlotFractions);
       }
-      return computeRects(layoutConfig, focusedId, stealFraction);
+      return computeRects(layoutConfig, focusedId, stealFraction, sidebarSlotFractions);
     }
     return panelRects;
-  }, [draggingId, activeSnap, tabOrder, layoutConfig, panelRects, stealFraction, focusedId]);
+  }, [draggingId, activeSnap, tabOrder, layoutConfig, panelRects, stealFraction, focusedId, sidebarSlotFractions]);
 
   // Override rects during group enter/exit animation
   const animatedRects = useMemo((): Map<string, PanelRect> => {

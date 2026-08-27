@@ -82,7 +82,7 @@ function applyLayoutFromGroup(group: GroupState) {
     : getDefaultConfig(childIds, group.focusedChildId);
   const rects = group.panelRects.size === childIds.length
     ? group.panelRects
-    : computeRects(config, group.focusedChildId, group.stealFraction);
+    : computeRects(config, group.focusedChildId, group.stealFraction, ls.sidebarSlotFractions);
 
   ls.restoreLayout(
     childIds,
@@ -112,7 +112,7 @@ function restoreLayoutFromSaved(saved: SavedLayoutState) {
       config = getDefaultConfig(saved.tabOrder, saved.focusedId);
     }
     if (rects.size !== saved.tabOrder.length) {
-      rects = computeRects(config, saved.focusedId, saved.stealFraction);
+      rects = computeRects(config, saved.focusedId, saved.stealFraction, ls.sidebarSlotFractions);
     }
   }
 
