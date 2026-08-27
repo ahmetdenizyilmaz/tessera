@@ -3,7 +3,7 @@ import { useProjectStore, type ProjectInfo } from '../../store/projectStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { FolderOpen, FileText, Plus, RefreshCw, Search, Star, Pin } from 'lucide-react';
+import { FolderOpen, FileText, MessageSquare, SquareTerminal, RefreshCw, Search, Star, Pin } from 'lucide-react';
 
 interface ProjectBrowserProps {
   onEditClaudeMd?: (project: ProjectInfo) => void;
@@ -18,8 +18,9 @@ export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
 
   const filteredProjects = getFilteredProjects();
 
-  const handleCreateInstance = useCallback((project: ProjectInfo) => {
+  const handleCreateInstance = useCallback((project: ProjectInfo, panelView: 'chat' | 'terminal') => {
     const settings = useSettingsStore.getState().settings;
+    const name = project.path.split(/[/\\]/).pop() || project.name;
     const id = useInstanceStore.getState().addInstance({
       cwd: project.path,
       model: settings.defaultModel,
@@ -29,8 +30,10 @@ export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
       maxBudget: 0,
       systemPrompt: '',
       agentMode: settings.defaultAgentMode,
-    }, project.name);
+      panelView,
+    }, name);
     useLayoutStore.getState().addPanel(id);
+    useLayoutStore.getState().setActiveTab(id);
   }, []);
 
   return (
@@ -146,11 +149,18 @@ export function ProjectBrowser({ onEditClaudeMd }: ProjectBrowserProps) {
                   </button>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleCreateInstance(project); }}
+                  onClick={(e) => { e.stopPropagation(); handleCreateInstance(project, 'chat'); }}
                   style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 2 }}
-                  title="Open in new instance"
+                  title="Open as chat panel"
                 >
-                  <Plus size={14} />
+                  <MessageSquare size={13} />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleCreateInstance(project, 'terminal'); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 2 }}
+                  title="Open as terminal panel"
+                >
+                  <SquareTerminal size={13} />
                 </button>
               </div>
             </div>

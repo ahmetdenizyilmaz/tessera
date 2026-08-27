@@ -7,6 +7,7 @@ import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useProjectStore } from '../../store/projectStore';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
 import type { InstanceConfig } from '../../types/instance';
 
@@ -117,6 +118,14 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
     return filtered.length > 0 ? filtered : source;
   })();
   const effectiveRouteModel = routeModel || routeVisibleModels[0] || '';
+
+  // Known projects for the directory picker — scan lazily when the dialog opens
+  const projects = useProjectStore((s) => s.projects);
+  useEffect(() => {
+    if (isOpen && projects.length === 0) {
+      useProjectStore.getState().fetchProjects();
+    }
+  }, [isOpen, projects.length]);
 
   // BUG-1: Close dialog on Escape key
   useEffect(() => {
@@ -235,6 +244,25 @@ export const NewInstanceDialog: React.FC<NewInstanceDialogProps> = ({ isOpen, on
               onChange={(e) => setName(e.target.value)}
               placeholder="Instance name"
             />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Project</label>
+            <select
+              className="form-select"
+              value={projects.some((p) => p.path === cwd) ? cwd : ''}
+              onChange={(e) => { if (e.target.value) setCwd(e.target.value); }}
+            >
+              <option value="">Custom directory…</option>
+              {projects.map((p) => (
+                <option key={p.path} value={p.path}>
+                  {(p.path.split(/[/\\]/).pop() || p.path) + ' — ' + p.path}
+                </option>
+              ))}
+            </select>
+            <span className="form-hint">
+              Picking a project fills the working directory below; you can still edit it.
+            </span>
           </div>
 
           <div className="form-group">
