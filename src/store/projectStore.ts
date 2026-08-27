@@ -37,9 +37,11 @@ export const useProjectStore = create<ProjectState>()(
       fetchProjects: async () => {
         set({ loading: true, error: null });
         try {
-          // Scan ~/.claude/projects/ directory
-          const homeDir = await import('@tauri-apps/api/path').then(m => m.homeDir());
-          const claudeProjectsDir = `${homeDir}.claude/projects`;
+          // Scan ~/.claude/projects/ — join properly: homeDir() has no
+          // trailing separator, so string concatenation yielded the
+          // nonexistent "C:\Users\x.claude/projects" and an always-empty list.
+          const pathApi = await import('@tauri-apps/api/path');
+          const claudeProjectsDir = await pathApi.join(await pathApi.homeDir(), '.claude', 'projects');
 
           const { readDir, exists, readTextFileLines } = await import('@tauri-apps/plugin-fs');
           const dirExists = await exists(claudeProjectsDir);
