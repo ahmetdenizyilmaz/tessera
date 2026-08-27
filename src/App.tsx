@@ -33,6 +33,7 @@ import { useGroupStore } from './store/groupStore';
 import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
 import { registerBuiltins } from './lib/builtinPlugins';
+import { openNewSessionWizard, createPluginPanel } from './lib/newSessionActions';
 import type { LlmProvider } from './types/instance';
 
 // Register built-in plugins at module load (before any render)
@@ -100,26 +101,8 @@ export default function App() {
     }
   }, []);
 
-  const handleNewGroup = useCallback(() => {
-    if (!canAddPanel()) { notifyPanelLimit(); return; }
-    // Determine current group context (null = root)
-    const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-    // Create the group in groupStore
-    const groupId = useGroupStore.getState().createGroup(currentGroupId);
-    // Add as a panel in layoutStore so it appears in the mosaic
-    useLayoutStore.getState().addPanel(groupId, 'group');
-  }, []);
-
   const handleNewPlugin = useCallback((pluginName: string) => {
-    if (!canAddPanel()) { notifyPanelLimit(); return; }
-    const instanceId = usePluginStore.getState().createInstance(pluginName);
-    if (instanceId) {
-      useLayoutStore.getState().addPanel(instanceId, 'plugin');
-      const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-      if (currentGroupId) {
-        useGroupStore.getState().addToGroup(currentGroupId, instanceId);
-      }
-    }
+    createPluginPanel(pluginName);
   }, []);
 
   // Scan for external plugins on app init (built-ins registered at module load)
@@ -188,8 +171,8 @@ export default function App() {
             // Ctrl+Shift+N → quick create with default settings
             handleNewInstance();
           } else {
-            // Ctrl+N → open New Instance dialog
-            setShowNewInstance(true);
+            // Ctrl+N → open the new-session wizard panel
+            openNewSessionWizard();
           }
           break;
         case 's':
@@ -224,7 +207,7 @@ export default function App() {
       {showSplash && <SplashScreen onComplete={hideSplash} />}
       <div className="app" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
         <MenuBar
-          onNewInstance={() => setShowNewInstance(true)}
+          onNewInstance={openNewSessionWizard}
           onQuickInstance={handleNewInstance}
           onNewLlmChat={() => setShowNewLlm('openai')}
           onNewComputer={() => {
@@ -256,7 +239,7 @@ export default function App() {
 
         {viewMode === 'panels' ? (
           <>
-            <TabBar onNewInstance={(v) => handleNewInstance(v)} onNewInstanceSettings={() => setShowNewInstance(true)} onNewLlmChat={(p) => setShowNewLlm(p ?? 'openai')} onNewGroup={handleNewGroup} onNewPlugin={handleNewPlugin} />
+            <TabBar />
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
               <Sidebar />
               <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -271,7 +254,7 @@ export default function App() {
         )}
 
         <StatusBar
-          onNewInstance={handleNewInstance}
+          onNewInstance={openNewSessionWizard}
           onUsageClick={() => setShowUsage(true)}
         />
 

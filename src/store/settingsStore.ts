@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   openaiDefaultModel: 'gpt-4o',
   geminiDefaultModel: 'gemini-2.0-flash',
   theme: 'dark',
+  lastSessionPreset: null,
 };
 
 export const useSettingsStore = create<SettingsState>()(

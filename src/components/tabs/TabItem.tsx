@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle } from 'lucide-react';
+import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle, Plus } from 'lucide-react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -29,6 +29,7 @@ const WIDGET_TAB_INFO: Record<string, { icon: React.ReactNode; label: string }> 
   mcp: { icon: <Server size={13} />, label: 'MCP' },
   analytics: { icon: <BarChart3 size={13} />, label: 'Analytics' },
   timeline: { icon: <GitBranch size={13} />, label: 'Timeline' },
+  'new-session': { icon: <Plus size={13} />, label: 'New Session' },
 };
 
 interface TabItemProps {

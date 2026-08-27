@@ -1,5 +1,20 @@
-import type { InstanceConfig } from './instance';
+import type { InstanceConfig, LlmProvider } from './instance';
 import type { WorkspaceSnapshotV3 } from '../lib/workspaceSerializer';
+
+/** Everything the new-session wizard's "last used" quick tile needs to
+ *  recreate the previous session in one click. */
+export interface LastSessionPreset {
+  kind: 'claude' | 'llm';
+  panelView: 'chat' | 'terminal';
+  /** Claude branch: which gateway the CLI was routed through. */
+  gateway?: 'anthropic' | 'openrouter' | 'ollama' | 'custom';
+  routeModel?: string;
+  customBaseUrl?: string;
+  /** LLM branch: which API-chat provider. */
+  llmProvider?: Exclude<LlmProvider, 'claude'>;
+  model: string;
+  cwd: string;
+}
 
 export interface SessionInfo {
   sessionId: string;
@@ -67,6 +82,8 @@ export interface AppSettings {
   openaiDefaultModel: string;
   geminiDefaultModel: string;
   theme: string;
+  /** One-click recreate source for the wizard's quick tile. */
+  lastSessionPreset: LastSessionPreset | null;
 }
 
 export interface AdyFile {

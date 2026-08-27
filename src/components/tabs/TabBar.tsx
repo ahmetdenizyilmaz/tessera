@@ -23,12 +23,11 @@ import { TabContextMenu } from './TabContextMenu';
 import { SwitchSessionDialog } from '../dialogs/SwitchSessionDialog';
 import { startFreshSession } from '../../lib/sessionActions';
 import { GroupBreadcrumb } from '../groups/GroupBreadcrumb';
-import { NewPanelMenu } from '../plugins/NewPanelMenu';
+import { openNewSessionWizard } from '../../lib/newSessionActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { INSTANCE_COLORS } from '../../types/instance';
 import { closePanel } from '../../lib/panelCleanup';
-import type { LlmProvider } from '../../types/instance';
 
 // Shared drag state for cross-group operations
 // Anchored to globalThis to survive HMR
@@ -69,20 +68,11 @@ const crossGroupCollision: CollisionDetection = (args) => {
 
 const EMPTY_TAB_ORDER: string[] = [];
 
-interface TabBarProps {
-  onNewInstance?: (panelView?: 'chat' | 'terminal') => void;
-  onNewInstanceSettings?: () => void;
-  onNewLlmChat?: (provider?: Exclude<LlmProvider, 'claude'>) => void;
-  onNewGroup?: () => void;
-  onNewPlugin?: (pluginName: string) => void;
-}
-
-export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onNewGroup, onNewPlugin }: TabBarProps) {
+export function TabBar() {
   const tabOrder = useLayoutStore((s) => s.tabOrder ?? EMPTY_TAB_ORDER);
   const moveTab = useLayoutStore((s) => s.moveTab);
   const panelTypes = useLayoutStore((s) => s.panelTypes);
 
-  const [showAddMenu, setShowAddMenu] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const activeTabId = useLayoutStore((s) => s.activeTabId);
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -411,21 +401,11 @@ export function TabBar({ onNewInstance, onNewInstanceSettings, onNewLlmChat, onN
       <div style={{ position: 'relative' }}>
         <button
           className="tab-bar-add"
-          onClick={() => setShowAddMenu((v) => !v)}
-          title="New instance"
+          onClick={openNewSessionWizard}
+          title="New session"
         >
           +
         </button>
-        {showAddMenu && (
-          <NewPanelMenu
-            onClose={() => setShowAddMenu(false)}
-            onNewChat={(view) => onNewInstance?.(view)}
-            onNewChatSettings={onNewInstanceSettings ? () => onNewInstanceSettings() : undefined}
-            onNewLlmChat={(p) => onNewLlmChat?.(p)}
-            onNewGroup={() => onNewGroup?.()}
-            onNewPlugin={(name) => onNewPlugin?.(name)}
-          />
-        )}
       </div>
 
       {contextMenu && (

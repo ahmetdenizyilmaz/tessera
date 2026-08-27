@@ -1,4 +1,4 @@
-import { X, FolderOpen, Bot, Server, BarChart3, GitBranch } from 'lucide-react';
+import { X, FolderOpen, Bot, Server, BarChart3, GitBranch, Plus } from 'lucide-react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import AgentList from '../agents/AgentList';
@@ -6,6 +6,7 @@ import { McpManager } from '../mcp/McpManager';
 import { lazy, Suspense } from 'react';
 const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
+import NewSessionWizard from '../wizard/NewSessionWizard';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
   projects: { icon: <FolderOpen size={14} />, label: 'Projects' },
@@ -13,6 +14,7 @@ const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
   mcp: { icon: <Server size={14} />, label: 'MCP Servers' },
   analytics: { icon: <BarChart3 size={14} />, label: 'Analytics' },
   timeline: { icon: <GitBranch size={14} />, label: 'Timeline' },
+  'new-session': { icon: <Plus size={14} />, label: 'New Session' },
 };
 
 interface WidgetPanelProps {
@@ -36,6 +38,8 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
         return <McpManager />;
       case 'analytics':
         return <Suspense fallback={null}><UsageDashboard /></Suspense>;
+      case 'new-session':
+        return <NewSessionWizard instanceId={instanceId} />;
       case 'timeline': {
         // Show timeline for the focused non-widget panel, or first available
         const layoutState = useLayoutStore.getState();

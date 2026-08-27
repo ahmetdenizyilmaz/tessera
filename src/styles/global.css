@@ -2138,3 +2138,97 @@ body,
   cursor: default;
   white-space: nowrap;
 }
+
+/* ─── New Session Wizard (widget kind new-session) ─────────────────────── */
+
+.nsw {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  outline: none;
+  max-width: 560px;
+}
+
+.nsw-step { display: flex; flex-direction: column; gap: 6px; }
+
+.nsw-step__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nsw-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.nsw-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.nsw-tile:hover { border-color: var(--accent); }
+.nsw-tile--active { border-color: var(--accent); background: rgba(74, 158, 255, 0.1); }
+.nsw-tile--nokey { border-color: var(--error); opacity: 0.85; }
+
+.nsw-tile__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nsw-tile__badge { color: var(--error); flex-shrink: 0; }
+.nsw-tile__ok { color: var(--success); flex-shrink: 0; }
+
+.nsw-quick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.nsw-quick:hover { border-color: var(--accent); }
+.nsw-quick__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.nsw-more {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.nsw-more__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
