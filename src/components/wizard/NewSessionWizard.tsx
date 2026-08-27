@@ -43,6 +43,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   const [models, setModels] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
   const [keyDraft, setKeyDraft] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
@@ -62,6 +63,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
   // Model discovery per route
   useEffect(() => {
     setModels([]);
+    setModelSearch('');
     if (!s.route) return;
     const m = routeMeta(s.route);
     const discover = async (provider: string, baseUrl: string, apiKey: string | null) => {
@@ -204,9 +206,16 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
     createFromWizard(instanceId);
   };
 
-  const visibleModels = s.route === 'gw-openrouter' && s.freeOnly
-    ? (models.filter((m) => m.endsWith(':free')).length > 0 ? models.filter((m) => m.endsWith(':free')) : models)
-    : models;
+  const visibleModels = (() => {
+    let list = models;
+    if (s.route === 'gw-openrouter' && s.freeOnly) {
+      const free = list.filter((m) => m.endsWith(':free'));
+      if (free.length > 0) list = free;
+    }
+    const q = modelSearch.trim().toLowerCase();
+    if (q) list = list.filter((m) => m.toLowerCase().includes(q));
+    return list;
+  })();
 
   const modelRequirementMet = !s.route ? false
     : s.route === 'claude-sub' ? true
@@ -337,6 +346,19 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
             </div>
           ) : (
             <>
+              {models.length > 12 && (
+                <input
+                  className="form-input"
+                  value={modelSearch}
+                  onChange={(e) => {
+                    setModelSearch(e.target.value);
+                    // Keep the selection in sync with what's visible
+                    s.set({ routeModel: '' });
+                  }}
+                  placeholder={`Search ${models.length} models…`}
+                  style={{ marginBottom: 6 }}
+                />
+              )}
               <div className="form-row" style={{ gap: 8, alignItems: 'center' }}>
                 {visibleModels.length > 0 ? (
                   <select
@@ -368,6 +390,9 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               </div>
               {(s.route === 'gw-ollama' || s.route === 'api-ollama') && !modelsLoading && models.length === 0 && (
                 <span className="form-hint">No local models found — is Ollama running?</span>
+              )}
+              {modelSearch.trim() && visibleModels.length === 0 && models.length > 0 && (
+                <span className="form-hint">No models match "{modelSearch.trim()}"{s.freeOnly && s.route === 'gw-openrouter' ? ' — try unchecking Free only' : ''}</span>
               )}
               {importError && <span className="form-hint" style={{ color: 'var(--error)' }}>{importError}</span>}
             </>
