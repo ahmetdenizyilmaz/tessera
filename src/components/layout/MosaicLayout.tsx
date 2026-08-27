@@ -483,6 +483,23 @@ export function MosaicLayout() {
               pointerEvents: isHidden ? 'none' : undefined,
             }}
           >
+            {/* "Reveal" resize style: content is laid out at its FINAL size
+                immediately, pinned top-left; the animating tile edge sweeps
+                across it like a curtain. No mid-animation rewrap, and xterm
+                refits exactly once at the start instead of after the tween. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: containerSize.width > 0
+                  ? Math.max(0, (containerSize.width * rect.w) / 100 - GAP * 2 - 2)
+                  : '100%',
+                height: containerSize.height > 0
+                  ? Math.max(0, (containerSize.height * rect.h) / 100 - GAP * 2 - 2)
+                  : '100%',
+              }}
+            >
             {panelType === 'group'
               ? <GroupPreview groupId={id} />
               : panelType === 'widget'
@@ -495,6 +512,7 @@ export function MosaicLayout() {
               ? <PluginPanel instanceId={id} />
               : <TerminalPanel instanceId={id} />
             }
+            </div>
             {/* Unfocused panel overlay: blocks xterm interactions until clicked */}
             {!isFocused && !isDrag && tabOrder.length > 1 && (
               <div className="unfocused-overlay" />
