@@ -266,17 +266,18 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           : authVariant === 'apikey' ? 'API key' : 'Local / keyless';
         return (
           <button className="nsw-quick" onClick={() => applyPreset(preset)} title={`Recreate the last session (${authTitle})`}>
-            <PanelViewPreview kind={preset.panelView} size={52} />
-            <AuthBadgePreview variant={authVariant} size={52} />
-            <span className="nsw-quick__text">
-              <span className="nsw-quick__title">
-                Last used
+            <span className="nsw-quick__art">
+              <PanelViewPreview kind={preset.panelView} size={76} />
+              <span className="nsw-quick__badges">
+                <AuthBadgePreview variant={authVariant} size={30} />
                 <ProviderIcon
                   provider={preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!}
-                  size={15}
-                  style={{ marginLeft: 6, verticalAlign: 'text-bottom' }}
+                  size={16}
                 />
               </span>
+            </span>
+            <span className="nsw-quick__text">
+              <span className="nsw-quick__title">Last used</span>
               <span className="nsw-quick__hint">
                 {preset.kind === 'claude' ? (preset.routeModel || preset.model) : preset.model}
                 {preset.kind === 'claude' && preset.cwd ? ` · ${preset.cwd.split(/[\\/]/).pop()}` : ''}
