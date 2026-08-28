@@ -2203,22 +2203,39 @@ body,
 .nsw-quick {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 14px 16px;
+  min-height: 96px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-elevated);
   color: var(--text-primary);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  text-align: left;
+  box-sizing: border-box;
+  transition: border-color 0.15s, background 0.15s;
 }
-.nsw-quick:hover { border-color: var(--accent); }
-.nsw-quick__label {
+.nsw-quick:hover { border-color: var(--accent); background: rgba(74, 158, 255, 0.06); }
+.nsw-quick__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.nsw-quick__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+.nsw-quick__hint {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .nsw-more {

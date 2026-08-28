@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { KeyRound, BadgeCheck, MessageSquare, SquareTerminal, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp } from 'lucide-react';
+import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -9,6 +9,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
+import { AuthBadgePreview } from '../icons/AuthBadgePreview';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import {
   routeMeta, checkKey, saveKey, createFromWizard, replaceWizard,
@@ -254,25 +255,37 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   return (
     <div className="nsw" tabIndex={-1} onKeyDown={handleKeyDown}>
-      {/* Quick tile: last used configuration, one click */}
-      {preset && (
-        <button className="nsw-quick" onClick={() => applyPreset(preset)} title="Recreate the last session you set up">
-          {preset.panelView === 'terminal' ? <SquareTerminal size={14} /> : <MessageSquare size={14} />}
-          <ProviderIcon
-            provider={preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!}
-            size={14}
-          />
-          {(preset.kind === 'claude' && preset.gateway === 'anthropic')
-            ? <span title="Subscription login" style={{ display: 'inline-flex' }}><BadgeCheck size={14} /></span>
-            : (preset.kind === 'llm' && ['anthropic', 'openai', 'gemini'].includes(preset.llmProvider!)) || preset.gateway === 'openrouter'
-            ? <span title="API key" style={{ display: 'inline-flex' }}><KeyRound size={14} /></span>
-            : null}
-          <span className="nsw-quick__label">
-            Last used · {preset.kind === 'claude' ? (preset.routeModel || preset.model) : preset.model}
-            {preset.kind === 'claude' && preset.cwd ? ` · ${preset.cwd.split(/[\\/]/).pop()}` : ''}
-          </span>
-        </button>
-      )}
+      {/* Quick tile: last used configuration, one click — same visual
+          weight and schematic language as the session-type tiles below */}
+      {preset && (() => {
+        const authVariant =
+          (preset.kind === 'claude' && preset.gateway === 'anthropic') ? 'subscription' as const
+          : ((preset.kind === 'llm' && ['anthropic', 'openai', 'gemini'].includes(preset.llmProvider!)) || preset.gateway === 'openrouter') ? 'apikey' as const
+          : 'local' as const;
+        const authTitle = authVariant === 'subscription' ? 'Subscription login'
+          : authVariant === 'apikey' ? 'API key' : 'Local / keyless';
+        return (
+          <button className="nsw-quick" onClick={() => applyPreset(preset)} title={`Recreate the last session (${authTitle})`}>
+            <PanelViewPreview kind={preset.panelView} size={52} />
+            <AuthBadgePreview variant={authVariant} size={52} />
+            <span className="nsw-quick__text">
+              <span className="nsw-quick__title">
+                Last used
+                <ProviderIcon
+                  provider={preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!}
+                  size={15}
+                  style={{ marginLeft: 6, verticalAlign: 'text-bottom' }}
+                />
+              </span>
+              <span className="nsw-quick__hint">
+                {preset.kind === 'claude' ? (preset.routeModel || preset.model) : preset.model}
+                {preset.kind === 'claude' && preset.cwd ? ` · ${preset.cwd.split(/[\\/]/).pop()}` : ''}
+                {` · ${authTitle}`}
+              </span>
+            </span>
+          </button>
+        );
+      })()}
 
       {/* Step 1: panel view */}
       <div className="nsw-step">
