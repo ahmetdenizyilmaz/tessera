@@ -2205,7 +2205,7 @@ body,
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
-  min-height: 96px;
+  min-height: 110px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-elevated);
@@ -2225,8 +2225,8 @@ body,
 .nsw-quick__badges {
   /* inside the schematic's frame, lower-right, nudged left */
   position: absolute;
-  right: 9px;
-  bottom: 5px;
+  right: 10px;
+  bottom: 4px;
   display: flex;
   align-items: center;
   gap: 4px;

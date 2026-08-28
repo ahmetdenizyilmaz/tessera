@@ -45,7 +45,7 @@ export const PanelViewPreview: React.FC<{
       <rect x="4" y="15" width="3" height="2" rx="1" fill="#51cf66" />
       <rect x="9" y="15" width="16" height="2" rx="1" fill="currentColor" fillOpacity="0.5" />
       <rect x="4" y="20" width="3" height="2" rx="1" fill="#51cf66" />
-      <rect x="9" y="20" width={clearCorner ? 8 : 28} height="2" rx="1" fill="currentColor" fillOpacity="0.35" />
+      <rect x="9" y="20" width={clearCorner ? 4 : 28} height="2" rx="1" fill="currentColor" fillOpacity="0.35" />
       {/* cursor */}
       <rect x="4" y="25" width="3" height="2" rx="1" fill="#51cf66" />
       <rect x="9" y="25" width="4" height="2" rx="0.5" fill="#51cf66" fillOpacity="0.9" />

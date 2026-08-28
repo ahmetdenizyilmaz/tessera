@@ -278,12 +278,12 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         return (
           <button className="nsw-quick" onClick={() => applyPreset(preset)} title={`Recreate the last session (${authTitle})`}>
             <span className="nsw-quick__art">
-              <PanelViewPreview kind={preset.panelView} size={76} clearCorner />
+              <PanelViewPreview kind={preset.panelView} size={88} clearCorner />
               <span className="nsw-quick__badges">
-                <AuthBadgePreview variant={authVariant} size={26} />
+                <AuthBadgePreview variant={authVariant} size={32} />
                 {(() => {
                   const p = preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
-                  return <ProviderIcon provider={p} size={14} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
+                  return <ProviderIcon provider={p} size={17} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
                 })()}
               </span>
             </span>
