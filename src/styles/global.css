@@ -2227,15 +2227,11 @@ body,
 }
 .nsw-quick__badges {
   position: absolute;
-  right: -10px;
-  bottom: -8px;
+  right: -8px;
+  bottom: -6px;
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 6px;
-  border-radius: 7px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
 }
 .nsw-quick__text {
   display: flex;

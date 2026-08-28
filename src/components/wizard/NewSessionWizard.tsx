@@ -19,6 +19,17 @@ import type { LastSessionPreset } from '../../types/session';
 
 const CLAUDE_TIERS = ['opus', 'sonnet', 'fable', 'haiku'];
 
+/** Brand-ish colors so provider marks don't render as flat text-white. */
+const PROVIDER_COLORS: Record<string, string> = {
+  claude: '#D97757',
+  anthropic: '#D97757',
+  openai: '#10A37F',
+  openrouter: '#8B7CF6',
+  gemini: '#4285F4',
+  ollama: '#CCCCCC',
+  lmstudio: '#9B59B6',
+};
+
 const TERMINAL_ROUTES: WizardRoute[] = ['claude-sub', 'gw-openrouter', 'gw-ollama', 'gw-custom'];
 const CHAT_ROUTES: WizardRoute[] = [
   ...TERMINAL_ROUTES,
@@ -270,10 +281,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               <PanelViewPreview kind={preset.panelView} size={76} />
               <span className="nsw-quick__badges">
                 <AuthBadgePreview variant={authVariant} size={30} />
-                <ProviderIcon
-                  provider={preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!}
-                  size={16}
-                />
+                {(() => {
+                  const p = preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
+                  return <ProviderIcon provider={p} size={16} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
+                })()}
               </span>
             </span>
             <span className="nsw-quick__text">
@@ -329,7 +340,11 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
                   onClick={() => pickRoute(route)}
                   title={noKey ? `${m.label} — API key not set, click to add` : m.label}
                 >
-                  <ProviderIcon provider={routeIconProvider(route)} size={20} />
+                  <ProviderIcon
+                    provider={routeIconProvider(route)}
+                    size={20}
+                    style={{ color: PROVIDER_COLORS[routeIconProvider(route)] ?? 'currentColor' }}
+                  />
                   <span className="nsw-tile__label">{m.label}</span>
                   {noKey && <KeyRound size={12} className="nsw-tile__badge" />}
                   {route === 'claude-sub' && <BadgeCheck size={12} className="nsw-tile__ok" />}
