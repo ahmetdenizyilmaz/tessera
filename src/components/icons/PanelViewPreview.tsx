@@ -25,9 +25,9 @@ export const PanelViewPreview: React.FC<{
         {/* incoming bubble */}
         <rect x="4" y="9" width="20" height="5" rx="2.5" fill="currentColor" fillOpacity="0.45" />
         {/* outgoing bubble */}
-        <rect x="16" y="16" width={clearCorner ? 16 : 24} height="5" rx="2.5" fill="#4a9eff" fillOpacity="0.75" />
+        <rect x="16" y="16" width={clearCorner ? 14 : 24} height="5" rx="2.5" fill="#4a9eff" fillOpacity="0.75" />
         {/* input bar */}
-        <rect x="4" y="25" width={clearCorner ? 12 : 36} height="5" rx="2.5"
+        <rect x="4" y="25" width={clearCorner ? 8 : 36} height="5" rx="2.5"
           fill="none" stroke="currentColor" strokeOpacity="0.5" />
       </svg>
     );
