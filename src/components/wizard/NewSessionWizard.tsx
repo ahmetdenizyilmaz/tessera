@@ -278,7 +278,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         return (
           <button className="nsw-quick" onClick={() => applyPreset(preset)} title={`Recreate the last session (${authTitle})`}>
             <span className="nsw-quick__art">
-              <PanelViewPreview kind={preset.panelView} size={76} />
+              <PanelViewPreview kind={preset.panelView} size={76} clearCorner />
               <span className="nsw-quick__badges">
                 <AuthBadgePreview variant={authVariant} size={26} />
                 {(() => {

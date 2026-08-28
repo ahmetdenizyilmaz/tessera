@@ -8,7 +8,10 @@ import React from 'react';
 export const PanelViewPreview: React.FC<{
   kind: 'chat' | 'terminal';
   size?: number;
-}> = ({ kind, size = 44 }) => {
+  /** Leave the lower-right area empty so overlaid badges (wizard quick
+   *  tile) never sit on drawn elements. */
+  clearCorner?: boolean;
+}> = ({ kind, size = 44, clearCorner = false }) => {
   const w = size;
   const h = Math.round((size * 3) / 4);
 
@@ -22,9 +25,9 @@ export const PanelViewPreview: React.FC<{
         {/* incoming bubble */}
         <rect x="4" y="9" width="20" height="5" rx="2.5" fill="currentColor" fillOpacity="0.45" />
         {/* outgoing bubble */}
-        <rect x="16" y="16" width="24" height="5" rx="2.5" fill="#4a9eff" fillOpacity="0.75" />
+        <rect x="16" y="16" width={clearCorner ? 16 : 24} height="5" rx="2.5" fill="#4a9eff" fillOpacity="0.75" />
         {/* input bar */}
-        <rect x="4" y="25" width="36" height="5" rx="2.5"
+        <rect x="4" y="25" width={clearCorner ? 12 : 36} height="5" rx="2.5"
           fill="none" stroke="currentColor" strokeOpacity="0.5" />
       </svg>
     );
@@ -42,7 +45,7 @@ export const PanelViewPreview: React.FC<{
       <rect x="4" y="15" width="3" height="2" rx="1" fill="#51cf66" />
       <rect x="9" y="15" width="16" height="2" rx="1" fill="currentColor" fillOpacity="0.5" />
       <rect x="4" y="20" width="3" height="2" rx="1" fill="#51cf66" />
-      <rect x="9" y="20" width="28" height="2" rx="1" fill="currentColor" fillOpacity="0.35" />
+      <rect x="9" y="20" width={clearCorner ? 8 : 28} height="2" rx="1" fill="currentColor" fillOpacity="0.35" />
       {/* cursor */}
       <rect x="4" y="25" width="3" height="2" rx="1" fill="#51cf66" />
       <rect x="9" y="25" width="4" height="2" rx="0.5" fill="#51cf66" fillOpacity="0.9" />

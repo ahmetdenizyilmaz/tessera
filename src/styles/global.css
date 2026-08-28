@@ -2223,10 +2223,10 @@ body,
   flex-shrink: 0;
 }
 .nsw-quick__badges {
-  /* inside the schematic's frame, lower-right, nudged up-left */
+  /* inside the schematic's frame, lower-right, nudged left */
   position: absolute;
   right: 9px;
-  bottom: 8px;
+  bottom: 5px;
   display: flex;
   align-items: center;
   gap: 4px;
