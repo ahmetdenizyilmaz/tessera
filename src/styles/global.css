@@ -2221,17 +2221,15 @@ body,
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
-  /* room for the badge cluster overhanging the corner */
-  margin-right: 8px;
-  margin-bottom: 4px;
 }
 .nsw-quick__badges {
+  /* inside the schematic's frame, lower-right, nudged up-left */
   position: absolute;
-  right: -8px;
-  bottom: -6px;
+  right: 9px;
+  bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 .nsw-quick__text {
   display: flex;

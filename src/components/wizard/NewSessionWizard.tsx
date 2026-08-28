@@ -280,10 +280,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
             <span className="nsw-quick__art">
               <PanelViewPreview kind={preset.panelView} size={76} />
               <span className="nsw-quick__badges">
-                <AuthBadgePreview variant={authVariant} size={30} />
+                <AuthBadgePreview variant={authVariant} size={26} />
                 {(() => {
                   const p = preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
-                  return <ProviderIcon provider={p} size={16} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
+                  return <ProviderIcon provider={p} size={14} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
                 })()}
               </span>
             </span>
