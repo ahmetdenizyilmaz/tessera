@@ -232,6 +232,18 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
     return list;
   })();
 
+  // The select can only DISPLAY a default — commit it to the store, or the
+  // Add guard (and the created config) sees an empty model even though the
+  // dropdown looks chosen. Re-syncs whenever discovery/filter changes.
+  const visibleKey = visibleModels.join('|');
+  useEffect(() => {
+    if (!s.route || s.route === 'claude-sub' || s.route === 'gw-custom') return;
+    if (visibleModels.length === 0) return;
+    if (!s.routeModel || !visibleModels.includes(s.routeModel)) {
+      s.set({ routeModel: visibleModels[0] });
+    }
+  }, [visibleKey, s.route]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const modelRequirementMet = !s.route ? false
     : s.route === 'claude-sub' ? true
     : s.route === 'gw-custom' ? s.customBaseUrl.trim().length > 0
@@ -389,7 +401,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
                 {visibleModels.length > 0 ? (
                   <select
                     className="form-select form-input-grow"
-                    value={s.routeModel || visibleModels[0]}
+                    value={s.routeModel}
                     onChange={(e) => s.set({ routeModel: e.target.value })}
                   >
                     {visibleModels.map((m) => <option key={m} value={m}>{m}</option>)}
