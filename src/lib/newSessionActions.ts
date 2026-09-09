@@ -116,9 +116,14 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
 
   if (meta.branch === 'claude') {
     const cwd = s.cwd || (await homeDir().catch(() => ''));
+    // Routed sessions open directly ON the chosen gateway model: pass it as
+    // --model instead of a tier alias, so the session starts switched (the
+    // same as running /model immediately) and the TUI shows the real name.
+    // The routing env still maps the tier aliases as a fallback.
+    const routedModel = meta.gateway && meta.gateway !== 'anthropic' ? s.routeModel.trim() : '';
     const config: InstanceConfig = {
       cwd,
-      model: s.claudeTier,
+      model: routedModel || s.claudeTier,
       dangerouslySkipPermissions: s.skipPermissions,
       permissionMode: s.permissionMode,
       allowedTools: s.allowedTools.split(',').map((t) => t.trim()).filter(Boolean),
