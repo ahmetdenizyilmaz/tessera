@@ -908,7 +908,14 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     }
 
     const rects = computeRects(config, id, state.stealFraction, state.sidebarSlotFractions);
-    set({ focusedId: id, layoutConfig: config, panelRects: rects });  },
+    // Focusing a panel is selecting it: the tab strip highlight follows, so
+    // clicking inside the mosaic and clicking a tab stay one concept.
+    set({
+      focusedId: id,
+      layoutConfig: config,
+      panelRects: rects,
+      ...(id ? { activeTabId: id } : {}),
+    });  },
 
   moveTab: (fromIndex: number, toIndex: number) => {
     const state = get();
