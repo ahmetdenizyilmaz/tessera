@@ -44,14 +44,20 @@ Get-ChildItem -Path $srcDir -Filter '*.dll' | ForEach-Object {
     Write-Host ("  + " + $_.Name)
 }
 
-# Install the `cgui` CLI launcher into ~/.local/bin (already on PATH, where
-# `claude` lives) so `cgui` works from any directory.
+# Install the CLI launchers into ~/.local/bin (already on PATH, where
+# `claude` lives) so they work from any directory:
+#   cgui          - open a Tessera tab in the current folder
+#   claude-or     - Claude Code via OpenRouter (reuses the key saved in the app)
+#   claude-local  - Claude Code via local Ollama
+#   tessera-key   - helper that reads a saved key from Windows Credential Manager
 $binDir = Join-Path (Join-Path $env:USERPROFILE '.local') 'bin'
-$cguiSrc = Join-Path $PSScriptRoot 'cgui.cmd'
-if (Test-Path $cguiSrc) {
-    New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-    Copy-Item $cguiSrc -Destination (Join-Path $binDir 'cgui.cmd') -Force
-    Write-Host '  + cgui.cmd -> ~/.local/bin'
+New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+foreach ($tool in @('cgui.cmd', 'claude-or.cmd', 'claude-local.cmd', 'tessera-key.ps1')) {
+    $src = Join-Path $PSScriptRoot $tool
+    if (Test-Path $src) {
+        Copy-Item $src -Destination (Join-Path $binDir $tool) -Force
+        Write-Host ("  + " + $tool + " -> ~/.local/bin")
+    }
 }
 
 $info = Get-Item $target
