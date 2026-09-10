@@ -5,7 +5,7 @@ import { useSettingsStore } from './settingsStore';
  *  Claude Code sessions (subscription login / routed gateways); api-* entries
  *  are plain LLM chat panels via llm_create_session. */
 export type WizardRoute =
-  | 'claude-sub' | 'gw-openrouter' | 'gw-ollama' | 'gw-custom'
+  | 'codex' | 'claude-sub' | 'gw-openrouter' | 'gw-ollama' | 'gw-custom'
   | 'api-anthropic' | 'api-openai' | 'api-gemini' | 'api-lmstudio' | 'api-ollama';
 
 export interface WizardState {

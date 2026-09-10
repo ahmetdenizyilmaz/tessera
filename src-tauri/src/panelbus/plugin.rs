@@ -21,7 +21,7 @@ const CMD_ASK: &str = include_str!("../../resources/plugin/commands/ask-panel.md
 /// Absolute path of the installed plugin directory, or `None` if it could not
 /// be written (in which case sessions simply spawn without it).
 pub fn ensure_installed() -> Option<PathBuf> {
-    let root = dirs::home_dir()?.join(".tessera").join("plugin");
+    let root = crate::app_paths::data_dir().join("plugin");
 
     let files: [(&str, &str); 5] = [
         (".claude-plugin/plugin.json", PLUGIN_JSON),
@@ -50,10 +50,10 @@ pub fn ensure_installed() -> Option<PathBuf> {
 
 /// Where the plugin's slash commands live, for the app's own command popup.
 pub fn commands_dir() -> Option<PathBuf> {
-    Some(dirs::home_dir()?.join(".tessera").join("plugin").join("commands"))
+    Some(crate::app_paths::data_dir().join("plugin").join("commands"))
 }
 
 pub fn plugin_dir() -> Option<PathBuf> {
-    let dir = dirs::home_dir()?.join(".tessera").join("plugin");
+    let dir = crate::app_paths::data_dir().join("plugin");
     dir.exists().then_some(dir)
 }

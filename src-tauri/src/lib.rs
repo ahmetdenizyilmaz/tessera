@@ -1,3 +1,5 @@
+pub mod app_paths;
+pub mod codex;
 pub mod auth;
 pub mod computer;
 pub mod pty;
@@ -94,6 +96,7 @@ pub fn run() {
         .manage(PtyManager::new())
         .manage(RelayClient::new())
         .manage(StreamJsonManager::new())
+        .manage(codex::CodexManager::default())
         .manage(database)
         .manage(llm::manager::LlmManager::new())
         .manage(PostHogTracker::new())
@@ -105,6 +108,16 @@ pub fn run() {
             computer::handle_screenshot_protocol(request)
         })
         .invoke_handler(tauri::generate_handler![
+            // Codex commands
+            codex::codex_discover,
+            codex::codex_history,
+            codex::codex_read_thread,
+            codex::codex_configure,
+            codex::codex_send,
+            codex::codex_interrupt,
+            codex::codex_respond,
+            codex::codex_close,
+            codex::codex_terminal_spawn,
             // PTY commands
             pty::manager::pty_spawn,
             pty::manager::pty_write,
@@ -229,6 +242,7 @@ pub fn run() {
                 use tauri::Manager;
                 app.state::<PtyManager>().kill_all();
                 app.state::<StreamJsonManager>().kill_all();
+                app.state::<codex::CodexManager>().kill_all();
             }
         });
 }

@@ -17,6 +17,10 @@ pub struct PanelInfo {
     pub cwd: String,
     /// "chat" | "terminal" | "llm"
     pub kind: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub codex_config: Option<crate::codex::Config>,
     /// starting | running | stopped | error
     pub status: String,
     /// Mid-turn right now.

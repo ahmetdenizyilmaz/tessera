@@ -48,13 +48,14 @@ export function replaceWizard(wizardId: string, fn: () => void): void {
 
 /** Which keyring provider (if any) a route needs, and its display identity. */
 export function routeMeta(route: WizardRoute): {
-  branch: 'claude' | 'llm';
+  branch: 'claude' | 'llm' | 'codex';
   provider: Exclude<LlmProvider, 'claude'> | null;
   keyProvider: string | null;
   gateway?: ClaudeRouting['gateway'];
   label: string;
 } {
   switch (route) {
+    case 'codex': return { branch: 'codex', provider: null, keyProvider: null, label: 'Codex · CLI login' };
     case 'claude-sub': return { branch: 'claude', provider: null, keyProvider: null, gateway: 'anthropic', label: 'Claude · subscription' };
     case 'gw-openrouter': return { branch: 'claude', provider: 'openrouter', keyProvider: 'openrouter', gateway: 'openrouter', label: 'OpenRouter gateway' };
     case 'gw-ollama': return { branch: 'claude', provider: 'ollama', keyProvider: null, gateway: 'ollama', label: 'Ollama · local' };
@@ -106,6 +107,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
   const s = useWizardStore.getState();
   if (!s.panelView || !s.route) return;
   const meta = routeMeta(s.route);
+  if (meta.branch === 'codex') return;
 
   const others = useLayoutStore.getState().tabOrder.filter((id) => id !== wizardPanelId);
   if (others.length >= MAX_PANELS) { notifyPanelLimit(); return; }

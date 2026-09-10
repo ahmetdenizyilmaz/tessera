@@ -1,0 +1,6 @@
+{
+  "productName": "Tessera Preview",
+  "identifier": "com.tessera.preview",
+  "app": { "windows": [{ "title": "Tessera Preview", "width": 1400, "height": 900, "resizable": true, "decorations": true, "maximized": true, "visible": false, "backgroundColor": "#15161d" }] },
+  "bundle": { "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.ico"] }
+}

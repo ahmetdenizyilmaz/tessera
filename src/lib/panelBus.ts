@@ -1,3 +1,6 @@
+import { useCodexStore } from '../store/codexStore';
+import { codexConfig } from './codexBridge';
+import type { CodexConfig } from '../types/codex';
 /**
  * Panel bus — the frontend half of cross-panel messaging.
  *
@@ -27,6 +30,8 @@ declare global {
 }
 
 interface PanelInfoPayload {
+  provider?: 'claude' | 'codex';
+  codex_config?: CodexConfig;
   id: string;
   name: string;
   cwd: string;
@@ -67,16 +72,19 @@ function snapshot(): PanelInfoPayload[] {
       : inst.config.panelView === 'terminal'
         ? 'terminal'
         : 'chat';
+    const codex = inst.config.agentProvider === 'codex' ? useCodexStore.getState().sessions[inst.id] : undefined;
     out.push({
+      provider: inst.config.agentProvider ?? 'claude',
+      codex_config: inst.config.agentProvider === 'codex' ? codexConfig(inst.config) : undefined,
       id: inst.id,
       name: inst.name,
       cwd: inst.config.cwd,
       kind,
       status: inst.status,
-      busy: session?.isStreaming ?? false,
-      awaiting_user: (session?.controlRequests?.length ?? 0) > 0,
+      busy: codex?.busy ?? session?.isStreaming ?? false,
+      awaiting_user: (codex?.requests.length ?? session?.controlRequests?.length ?? 0) > 0,
       model: inst.config.model || null,
-      session_id: inst.claudeSessionId || null,
+      session_id: (inst.config.agentProvider === 'codex' ? inst.codexThreadId : inst.claudeSessionId) || null,
     });
   }
   return out;
@@ -138,5 +146,6 @@ export function initPanelBus() {
   useInstanceStore.subscribe(scheduleSync);
   useLayoutStore.subscribe(scheduleSync);
   useChatStore.subscribe(scheduleSync);
+  useCodexStore.subscribe(scheduleSync);
   scheduleSync();
 }

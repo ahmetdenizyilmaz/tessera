@@ -330,7 +330,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
               })
               .catch((err) => {
                 useInstanceStore.getState().setStatus(instanceId, 'error');
-                terminal.writeln(`\r\n\x1b[31mFailed to start claude: ${err}\x1b[0m`);
+                terminal.writeln(`\r\n\x1b[31mFailed to start coding agent: ${err}\x1b[0m`);
               });
           } else {
             // Retry up to 5 times at 200ms intervals
@@ -366,7 +366,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
                   })
                   .catch((err) => {
                     useInstanceStore.getState().setStatus(instanceId, 'error');
-                    terminal.writeln(`\r\n\x1b[31mFailed to start claude: ${err}\x1b[0m`);
+                    terminal.writeln(`\r\n\x1b[31mFailed to start coding agent: ${err}\x1b[0m`);
                   });
               } else if (retries >= 5) {
                 if (retryIntervalRef.current !== null) {

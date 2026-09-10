@@ -20,14 +20,14 @@ pub fn definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "list_panels",
-            "description": "List the other Claude panels open in this Tessera window, including \
+            "description": "List the other coding-agent panels open in this Tessera window, including \
 their name, working directory and whether they are currently busy. Use this before messaging \
 another panel so you address it correctly.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         }),
         json!({
             "name": "send_to_panel",
-            "description": "Send a message to another Claude panel in this window. It arrives as a \
+            "description": "Send a message to another coding-agent panel in this window. It arrives as a \
 user turn in that panel and the person can see it. Returns as soon as it is delivered; pass \
 wait_for_reply if you need that panel's answer before continuing.",
             "inputSchema": {
@@ -44,7 +44,7 @@ wait_for_reply if you need that panel's answer before continuing.",
         }),
         json!({
             "name": "read_panel",
-            "description": "Read the recent conversation from another Claude panel, so you can pick \
+            "description": "Read the recent conversation from another coding-agent panel, so you can pick \
 up context without interrupting it.",
             "inputSchema": {
                 "type": "object",
@@ -84,7 +84,7 @@ pub async fn call(app: &AppHandle, caller_id: &str, name: &str, args: Value) -> 
     match name {
         "list_panels" => list_panels(app, caller_id),
         "send_to_panel" => send_to_panel(app, caller_id, args).await,
-        "read_panel" => read_panel(app, caller_id, args),
+        "read_panel" => read_panel(app, caller_id, args).await,
         other => Err(format!("unknown tool: {}", other)),
     }
 }
@@ -99,6 +99,7 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
                     "id": p.id,
                     "name": p.name,
                     "kind": p.kind,
+                    "provider": p.provider.as_deref().unwrap_or("claude"),
                     "cwd": p.cwd,
                     "model": p.model,
                     "status": p.status,
@@ -214,6 +215,12 @@ Answer in your own panel instead of forwarding again.",
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    if target.provider.as_deref() == Some("codex") {
+        bus.record_inbound_hop(&target.id, hop);
+        return crate::codex::deliver(app, &target.id, &wrapped, wait,
+            args.get("timeout_seconds").and_then(Value::as_u64).unwrap_or(DEFAULT_WAIT_SECS)).await;
+    }
+
     if target.kind == "terminal" {
         return deliver_to_terminal(app, &target, &wrapped, wait);
     }
@@ -319,7 +326,7 @@ so wait_for_reply was ignored — use read_panel or ask the person."
     }))
 }
 
-fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, String> {
+async fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
     let target = resolve_target(&bus, caller_id, &args)?;
     let limit = args
@@ -327,6 +334,11 @@ fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, St
         .and_then(|v| v.as_u64())
         .unwrap_or(20)
         .clamp(1, 100) as usize;
+
+    if target.provider.as_deref() == Some("codex") {
+        let messages = crate::codex::read_recent(app, &target.id, limit).await?;
+        return Ok(json!({"panel":target.name,"messages":messages}));
+    }
 
     // Prefer the live session id the stream manager refreshes from every
     // system/init event; fall back to whatever the registry last mirrored.

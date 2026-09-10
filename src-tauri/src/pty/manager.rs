@@ -259,6 +259,17 @@ pub async fn pty_spawn(
         .spawn_command(cmd)
         .map_err(|e| format!("Failed to spawn claude: {}", e))?;
 
+    install_pair(id, pair, child, &app, &state)
+}
+
+/// Codex supplies its own command; Claude argument and environment construction stays above.
+pub fn spawn_prepared(id: String, cmd: CommandBuilder, cols: u16, rows: u16, app: &AppHandle, state: &PtyManager) -> Result<(), String> {
+    let pair = native_pty_system().openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| format!("Cannot start terminal: {e}"))?;
+    install_pair(id, pair, child, app, state)
+}
+
+fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable_pty::Child + Send + Sync>, app: &AppHandle, state: &PtyManager) -> Result<(), String> {
     // Drop slave after spawning - we only need the master side
     drop(pair.slave);
 

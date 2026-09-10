@@ -1,3 +1,4 @@
+import { ensureCodex } from '../lib/codexBridge';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useInstanceStore } from '../store/instanceStore';
@@ -65,6 +66,20 @@ export function usePty(instanceId: string) {
 
     // Register one-time exit listener to auto-clean on PTY death
     registerExitListener(instanceId);
+
+    if (instance.config.agentProvider === 'codex') {
+      try {
+        await ensureCodex(instanceId);
+        await invoke('codex_terminal_spawn', { id: instanceId, cols, rows });
+        spawnedPtys.set(instanceId, 'running');
+        useInstanceStore.getState().setStatus(instanceId, 'running');
+      } catch (err) {
+        spawnedPtys.delete(instanceId);
+        useInstanceStore.getState().setStatus(instanceId, 'error');
+        throw err;
+      }
+      return;
+    }
 
     // Pin the session id before the CLI starts. Rust resumes it if the JSONL
     // exists and passes --session-id otherwise, so this panel owns a known
@@ -197,7 +212,7 @@ export function consumeFreshMount(id: string): boolean {
   return freshMountIds.delete(id);
 }
 
-export function cleanupPty(id: string) {
+export function cleanupPty(id: string, kill = true) {
   spawnedPtys.delete(id);
   writeChains.delete(id);
   // Clean up exit listener
@@ -207,7 +222,7 @@ export function cleanupPty(id: string) {
     exitListeners.delete(id);
   }
   // Best-effort kill in case PTY is still alive
-  invoke('pty_kill', { id }).catch(() => {});
+  if (kill) invoke('pty_kill', { id }).catch(() => {});
 }
 
 export function isPtySpawned(id: string): boolean {

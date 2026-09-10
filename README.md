@@ -23,6 +23,10 @@ even message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + Re
 
 > **Status:** beta. Actively developed; expect rough edges.
 
+> **Codex provider preview:** this branch adds Codex chat and native terminal
+> panels alongside Claude, with CLI login reuse and cross-panel messaging.
+> See [setup, isolation, and build instructions](docs/codex-provider.md).
+
 ---
 
 ## Features

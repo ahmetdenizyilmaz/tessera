@@ -1,3 +1,4 @@
+import type { AgentProvider, CodexConfig } from './codex';
 /** 'claude' is the Claude Code CLI (subscription login, tools, agentic).
  *  'anthropic' is the Messages API with your own key — plain chat only. */
 export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'openrouter' | 'gemini' | 'ollama' | 'lmstudio';
@@ -30,6 +31,8 @@ export interface LlmConfig {
 }
 
 export interface InstanceConfig {
+  agentProvider?: AgentProvider;
+  codex?: Partial<Pick<CodexConfig, 'effort' | 'sandbox' | 'approvalPolicy' | 'executablePath'>>;
   cwd: string;
   model: string;
   dangerouslySkipPermissions: boolean;
@@ -53,6 +56,8 @@ export interface ClaudeInstance {
   config: InstanceConfig;
   status: 'starting' | 'running' | 'stopped' | 'error';
   claudeSessionId?: string;
+  codexThreadId?: string;
+  codexHasTurns?: boolean;
 }
 
 export const INSTANCE_COLORS: string[] = [

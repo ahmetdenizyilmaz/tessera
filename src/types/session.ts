@@ -1,10 +1,12 @@
+import type { CodexConfig } from './codex';
 import type { InstanceConfig, LlmProvider } from './instance';
 import type { WorkspaceSnapshotV3 } from '../lib/workspaceSerializer';
 
 /** Everything the new-session wizard's "last used" quick tile needs to
  *  recreate the previous session in one click. */
 export interface LastSessionPreset {
-  kind: 'claude' | 'llm';
+  kind: 'claude' | 'llm' | 'codex';
+  codex?: CodexConfig;
   panelView: 'chat' | 'terminal';
   /** Claude branch: which gateway the CLI was routed through. */
   gateway?: 'anthropic' | 'openrouter' | 'ollama' | 'custom';
@@ -100,6 +102,7 @@ export interface AdyFile {
     color: string;
     config: InstanceConfig;
     claudeSessionId?: string;
+    codexThreadId?: string;
   }>;
   settings?: Partial<AppSettings>;
   layout?: {
@@ -131,6 +134,7 @@ export interface SavedWorkspace {
     color: string;
     config: InstanceConfig;
     claudeSessionId?: string;
+    codexThreadId?: string;
   }>;
   savedAt: number;
   layout?: {

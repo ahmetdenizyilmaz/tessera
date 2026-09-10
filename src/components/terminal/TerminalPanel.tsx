@@ -1,3 +1,4 @@
+import { CodexPanel } from '../codex/CodexPanel';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -49,6 +50,10 @@ function hexToRgba(hex: string, alpha: number): string {
 
 
 export function TerminalPanel({ instanceId }: TerminalPanelProps) {
+  const provider = useInstanceStore(s => s.instances.get(instanceId)?.config.agentProvider);
+  return provider === 'codex' ? <CodexPanel instanceId={instanceId} /> : <ClaudeTerminalPanel instanceId={instanceId} />;
+}
+function ClaudeTerminalPanel({ instanceId }: TerminalPanelProps) {
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const removePanel = useLayoutStore((s) => s.removePanel);
   const toggleMaximized = useLayoutStore((s) => s.toggleMaximized);
