@@ -136,6 +136,7 @@ pub fn run() {
             sessions::usage_parser::session_parse_recent_usage,
             sessions::usage_checker::check_claude_usage,
             sessions::image_saver::save_chat_image,
+            sessions::image_saver::read_chat_image,
             sessions::file_manager::session_save_ady,
             sessions::file_manager::session_load_ady,
             // System commands

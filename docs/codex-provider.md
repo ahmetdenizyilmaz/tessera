@@ -27,11 +27,28 @@ after the first user turn; attempting to resume an empty thread fails. No artifi
 bootstrap prompt is sent. Existing saved conversations attach immediately. Change
 models and reasoning effort inside the native terminal once it is attached.
 
+Both providers share the same compact header, color chooser, rename behavior,
+and restart/maximize/close icons. Click the color dot (or right-click the title)
+to choose a color; double-click the name to rename. Model and effort appear in
+small text under the title. Chat model/effort controls live in **Panel controls**
+(the menu icon), along with Claude checkpoints or Codex token usage. The native
+Codex terminal also displays its current model/effort in its own footer.
+
 In chat, model and reasoning selections apply to the next turn. Markdown,
 reasoning summaries, command output, file changes, tool calls, image attachments,
-token usage, interruption, restart, and history are supported. **New** starts a fresh
-conversation; **Restart** reconnects the current one. Empty unsent panels restore
+token usage, interruption, restart, and history are supported. Use the main **+**
+wizard for new conversations and history; the panel has no **New** or **History**
+buttons. **Restart** reconnects the current conversation. Empty unsent panels restore
 as empty panels because they do not yet have a resumable transcript.
+
+The paperclip in both chat composers opens the native Windows image picker.
+PNG, JPEG, GIF and WebP files up to 10 MB each are supported, with up to eight
+picker attachments. Image previews can be inspected or removed, and image-only
+messages can be sent. Codex also accepts pasted images; Claude keeps its existing
+paste, file-mention, slash-command and message-queue behavior. Claude copies picked
+images to the project's `.tessera-images`, like its pasted images, so queued turns
+retain the attachment even if the original file is removed. File-picker cancellation
+does nothing; loading errors are shown in the composer.
 
 Approval and question cards belong to their own panel. Command/file approvals,
 turn-scoped permission grants, questions, and basic MCP forms/URL elicitations are
@@ -45,6 +62,16 @@ The existing `panels` MCP server exposes `list_panels`, `read_panel`, and
 `send_to_panel` to both providers. For example:
 
 > Ask the Codex panel named “Tests” to review the proposed changes and wait for its reply.
+
+The MCP tool descriptions, server instructions, Codex developer instructions, and
+bundled Claude skill all define **panel, session, subwindow, sub-window, pane, tab,
+chat, conversation, and other agent** as the same open destination. For example,
+“send the other session this message” and “ask the backend subwindow” should use
+`list_panels` then `send_to_panel`. A single matching non-self destination can be
+selected directly; several ambiguous matches require clarification. Closed history
+and unrelated OS windows are outside this roster. Messaging remains subject to
+the existing approval and delivery rules. Restart an existing panel to reload its
+MCP descriptions after an app update.
 
 Codex delivery goes through the structured app-server turn API, including for a
 terminal panel. This gives Tessera completion/interruption events and lets a hidden
@@ -94,6 +121,9 @@ Codex IDs in malformed snapshots are not resumed twice.
 ```powershell
 npm ci
 npm test
+node tools/test-terminal-cursor.mjs
+# With npm run dev running in another terminal:
+node tools/test-panel-ui.mjs
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1 -Stable
 
@@ -134,6 +164,12 @@ operation. This branch has not been merged or published.
   lifecycle, model/history discovery, approvals, MCP configuration, terminal setup.
 - `src/components/codex/`: provider setup, history browser, chat/terminal panel,
   approval/question cards and MCP forms.
+- `AgentPanelHeader.tsx` and `ImageAttachmentButton.tsx`: shared Claude/Codex
+  chrome, native image picker, previews and visible picker errors.
+- `src/lib/terminalCursor.ts`: a display-only guard for temporary ConPTY cursor
+  positions during thinking. The actual terminal buffer, PTY bytes and cursor
+  position reports are unchanged. Idle/approval menus retain the native cursor;
+  Claude terminals use the same rule while their interrupt hint is displayed.
 - `src/lib/codexBridge.ts`, `codexReducer.ts`, and `src/store/codexStore.ts`: one
   app-level event listener with state hydration independent of component mounts.
 - `workspaceSerializer.ts`, `panelCleanup.ts`, `usePty.ts`, and the panel bus:
@@ -147,6 +183,18 @@ legacy workspace restoration, duplicate thread IDs, MCP translation and form
 validation, permission constraints, and both state namespaces. The opt-in live
 test covers stdio and authenticated WebSockets, real model output, exact-ID resume,
 and process teardown.
+
+The cursor investigation captured output from the installed Codex 0.154.0 through
+Windows ConPTY and replayed Tessera's 5 ms batches in real xterm. The replay
+reproduced 12 visible caret positions in the transcript; the guard suppressed all
+12 while keeping the caret at the input. This is the same class of transient
+Windows redraw problem described in [Codex issue #39710](https://github.com/openai/codex/issues/39710).
+`tools/replay-terminal.mjs <capture.jsonl>` can replay another timestamped capture.
+The deterministic cursor checks cover thinking/footer redraws, multiline input,
+normal menus, focus, hidden cursors, disposal, and unchanged cursor reports.
+The browser component checks cover the shared header, rename/cancel, color picker,
+model/effort controls, native-picker IPC, image-only sends for both providers,
+cancellation/errors, stream-time draft selection, and narrow panels.
 
 On the development PC, the preview was also exercised through its actual WebView2
 UI: CLI login and model discovery, chat output, MCP approval submission, history

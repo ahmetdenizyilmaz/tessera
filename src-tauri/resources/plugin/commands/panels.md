@@ -1,5 +1,5 @@
 ---
-description: List the other Claude panels open in this window
+description: List open Claude and Codex sessions, panels, subwindows, panes, and tabs
 allowed-tools: mcp__panels__list_panels
 ---
 

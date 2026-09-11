@@ -20,20 +20,28 @@ pub fn definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "list_panels",
-            "description": "List the other coding-agent panels open in this Tessera window, including \
-their name, working directory and whether they are currently busy. Use this before messaging \
-another panel so you address it correctly.",
+            "description": "Find the Claude and Codex sessions open in this Tessera window, including \
+panels inside groups. Panel, session, subwindow, sub-window, pane, tab, chat, conversation, and \
+other agent refer to these same destinations. Call this when the user says 'the other session', \
+'another subwindow', or 'the other one', before sending a message or reading its context. \
+Returns names, ids, providers, working directories, busy/reachable state and is_self. \
+Choose the matching non-self recipient; ask which one if several match. Does not list closed history.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         }),
         json!({
             "name": "send_to_panel",
-            "description": "Send a message to another coding-agent panel in this window. It arrives as a \
-user turn in that panel and the person can see it. Returns as soon as it is delivered; pass \
-wait_for_reply if you need that panel's answer before continuing.",
+            "description": "Send, tell, ask, message, or forward text to another open Claude or Codex \
+session in Tessera. Use for requests such as 'send the other session this message', 'tell the \
+backend subwindow', 'ask the other tab', or 'message the other agent'. Panel, session, subwindow, \
+sub-window, pane, tab, chat and conversation mean the same destination here. Call list_panels \
+to identify the recipient, then pass its returned name or id in panel. If several recipients \
+match, clarify; do not guess or broadcast. The message arrives as a visible user turn in that \
+session. Returns after delivery; set wait_for_reply when the user's task needs its answer. \
+Sending a message does not approve permissions or bypass a pending prompt.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "panel": { "type": "string", "description": "Panel name or id, from list_panels." },
+                    "panel": { "type": "string", "description": "The destination session/subwindow/pane/tab's exact panel name or id returned by list_panels. Use its id if names are duplicated; do not pass the literal words 'other session'." },
                     "message": { "type": "string", "description": "What to say. Include the context the other panel needs — it cannot see your conversation." },
                     "wait_for_reply": { "type": "boolean", "description": "Block until that panel finishes its turn and return what it said. Default false." },
                     "timeout_seconds": { "type": "number", "description": "Only with wait_for_reply. Default 60, maximum 300." }
@@ -44,12 +52,13 @@ wait_for_reply if you need that panel's answer before continuing.",
         }),
         json!({
             "name": "read_panel",
-            "description": "Read the recent conversation from another coding-agent panel, so you can pick \
-up context without interrupting it.",
+            "description": "Read the recent conversation from another open Claude or Codex session \
+(also called a panel, subwindow, sub-window, pane, tab, chat, or other agent) without interrupting it. \
+Use when asked what the other session said or decided. Call list_panels to identify it first.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "panel": { "type": "string", "description": "Panel name or id, from list_panels." },
+                    "panel": { "type": "string", "description": "The destination session/subwindow/pane/tab's exact panel name or id from list_panels." },
                     "limit": { "type": "number", "description": "How many recent messages to return. Default 20." }
                 },
                 "required": ["panel"],

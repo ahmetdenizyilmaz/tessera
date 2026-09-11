@@ -1,10 +1,13 @@
 ---
-description: Send a message to another panel — /send <panel> <message>
+description: Send a message to another session, panel, subwindow, pane, or tab — /send <panel> <message>
 argument-hint: <panel> <message>
 allowed-tools: mcp__panels__list_panels, mcp__panels__send_to_panel
 ---
 
-Send a message to another Claude panel in this window.
+Send a message to another Claude or Codex session in this window. Session,
+panel, subwindow, sub-window, pane, tab, chat, and conversation mean the same
+destination. Call `list_panels` to identify the intended non-self recipient;
+ask which one if several match instead of guessing or broadcasting.
 
 Arguments: $ARGUMENTS
 

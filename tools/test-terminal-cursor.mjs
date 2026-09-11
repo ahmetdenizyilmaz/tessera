@@ -1,0 +1,57 @@
+// Real xterm parser/renderer regression checks, without a CLI or saved workspace.
+import { chromium, expect } from '@playwright/test';
+import { build } from 'esbuild';
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const page = await browser.newPage();
+try {
+  await page.setContent('<div id="terminal"></div><input id="elsewhere" />');
+  await page.addScriptTag({ path: 'node_modules/@xterm/xterm/lib/xterm.js' });
+  await page.addStyleTag({ path: 'node_modules/@xterm/xterm/css/xterm.css' });
+  const bundle = await build({ entryPoints: ['src/lib/terminalCursor.ts'], bundle: true, write: false, format: 'iife', globalName: 'TesseraCursor' });
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  const results = await page.evaluate(async () => {
+    const terminal = new window.Terminal({ cols: 80, rows: 20 });
+    terminal.open(document.getElementById('terminal'));
+    terminal.focus();
+    let working = true;
+    const guard = window.TesseraCursor.installTerminalCursorGuard(terminal, () => working);
+    const writes = [];
+    terminal.onData(data => writes.push(data));
+    const write = data => new Promise(resolve => terminal.write(data, () => requestAnimationFrame(resolve)));
+    const guarded = () => terminal.element.classList.contains('terminal-cursor-guarded');
+    await write('\x1b[2J\x1b[5;1HWorking...\x1b[10;1H› draft\x1b[12;1H  gpt-test medium\x1b[10;8H\x1b[?25h');
+    const inputNormal = !guarded();
+    await write('\x1b[5;1HThinking...\x1b[?25h');
+    const thinkingGuarded = guarded();
+    const caret = terminal.element.querySelector('.terminal-input-caret');
+    const savedTop = caret.style.top;
+    await write('\x1b[12;5H');
+    const footerGuarded = guarded() && caret.style.top === savedTop;
+    await write('\x1b[6n');
+    const realCursor = { x: terminal.buffer.active.cursorX, y: terminal.buffer.active.cursorY, reports: writes };
+    await write('\x1b[10;8H');
+    const restored = !guarded();
+    await write('\x1b[11;1H  continued draft\x1b[12;1H\x1b[K\x1b[14;1H  gpt-test medium\x1b[11;9H');
+    const multiline = !guarded();
+    document.getElementById('elsewhere').focus();
+    await write('\x1b[5;1HThinking...\x1b[?25h');
+    const focusKept = document.activeElement.id === 'elsewhere';
+    working = false; guard.update();
+    const menuNormal = !guarded() && caret.hidden;
+    working = true;
+    await write('\x1b[2J\x1b[10;1H❯ draft\x1b[10;8H\x1b[?25h');
+    await write('\x1b[5;1HThinking...\x1b[?25h');
+    const claudeGuarded = guarded();
+    await write('\x1b[?25l');
+    const hiddenRespected = caret.hidden;
+    guard.dispose();
+    const disposed = !terminal.element.querySelector('.terminal-input-caret') && !guarded();
+    terminal.dispose();
+    return { inputNormal, thinkingGuarded, footerGuarded, realCursor, restored, multiline, focusKept, menuNormal, claudeGuarded, hiddenRespected, disposed };
+  });
+  const { realCursor, ...checks } = results;
+  for (const [name, passed] of Object.entries(checks)) expect(passed, name).toBe(true);
+  expect(realCursor).toEqual({ x: 4, y: 11, reports: ['\x1b[12;5R'] });
+  console.log('PASS terminal cursor: thinking/footer redraws, restore, multiline input, focus, menus, Claude prompts, hidden cursor and cleanup');
+  console.log('PASS cursor-position reports and the real terminal buffer remain unchanged');
+} finally { await browser.close(); }

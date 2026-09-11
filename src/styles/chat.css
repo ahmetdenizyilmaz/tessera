@@ -622,6 +622,25 @@
   gap: 6px;
 }
 
+.chat-attach-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+  width: 30px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.chat-attach-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.chat-attach-btn:disabled { opacity: 0.4; cursor: default; }
+.chat-attachment-error { padding: 4px 10px; font-size: 11px; color: var(--error); }
+
 .chat-textarea {
   flex: 1;
   min-height: 38px;

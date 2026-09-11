@@ -29,7 +29,7 @@ const names = [`Smoke Chat ${suffix}`, `Smoke Terminal ${suffix}`];
 const panel = (name) =>
   page
     .locator(".codex-panel")
-    .filter({ has: page.locator(`input.codex-name[value="${name}"]`) });
+    .filter({ has: page.getByText(name, { exact: true }) });
 
 async function create(view, name) {
   await page.getByTitle("New session", { exact: true }).click();
@@ -50,7 +50,9 @@ async function create(view, name) {
     .click();
   const fresh = page.locator(".codex-panel:not([data-smoke-existing])");
   await fresh.waitFor();
+  await fresh.getByTitle("Double-click to rename").dblclick();
   await fresh.getByLabel("Panel name").fill(name);
+  await fresh.getByLabel("Panel name").press("Enter");
   return panel(name);
 }
 async function send(target, message) {
@@ -61,7 +63,7 @@ async function send(target, message) {
 try {
   const chat = await create("Chat", names[0]);
   await send(chat, "Reply exactly TESSERA_CHAT_SMOKE_OK. Do not use tools.");
-  await expect(chat.locator(".codex-status")).toHaveText("Ready", {
+  await expect(chat.locator(".agent-panel-status")).toHaveText("Ready", {
     timeout: 60000,
   });
   await expect(
@@ -79,7 +81,7 @@ try {
     "TESSERA_TERMINAL_SMOKE_OK",
     { timeout: 60000 },
   );
-  await expect(terminal.locator(".codex-status")).toHaveText("Ready", {
+  await expect(terminal.locator(".agent-panel-status")).toHaveText("Ready", {
     timeout: 60000,
   });
   await expect(terminal.locator(".codex-terminal")).not.toContainText(
@@ -130,7 +132,7 @@ try {
     const owned = panel(name);
     if (await owned.count())
       await owned
-        .getByTitle("Close panel", { exact: true })
+        .getByTitle("Close instance", { exact: true })
         .evaluate((button) => button.click());
   }
   await browser.close();

@@ -3,44 +3,53 @@ import { invoke } from "@tauri-apps/api/core";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useCodexStore } from "../../store/codexStore";
 import { ensureCodex } from "../../lib/codexBridge";
-import {
-  restartCodex,
-  findCodexPanel,
-  focusCodexPanel,
-} from "../../lib/codexSessions";
+import { restartCodex } from "../../lib/codexSessions";
 import { closePanel } from "../../lib/panelCleanup";
-import { useLayoutStore } from "../../store/layoutStore";
+
 import { XTermView } from "../terminal/XTermView";
 import { MarkdownRenderer } from "../chat/MarkdownRenderer";
 import { ProviderIcon } from "../icons/ProviderIcons";
 import { CodexRequests } from "./CodexRequests";
-import { CodexHistory } from "./CodexHistory";
-import type { CodexDiscovery, CodexItem, CodexThread } from "../../types/codex";
+import { AgentPanelHeader } from "../terminal/AgentPanelHeader";
+import { ImageAttachmentButton } from "../chat/ImageAttachmentButton";
+import { ImageChip } from "../chat/ImageChip";
+import type { CodexDiscovery, CodexItem } from "../../types/codex";
 
 function ItemView({ item }: { item: CodexItem }) {
   if (item.type === "userMessage")
     return (
-      <article className="codex-message codex-message-user">
-        <small>You</small>
-        {item.content?.map((c, i) =>
-          c.type === "text" ? (
-            <p key={i}>{c.text}</p>
-          ) : c.type === "image" && c.url?.startsWith("data:image/") ? (
-            <img
-              className="codex-attachment"
-              key={i}
-              src={c.url}
-              alt="Attached"
-            />
-          ) : null,
-        )}
+      <article className="msg msg--user codex-message-user">
+        <div className="msg-header msg-header--user">
+          <span className="msg-label">You</span>
+        </div>
+        <div className="msg-body msg-body--user">
+          {item.content?.map((c, i) =>
+            c.type === "text" ? (
+              <p className="msg-user-text" key={i}>
+                {c.text}
+              </p>
+            ) : c.type === "image" && c.url?.startsWith("data:image/") ? (
+              <img
+                className="codex-attachment"
+                key={i}
+                src={c.url}
+                alt="Attached"
+              />
+            ) : null,
+          )}
+        </div>
       </article>
     );
   if (item.type === "agentMessage")
     return (
-      <article className="codex-message">
-        <small>Codex</small>
-        <MarkdownRenderer content={item.text ?? ""} />
+      <article className="msg msg--assistant codex-message">
+        <div className="msg-header">
+          <ProviderIcon provider="openai" size={14} />
+          <span className="msg-label">Codex</span>
+        </div>
+        <div className="msg-body">
+          <MarkdownRenderer content={item.text ?? ""} />
+        </div>
       </article>
     );
   if (item.type === "reasoning")
@@ -96,10 +105,11 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     [pending, setPending] = useState(false),
     [restartKey, setRestartKey] = useState(0);
   const [text, setText] = useState(""),
-    [images, setImages] = useState<string[]>([]),
-    [history, setHistory] = useState(false);
+    [images, setImages] = useState<string[]>([]);
   const [models, setModels] = useState<CodexDiscovery["models"]>([]);
   const body = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const [attaching, setAttaching] = useState(false);
   const follow = useRef(true);
   const isTerminal = instance?.config.panelView === "terminal";
   const terminalAttached = isTerminal && session?.materialized;
@@ -128,21 +138,14 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     if (follow.current && body.current)
       body.current.scrollTop = body.current.scrollHeight;
   }, [session?.items, session?.requests]);
-  const restart = async (fresh = false, thread?: CodexThread) => {
-    if (thread) {
-      const holder = findCodexPanel(thread.id);
-      if (holder && holder !== instanceId) {
-        focusCodexPanel(holder);
-        return;
-      }
-    }
+  const restart = async () => {
+    if (pending || session?.busy) return;
     setPending(true);
     setReady(false);
     try {
-      await restartCodex(instanceId, fresh, thread?.id, thread?.cwd);
+      await restartCodex(instanceId);
       setRestartKey((k) => k + 1);
       setReady(true);
-      setHistory(false);
     } catch (e) {
       error(e);
     } finally {
@@ -150,7 +153,17 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     }
   };
   const send = async () => {
-    if (!text.trim() || pending || session?.busy) return;
+    if (
+      (!text.trim() && !images.length) ||
+      pending ||
+      attaching ||
+      !ready ||
+      !session?.connected ||
+      session?.busy ||
+      session?.requests.length
+    )
+      return;
+    const focusedBeforeSend = document.activeElement;
     setPending(true);
     useCodexStore.getState().setError(instanceId, undefined);
     try {
@@ -163,6 +176,8 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
       });
       setText("");
       setImages([]);
+      if (composer.current) composer.current.style.height = "40px";
+      if (document.activeElement === focusedBeforeSend) composer.current?.focus({ preventScroll: true });
       follow.current = true;
     } catch (e) {
       error(e);
@@ -171,7 +186,10 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     }
   };
   const attach = async (files: File[]) => {
+    setAttaching(true);
     try {
+      if (files.length + images.length > 8)
+        throw new Error("Attach up to 8 images per message.");
       if (model?.inputModalities && !model.inputModalities.includes("image"))
         throw new Error("The selected model does not accept images.");
       const data = await Promise.all(
@@ -193,144 +211,138 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
         ),
       );
       setImages((old) => [...old, ...data].slice(0, 8));
+      useCodexStore.getState().setError(instanceId, undefined);
     } catch (e) {
       error(e);
+    } finally {
+      setAttaching(false);
     }
   };
+  const canSend =
+    ready &&
+    !!session?.connected &&
+    !pending &&
+    !attaching &&
+    !session?.busy &&
+    !session?.requests.length &&
+    (!!text.trim() || images.length > 0);
   if (!instance) return null;
   return (
-    <section className="codex-panel" style={{ borderTopColor: instance.color }}>
-      <header className="codex-toolbar">
-        <ProviderIcon provider="openai" size={18} />
-        <input
-          aria-label="Panel name"
-          className="codex-name"
-          value={instance.name}
-          onChange={(e) =>
-            useInstanceStore.getState().setName(instanceId, e.target.value)
-          }
-        />
-        <input
-          aria-label="Panel color"
-          type="color"
-          value={instance.color}
-          onChange={(e) =>
-            useInstanceStore.getState().setColor(instanceId, e.target.value)
-          }
-        />
-        <span className="codex-status">
-          {session?.requests.length
+    <section
+      className="terminal-panel codex-panel"
+      style={{ borderTopColor: instance.color }}
+    >
+      <AgentPanelHeader
+        instanceId={instanceId}
+        status={
+          session?.requests.length
             ? "Needs input"
             : session?.busy
               ? "Working"
               : terminalAttached && instance.status === "stopped"
                 ? "Terminal stopped"
+                : ready && session?.connected
+                  ? "Ready"
+                  : "Stopped"
+        }
+        statusColor={
+          session?.error
+            ? "#ff6b6b"
+            : session?.busy || session?.requests.length
+              ? "#ffd43b"
               : ready && session?.connected
-                ? "Ready"
-                : "Stopped"}
-        </span>
-        {!isTerminal && (
-          <>
-            <select
-              aria-label="Codex model"
-              value={instance.config.model}
-              disabled={pending || session?.busy}
-              onChange={(e) => {
-                const m = models.find((m) => m.model === e.target.value);
-                useInstanceStore.getState().updateInstance(instanceId, {
-                  config: {
-                    ...instance.config,
-                    model: e.target.value,
-                    codex: {
-                      ...instance.config.codex,
-                      effort: m?.defaultReasoningEffort ?? "",
-                    },
-                  },
-                });
-              }}
-            >
-              {!models.some((m) => m.model === instance.config.model) && (
-                <option value={instance.config.model}>
-                  {instance.config.model || "Default model"}
-                </option>
-              )}
-              {models.map((m) => (
-                <option key={m.id} value={m.model}>
-                  {m.displayName}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Reasoning effort"
-              value={instance.config.codex?.effort ?? ""}
-              disabled={pending || session?.busy}
-              onChange={(e) =>
-                useInstanceStore.getState().updateInstance(instanceId, {
-                  config: {
-                    ...instance.config,
-                    codex: {
-                      ...instance.config.codex,
-                      effort: e.target.value,
-                    },
-                  },
-                })
+                ? "#51cf66"
+                : "#a0a0a0"
+        }
+        metadata={`Codex · ${instance.config.model || "default"} · ${instance.config.codex?.effort || "default effort"}`}
+        onClose={() => void closePanel(instanceId)}
+        onRestart={() => void restart()}
+        restarting={pending || session?.busy}
+        onStop={
+          session?.busy
+            ? () => {
+                void invoke("codex_interrupt", { id: instanceId }).catch(error);
               }
-            >
-              {!model && (
-                <option value={instance.config.codex?.effort ?? ""}>
-                  Default effort
-                </option>
-              )}
-              {model?.supportedReasoningEfforts.map((e) => (
-                <option key={e.reasoningEffort} value={e.reasoningEffort}>
-                  {e.reasoningEffort}
-                </option>
-              ))}
-            </select>
+            : undefined
+        }
+        controls={
+          <>
+            {!isTerminal && (
+              <div className="toolbar-menu-row codex-model-controls">
+                <select
+                  aria-label="Codex model"
+                  value={instance.config.model}
+                  disabled={pending || session?.busy}
+                  onChange={(e) => {
+                    const m = models.find((m) => m.model === e.target.value);
+                    useInstanceStore.getState().updateInstance(instanceId, {
+                      config: {
+                        ...instance.config,
+                        model: e.target.value,
+                        codex: {
+                          ...instance.config.codex,
+                          effort: m?.defaultReasoningEffort ?? "",
+                        },
+                      },
+                    });
+                  }}
+                >
+                  {!models.some((m) => m.model === instance.config.model) && (
+                    <option value={instance.config.model}>
+                      {instance.config.model || "Default model"}
+                    </option>
+                  )}
+                  {models.map((m) => (
+                    <option key={m.id} value={m.model}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Reasoning effort"
+                  value={instance.config.codex?.effort ?? ""}
+                  disabled={pending || session?.busy}
+                  onChange={(e) =>
+                    useInstanceStore.getState().updateInstance(instanceId, {
+                      config: {
+                        ...instance.config,
+                        codex: {
+                          ...instance.config.codex,
+                          effort: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                >
+                  {!model && (
+                    <option value={instance.config.codex?.effort ?? ""}>
+                      Default effort
+                    </option>
+                  )}
+                  {model?.supportedReasoningEfforts.map((e) => (
+                    <option key={e.reasoningEffort} value={e.reasoningEffort}>
+                      {e.reasoningEffort}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <small>{instance.config.cwd}</small>
+            <small>{instance.config.codex?.sandbox ?? "workspace-write"}</small>
+            {isTerminal && (
+              <small>
+                Change model and effort with /model in the terminal.
+              </small>
+            )}
+            {session?.usage && (
+              <details>
+                <summary>Token usage</summary>
+                <pre>{JSON.stringify(session.usage, null, 2)}</pre>
+              </details>
+            )}
           </>
-        )}
-        <button
-          title="Interrupt current turn"
-          disabled={!session?.busy}
-          onClick={() =>
-            invoke("codex_interrupt", { id: instanceId }).catch(error)
-          }
-        >
-          Stop
-        </button>
-        <button
-          disabled={pending || session?.busy}
-          onClick={() => setHistory((v) => !v)}
-        >
-          History
-        </button>
-        <button
-          disabled={pending || session?.busy}
-          onClick={() => void restart(true)}
-        >
-          New
-        </button>
-        <button
-          disabled={pending || session?.busy}
-          onClick={() => void restart()}
-        >
-          Restart
-        </button>
-        <button
-          title="Maximize panel"
-          onClick={() => useLayoutStore.getState().toggleMaximized(instanceId)}
-        >
-          ⤢
-        </button>
-        <button title="Close panel" onClick={() => void closePanel(instanceId)}>
-          ×
-        </button>
-      </header>
-      <div className="codex-project">
-        {instance.config.cwd} ·{" "}
-        {instance.config.codex?.sandbox ?? "workspace-write"}
-        {isTerminal ? " · Change model/effort in the Codex terminal" : ""}
-      </div>
+        }
+      />
       {session?.error && (
         <div role="alert" className="codex-error">
           {session.error}
@@ -340,13 +352,6 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
             </button>
           )}
         </div>
-      )}
-      {history && (
-        <CodexHistory
-          executablePath={instance.config.codex?.executablePath}
-          currentThreadId={instance.codexThreadId}
-          onSelect={(t) => void restart(false, t)}
-        />
       )}
       {terminalAttached ? (
         <div className="codex-terminal">
@@ -387,83 +392,103 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
         </div>
       )}
       {!terminalAttached && (
-        <footer className="codex-input">
+        <footer className="chat-input-area codex-input">
           {!!images.length && (
-            <div className="form-row">
+            <div className="image-chips">
               {images.map((img, i) => (
-                <button
+                <ImageChip
                   key={i}
-                  onClick={() => setImages((a) => a.filter((_, j) => i !== j))}
-                  title="Remove image"
-                >
-                  <img
-                    className="codex-attachment"
-                    src={img}
-                    alt={"Attachment " + (i + 1)}
-                  />
-                </button>
+                  src={img}
+                  name={`Image ${i + 1}`}
+                  onRemove={() =>
+                    setImages((old) => old.filter((_, index) => i !== index))
+                  }
+                />
               ))}
             </div>
           )}
-          <textarea
-            aria-label="Message Codex"
-            placeholder="Ask Codex… (Enter to send, Shift+Enter for a new line)"
-            value={text}
-            disabled={!ready || !session?.connected}
-            onChange={(e) => setText(e.target.value)}
-            onPaste={(e) => {
-              const files = Array.from(e.clipboardData.files);
-              if (files.length) {
-                e.preventDefault();
-                void attach(files);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault();
-                if (!session?.requests.length) void send();
-              }
-            }}
-          />
-          <div className="form-row">
-            <label className="btn btn-secondary">
-              Attach images
-              <input
-                hidden
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => {
-                  void attach(Array.from(e.target.files ?? []));
-                  e.target.value = "";
-                }}
-              />
-            </label>
+          <div className="chat-input-row">
+            <ImageAttachmentButton
+              remaining={Math.max(0, 8 - images.length)}
+              disabled={attaching}
+              onLoadingChange={setAttaching}
+              onError={error}
+              onAttach={(picked) => {
+                if (
+                  model?.inputModalities &&
+                  !model.inputModalities.includes("image")
+                )
+                  throw new Error("The selected model does not accept images.");
+                setImages((old) => [
+                  ...old,
+                  ...picked.map((image) => image.dataUrl),
+                ]);
+                useCodexStore.getState().setError(instanceId, undefined);
+                composer.current?.focus({ preventScroll: true });
+              }}
+            />
+            <textarea
+              ref={composer}
+              className="chat-textarea"
+              rows={1}
+              aria-label="Message Codex"
+              placeholder="Message Codex… (Enter to send, Shift+Enter for a new line)"
+              value={text}
+              disabled={!ready || !session?.connected}
+              onChange={(event) => setText(event.target.value)}
+              onInput={(event) => {
+                const el = event.currentTarget;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(180, Math.max(40, el.scrollHeight))}px`;
+              }}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData.files).filter(
+                  (file) => file.type.startsWith("image/"),
+                );
+                if (files.length) {
+                  event.preventDefault();
+                  void attach(files);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
             <button
-              className="btn btn-primary"
-              disabled={
-                !ready ||
-                !session?.connected ||
-                pending ||
-                session?.busy ||
-                !!session?.requests.length ||
-                !text.trim()
-              }
+              type="button"
+              className={`chat-send-btn ${canSend ? "chat-send-btn--active" : ""}`}
+              aria-label="Send"
+              title="Send (Enter)"
+              disabled={!canSend}
               onClick={() => void send()}
             >
-              Send
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 8L14 2L8 14L7 9L2 8Z"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  strokeWidth="0.5"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
-            {session?.usage && (
-              <details>
-                <summary>Token usage</summary>
-                <pre>{JSON.stringify(session.usage, null, 2)}</pre>
-              </details>
-            )}
           </div>
+          {attaching && (
+            <div className="chat-input-saving">Loading images…</div>
+          )}
         </footer>
       )}
     </section>

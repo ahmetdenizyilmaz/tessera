@@ -8,6 +8,8 @@ import '@xterm/xterm/css/xterm.css';
 import { usePty, isPtySpawned, consumeFreshMount } from '../../hooks/usePty';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useInstanceStore } from '../../store/instanceStore';
+import { useCodexStore } from '../../store/codexStore';
+import { installTerminalCursorGuard } from '../../lib/terminalCursor';
 import { listen } from '@tauri-apps/api/event';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -179,6 +181,24 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    const cursorGuard = installTerminalCursorGuard(terminal, () => {
+      if (useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'codex') {
+        const session = useCodexStore.getState().sessions[instanceId];
+        return !!session?.busy && !session.requests.length;
+      }
+      // Claude terminal status is owned by its native TUI. Its interrupt hint
+      // is present only during an active turn; approval/selection menus keep
+      // xterm's ordinary cursor behavior.
+      const buffer = terminal.buffer.active;
+      for (let y = Math.max(0, terminal.rows - 12); y < terminal.rows; y++) {
+        if (/esc to (?:interrupt|cancel)/i.test(buffer.getLine(buffer.baseY + y)?.translateToString(true) || '')) return true;
+      }
+      return false;
+    });
+    const unsubscribeCursor = useCodexStore.subscribe((state, previous) => {
+      const session = state.sessions[instanceId], old = previous.sessions[instanceId];
+      if (session?.busy !== old?.busy || session?.requests.length !== old?.requests.length) cursorGuard.update?.();
+    });
     termRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
@@ -467,6 +487,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       }
 
       dataDisposable.dispose();
+      unsubscribeCursor();
+      cursorGuard.dispose();
       if (unlisten) unlisten();
       terminal.dispose();
       termRef.current = null;
