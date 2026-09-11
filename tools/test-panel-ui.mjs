@@ -268,21 +268,36 @@ try {
     const inst = window.instanceStore.getState().instances.get("codex-ui");
     window.instanceStore.getState().updateInstance("codex-ui", { config: { ...inst.config, panelView: "terminal" } });
     window.codexStore.setState(s => ({ sessions: { ...s.sessions, "codex-ui": {
-      ...s.sessions["codex-ui"], materialized: true, requests: [{ id: 82,
-        method: "item/commandExecution/requestApproval", params: { command: "echo test\n".repeat(80), availableDecisions: ["accept", "cancel"] },
-      }],
+      ...s.sessions["codex-ui"], materialized: true, requests: [],
     }}}));
   });
   const nativeInput = codex.locator(".xterm-helper-textarea");
   await nativeInput.focus();
+  await expect.poll(() => page.evaluate(() => window.calls.some(c => c.command === "codex_terminal_spawn"))).toBe(true);
+  const geometry = () => page.evaluate(() => ({ cols: window.nativeTerminal.cols, rows: window.nativeTerminal.rows }));
+  const fullGeometry = await geometry();
+  await page.evaluate(() => {
+    window.calls = [];
+    window.codexStore.setState(s => ({ sessions: { ...s.sessions, "codex-ui": {
+      ...s.sessions["codex-ui"], requests: [{ id: 82,
+        method: "item/commandExecution/requestApproval", params: { command: "echo test\n".repeat(80), availableDecisions: ["accept", "cancel"] },
+      }],
+    }}}));
+  });
+  await expect(question).toBeVisible();
+  await expect(nativeInput).toBeFocused();
+  expect(await geometry()).toEqual(fullGeometry);
   await page.evaluate(() => { window.calls = []; });
   await nativeInput.press("Alt+ArrowUp");
   await expect(question).toBeFocused();
   expect(await page.evaluate(() => window.calls.filter(c => c.command === "pty_write"))).toEqual([]);
   await expect(question.getByRole("button", { name: "Allow once" })).toBeVisible();
+  expect(await geometry()).toEqual(fullGeometry);
   await question.press("Alt+ArrowDown");
   await expect(nativeInput).toBeFocused();
   expect(await page.evaluate(() => window.calls.filter(c => c.command === "codex_respond"))).toEqual([]);
+  expect(await geometry()).toEqual(fullGeometry);
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "pty_resize"))).toEqual([]);
   expect(errors).toEqual([]);
   console.log("PASS Codex questions share Claude styling; Alt+Up/Alt+Down reveal requests without sending terminal keys or answering prompts");
 
@@ -295,14 +310,25 @@ try {
     });
   });
   await expect(question).toHaveCount(0);
+  expect(await geometry()).toEqual(fullGeometry);
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "pty_resize"))).toEqual([]);
+  console.log("PASS approval arrival, expansion, collapse and dismissal preserve PTY geometry and input focus");
   await page.evaluate(() => window.writeTerminalOutput(
     Array.from({ length: 300 }, (_, i) => `history row ${i}`).join("\r\n") + "\r\nPROMPT> ",
   ));
-  const promptVisible = () => codex.locator(".xterm-rows").textContent().then(text => text.includes("PROMPT>"));
+  let promptMarker = "PROMPT>";
+  const promptVisible = () => codex.locator(".xterm-rows").textContent().then(text => text.includes(promptMarker));
   const browseHistory = async () => {
     await codex.locator(".xterm").hover();
     await page.mouse.wheel(0, -500);
-    await expect.poll(promptVisible).toBe(false);
+    await expect.poll(promptVisible).toBe(false).catch(async error => {
+      console.error(await page.evaluate(() => {
+        const t = window.nativeTerminal, b = t.buffer.normal;
+        return { cols: t.cols, rows: t.rows, baseY: b.baseY, viewportY: b.viewportY,
+          lines: t.element.querySelector('.xterm-rows').textContent };
+      }));
+      throw error;
+    });
     await nativeInput.focus();
     await page.evaluate(() => { window.calls = []; });
   };
@@ -333,6 +359,53 @@ try {
   await expect.poll(sentKeys).toBe("native paste\nsecond line");
   expect(errors).toEqual([]);
   console.log("PASS native panel typing/Enter and all paste paths reveal input from history and send exactly once");
+
+  // Real component unmount/remount (as when moving between views/groups),
+  // including a narrow source view. Preserve history and reading intent.
+  await codex.evaluate(node => { node.style.width = "400px"; });
+  await expect.poll(() => geometry().then(size => size.cols < fullGeometry.cols)).toBe(true);
+  promptMarker = "CURRENT INPUT>";
+  await page.evaluate(marker => window.writeTerminalOutput("\r\n" +
+    Array.from({ length: 5000 }, (_, i) => `long history ${i}: ` + "wrapped words ".repeat(8)).join("\r\n") +
+    `\r\n${marker} `), promptMarker);
+  await expect.poll(promptVisible).toBe(true);
+  await browseHistory();
+  const reading = await page.evaluate(() => {
+    const t = window.nativeTerminal, b = t.buffer.normal;
+    return { top: b.viewportY, lines: Array.from({ length: b.length }, (_, i) => b.getLine(i).translateToString(true)) };
+  });
+  const switchView = async panelView => page.evaluate(panelView => {
+    const inst = window.instanceStore.getState().instances.get("codex-ui");
+    window.instanceStore.getState().updateInstance("codex-ui", { config: { ...inst.config, panelView } });
+  }, panelView);
+  await switchView("chat");
+  await expect(nativeInput).toHaveCount(0);
+  await switchView("terminal");
+  await expect(nativeInput).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.nativeTerminal.buffer.normal.viewportY)).toBe(reading.top);
+  expect(await page.evaluate(() => {
+    const b = window.nativeTerminal.buffer.normal;
+    return Array.from({ length: b.length }, (_, i) => b.getLine(i).translateToString(true));
+  })).toEqual(reading.lines);
+  await nativeInput.pressSequentially("resume draft");
+  await expect.poll(promptVisible).toBe(true);
+  await switchView("chat");
+  await expect(nativeInput).toHaveCount(0);
+  await switchView("terminal");
+  await expect.poll(promptVisible).toBe(true);
+  // Visibility changes with identical geometry should never resize ConPTY.
+  await page.evaluate(() => { window.calls = []; });
+  for (let i = 0; i < 3; i++) {
+    await codex.evaluate(node => { node.style.display = "none"; });
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    await codex.evaluate(node => { node.style.display = ""; });
+    await nativeInput.focus();
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    await expect.poll(promptVisible).toBe(true);
+  }
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "pty_resize"))).toEqual([]);
+  expect(errors).toEqual([]);
+  console.log("PASS actual component remount preserves narrow-terminal history, reading position and input following; visibility cycles do not resize ConPTY");
 } finally {
   if (errors.length) {
     console.error(errors);

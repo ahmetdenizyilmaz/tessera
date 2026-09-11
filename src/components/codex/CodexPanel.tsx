@@ -154,6 +154,9 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     if (follow.current && body.current)
       body.current.scrollTop = body.current.scrollHeight;
   }, [session?.items, session?.requests]);
+  useEffect(() => {
+    if (!session?.requests.length) setRequestsExpanded(false);
+  }, [session?.requests.length]);
   const restart = async (fresh = false, threadId?: string, cwd?: string) => {
     if (pending || session?.busy) return;
     setPending(true);
@@ -257,6 +260,18 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
       ".xterm-helper-textarea, .chat-textarea",
     )?.focus({ preventScroll: true }));
   };
+  const requests = !!session?.requests.length && (
+    <div ref={requestArea} className={`codex-requests${requestsExpanded ? " codex-requests--expanded" : ""}`}>
+      <div className="codex-request-toolbar">
+        <button type="button" className="control-btn control-btn--neutral"
+          aria-expanded={requestsExpanded}
+          onClick={requestsExpanded ? returnToInput : showRequests}>
+          {requestsExpanded ? "Back to input · Esc" : `Questions & approvals (${session.requests.length}) · Alt+↑`}
+        </button>
+      </div>
+      <CodexRequests requests={session.requests} instanceId={instanceId} />
+    </div>
+  );
   if (!instance) return null;
   return (
     <section
@@ -470,6 +485,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
           {ready && (
             <XTermView key={restartKey} instanceId={instanceId} isVisible />
           )}
+          {requests}
         </div>
       ) : (
         <>
@@ -500,18 +516,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
           </div>
         </>
       )}
-      {!!session?.requests.length && (
-        <div ref={requestArea} className={`codex-requests${requestsExpanded ? " codex-requests--expanded" : ""}`}>
-          <div className="codex-request-toolbar">
-            <button type="button" className="control-btn control-btn--neutral"
-              aria-expanded={requestsExpanded}
-              onClick={requestsExpanded ? returnToInput : showRequests}>
-              {requestsExpanded ? "Back to input · Esc" : `Questions & approvals (${session.requests.length}) · Alt+↑`}
-            </button>
-          </div>
-          <CodexRequests requests={session.requests} instanceId={instanceId} />
-        </div>
-      )}
+      {!terminalAttached && requests}
       {!terminalAttached && (
         <footer className="chat-input-area codex-input">
           {!!images.length && (

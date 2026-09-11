@@ -63,6 +63,20 @@
   min-height: 0;
   position: relative;
 }
+/* Requests must not change the PTY's rows: Codex rebuilds its transcript on
+   resize. The top drawer leaves the input visible and expands on Alt+Up. */
+.codex-terminal > .codex-requests {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  z-index: 2;
+  background: var(--bg-primary, #15161d);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px #0006;
+}
+.codex-terminal > .codex-requests--expanded { max-height: calc(100% - 12px); }
 .codex-empty {
   color: var(--text-muted, #aaa);
   padding: 24px;
