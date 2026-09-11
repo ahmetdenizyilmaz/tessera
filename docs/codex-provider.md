@@ -61,6 +61,14 @@ to exercise the real native settings RPC and notifications over both stdio and
 authenticated WebSockets. This creates only ephemeral test threads, verifies
 Full access, Auto-review and Read only, and runs no model turns.
 
+The rebuilt Preview was also verified against Codex 0.154.0 through its real
+WebView2 UI: selecting Full Access in the native menu updated the saved panel,
+and a full application restart retained `never` / `dangerFullAccess` on the same
+conversation ID. A disposable terminal inherited the Full access default, then
+executed a native terminal turn that wrote a file outside its project and called
+`panels.list_panels`; both completed with zero approval requests. The test panel
+was closed afterward and the five existing user panels were preserved.
+
 Pending Codex questions and approvals are also shown as GUI cards using Claude's
 question/option styling. Press **Alt+Up** inside a Codex panel to expand and focus
 its requests; **Alt+Down** or **Escape** returns to the input. The shortcut does
