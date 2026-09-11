@@ -237,10 +237,10 @@ promotion script rejects preview binaries. No automatic updater, stable shortcut
 or `cgui` launcher is changed by preview installation.
 
 The repository lives at `Desktop/Projects/tessera`; `claude_gui_v2` is a Windows
-junction to the same folder for compatibility with existing paths. Work is on
-`feature/codex-provider`, with the follow-up fixes on `fix/codex-panel-followups`;
-returning to the stable installed app requires no Git operation. Neither branch
-is merged into `master`.
+junction to the same folder for compatibility with existing paths. Codex support
+and its follow-up fixes are merged into the default `master` branch. Preview and
+stable builds still have separate app identities and state; returning to the
+stable installed app requires no Git operation.
 
 Panel messaging runs inside Tessera's Rust backend; its complete server source
 and bundled Claude instructions are in this repository. It needs no separate
