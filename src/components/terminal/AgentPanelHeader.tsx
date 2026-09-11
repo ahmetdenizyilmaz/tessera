@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useLayoutStore } from "../../store/layoutStore";
 import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
+import { ProviderIcon } from "../icons/ProviderIcons";
 
 /** Shared panel chrome. Provider-specific controls stay inside the same menu. */
 export function AgentPanelHeader({
@@ -138,7 +139,15 @@ export function AgentPanelHeader({
               className="agent-panel-metadata"
               title={`${metadata}\n${instance.config.cwd}`}
             >
-              {metadata}
+              <span className="agent-panel-provider-icon" aria-hidden="true">
+                <ProviderIcon
+                  provider={
+                    instance.config.agentProvider === "codex" ? "openai" : "claude"
+                  }
+                  size={12}
+                />
+              </span>
+              <span className="agent-panel-metadata-text">{metadata}</span>
             </span>
           </div>
         </div>

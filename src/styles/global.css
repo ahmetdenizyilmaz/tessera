@@ -366,7 +366,9 @@ body,
 
 .agent-panel-toolbar { height: 40px; gap: 6px; container-type: inline-size; }
 .agent-panel-heading { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
-.agent-panel-metadata { color: var(--text-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-panel-metadata { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--text-muted); font-size: 10px; overflow: hidden; white-space: nowrap; }
+.agent-panel-provider-icon { display: inline-flex; flex-shrink: 0; }
+.agent-panel-metadata-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .agent-panel-color { width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; cursor: pointer; flex-shrink: 0; }
 .agent-panel-toolbar .toolbar-actions { gap: 3px; flex-shrink: 0; }
 .agent-panel-toolbar .toolbar-menu { max-width: min(320px, 80vw); }
