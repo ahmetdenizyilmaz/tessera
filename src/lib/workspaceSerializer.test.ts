@@ -69,7 +69,7 @@ it("round-trips a mixed group with independent Claude and Codex identities", () 
     {
       ...config,
       agentProvider: "codex",
-      codex: { sandbox: "workspace-write", effort: "high" },
+      codex: { sandbox: "workspace-write", effort: "high", approvalsReviewer: "auto_review" },
     },
     "Codex",
   );
@@ -87,7 +87,7 @@ it("round-trips a mixed group with independent Claude and Codex identities", () 
     codexThreadId: "codex-thread",
     config: {
       agentProvider: "codex",
-      codex: { sandbox: "workspace-write", effort: "high" },
+      codex: { sandbox: "workspace-write", effort: "high", approvalsReviewer: "auto_review" },
     },
   });
   expect(restored.instances.find((i) => i.name === "Claude")).toMatchObject({

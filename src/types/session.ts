@@ -1,4 +1,4 @@
-import type { CodexConfig } from './codex';
+import type { CodexConfig, CodexPermissionMode } from './codex';
 import type { InstanceConfig, LlmProvider } from './instance';
 import type { WorkspaceSnapshotV3 } from '../lib/workspaceSerializer';
 
@@ -61,6 +61,8 @@ export interface AppSettings {
   defaultPermissionMode: string;
   defaultSkipPermissions: boolean;
   defaultAgentMode: boolean;
+  /** Only new Codex panels inherit this; restored panels retain their policy. */
+  defaultCodexPermissionMode: CodexPermissionMode;
   /** What the New Instance dialog opens with, carried over from the last
    *  instance actually created. Kept separate from the `default*` fields so
    *  creating an instance never silently rewrites the configured defaults. */

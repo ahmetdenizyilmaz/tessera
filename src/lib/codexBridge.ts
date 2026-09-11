@@ -33,6 +33,7 @@ export function codexConfig(config: InstanceConfig): CodexConfig {
     effort: config.codex?.effort ?? "",
     sandbox: config.codex?.sandbox ?? "workspace-write",
     approvalPolicy: config.codex?.approvalPolicy ?? "on-request",
+    approvalsReviewer: config.codex?.approvalsReviewer ?? "user",
     executablePath: config.codex?.executablePath ?? "",
   };
 }

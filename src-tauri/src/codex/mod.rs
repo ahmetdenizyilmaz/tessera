@@ -20,6 +20,8 @@ pub struct Config {
     pub sandbox: String,
     #[serde(default = "default_approval")]
     pub approval_policy: String,
+    #[serde(default = "default_reviewer")]
+    pub approvals_reviewer: String,
     #[serde(default)]
     pub instructions: String,
     #[serde(default)]
@@ -33,6 +35,9 @@ fn default_sandbox() -> String {
 fn default_approval() -> String {
     "on-request".into()
 }
+fn default_reviewer() -> String {
+    "user".into()
+}
 
 impl Config {
     fn validate(&self) -> Result<(), String> {
@@ -45,6 +50,9 @@ impl Config {
         }
         if !["on-request", "never"].contains(&self.approval_policy.as_str()) {
             return Err("Invalid Codex approval policy".into());
+        }
+        if !["user", "auto_review"].contains(&self.approvals_reviewer.as_str()) {
+            return Err("Invalid Codex approval reviewer".into());
         }
         if !self
             .effort
@@ -61,6 +69,21 @@ impl Config {
             "danger-full-access" => "danger-full-access",
             _ => "workspace-write",
         }
+    }
+
+    fn thread_params(&self, mut overrides: Map<String, Value>) -> Value {
+        overrides.insert("approvals_reviewer".into(), json!(self.approvals_reviewer));
+        if !self.effort.is_empty() {
+            overrides.insert("model_reasoning_effort".into(), json!(self.effort));
+        }
+        let mut params = json!({
+            "cwd":self.cwd,"sandbox":self.wire_sandbox(),"approvalPolicy":self.approval_policy,
+            "approvalsReviewer":self.approvals_reviewer,"config":overrides
+        });
+        if !self.model.is_empty() {
+            params["model"] = json!(self.model);
+        }
+        params
     }
 }
 
@@ -366,11 +389,7 @@ pub async fn configure(
         }
     }
     manager.close(&id);
-    let (mut overrides, env) = panel_overrides(app, &id)?;
-    overrides.insert("approvals_reviewer".into(), json!("user"));
-    if !config.effort.is_empty() {
-        overrides.insert("model_reasoning_effort".into(), json!(config.effort));
-    }
+    let (overrides, env) = panel_overrides(app, &id)?;
     let client = Client::spawn(
         &id,
         executable::resolve(Some(&config.executable_path))?,
@@ -379,13 +398,7 @@ pub async fn configure(
         Some(app.clone()),
     )
     .await?;
-    let mut params = json!({
-        "cwd":config.cwd,"sandbox":config.wire_sandbox(),"approvalPolicy":config.approval_policy,
-        "approvalsReviewer":"user","config":overrides
-    });
-    if !config.model.is_empty() {
-        params["model"] = json!(config.model);
-    }
+    let mut params = config.thread_params(overrides);
     let bus_instructions = crate::panelbus::MESSAGING_INSTRUCTIONS;
     params["developerInstructions"] =
         json!(format!("{}\n{}", config.instructions, bus_instructions));
@@ -469,7 +482,12 @@ pub async fn send(
     if !client.requests.lock().unwrap().is_empty() {
         return Err("Answer this panel's pending request before sending another message.".into());
     }
-    let sid = client.thread.lock().unwrap().clone().ok_or("Codex has no active thread")?;
+    let sid = client
+        .thread
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("Codex has no active thread")?;
     if client
         .busy
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -720,6 +738,42 @@ pub async fn read_recent(app: &AppHandle, id: &str, limit: usize) -> Result<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_permissions_keep_human_approvals() {
+        let config: Config = serde_json::from_value(json!({"cwd":"."})).unwrap();
+        config.validate().unwrap();
+        let params = config.thread_params(Map::new());
+        assert_eq!(params["sandbox"], "workspace-write");
+        assert_eq!(params["approvalPolicy"], "on-request");
+        assert_eq!(params["approvalsReviewer"], "user");
+    }
+
+    #[test]
+    fn auto_review_reaches_thread_and_config_without_expanding_access() {
+        let config: Config = serde_json::from_value(json!({
+            "cwd":".","approvalsReviewer":"auto_review"
+        }))
+        .unwrap();
+        config.validate().unwrap();
+        let overrides =
+            json!({"approvals_reviewer":"user","mcp_servers.panels":{"url":"http://localhost"}})
+                .as_object()
+                .unwrap()
+                .clone();
+        let params = config.thread_params(overrides);
+        assert_eq!(params["sandbox"], "workspace-write");
+        assert_eq!(params["approvalPolicy"], "on-request");
+        assert_eq!(params["approvalsReviewer"], "auto_review");
+        assert_eq!(params["config"]["approvals_reviewer"], "auto_review");
+        assert_eq!(
+            params["config"]["mcp_servers.panels"]["url"],
+            "http://localhost"
+        );
+        let mut invalid = config.clone();
+        invalid.approvals_reviewer = "accept_everything".into();
+        assert!(invalid.validate().is_err());
+    }
+
     #[test]
     fn mcp_conversion_preserves_transport_and_rejects_sse() {
         let input = json!({"local":{"command":"node","args":["server.js"],"env":{"MODE":"test"}},"remote":{"type":"http","url":"http://127.0.0.1:1234","headers":{"X-Test":"yes"}}});

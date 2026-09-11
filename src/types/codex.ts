@@ -1,10 +1,17 @@
 export type AgentProvider = "claude" | "codex";
+export type CodexPermissionMode =
+  | "auto-review"
+  | "workspace-write"
+  | "read-only"
+  | "danger-full-access";
 export interface CodexConfig {
   cwd: string;
   model: string;
   effort: string;
   sandbox: "read-only" | "workspace-write" | "danger-full-access";
   approvalPolicy: "on-request" | "never";
+  /** Older workspaces routed approvals to the user. */
+  approvalsReviewer?: "user" | "auto_review";
   instructions: string;
   executablePath: string;
   terminal: boolean;

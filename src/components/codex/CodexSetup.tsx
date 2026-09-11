@@ -5,6 +5,8 @@ import { useWizardStore } from "../../store/wizardStore";
 import { useSettingsStore } from "../../store/settingsStore";
 import { openCodexSession } from "../../lib/codexSessions";
 import { CodexHistory } from "./CodexHistory";
+import { CodexPermissionSelect } from "./CodexPermissionSelect";
+import { codexPermissionMode, codexPermissions } from "../../lib/codexPermissions";
 import type {
   CodexConfig,
   CodexDiscovery,
@@ -18,8 +20,7 @@ export function CodexSetup({ wizardId }: { wizardId: string }) {
     cwd: wizard.cwd,
     model: last?.kind === "codex" ? (last.codex?.model ?? "") : "",
     effort: last?.kind === "codex" ? (last.codex?.effort ?? "") : "",
-    sandbox: "workspace-write",
-    approvalPolicy: "on-request",
+    ...codexPermissions(useSettingsStore.getState().settings.defaultCodexPermissionMode),
     instructions: "",
     executablePath: last?.codex?.executablePath ?? "",
     terminal: wizard.panelView === "terminal",
@@ -183,36 +184,11 @@ export function CodexSetup({ wizardId }: { wizardId: string }) {
           </button>
         </div>
       </label>
-      <label className="form-label">
-        Permissions
-        <select
-          className="form-select"
-          aria-label="Codex permissions"
-          value={config.sandbox}
-          onChange={(e) => {
-            const sandbox = e.target.value as CodexConfig["sandbox"];
-            patch({
-              sandbox,
-              approvalPolicy:
-                sandbox === "danger-full-access" ? "never" : "on-request",
-            });
-          }}
-        >
-          <option value="workspace-write">
-            Project edits · ask for additional access
-          </option>
-          <option value="read-only">Read only · ask before changes</option>
-          <option value="danger-full-access">
-            Full access · no approval prompts
-          </option>
-        </select>
-      </label>
-      {config.sandbox === "danger-full-access" && (
-        <p className="form-hint">
-          This panel can change files outside the project and run network
-          commands without asking.
-        </p>
-      )}
+      <CodexPermissionSelect
+        value={codexPermissionMode(config)}
+        onChange={(mode) => patch(codexPermissions(mode))}
+        disabled={creating}
+      />
       <details>
         <summary>Additional instructions</summary>
         <textarea

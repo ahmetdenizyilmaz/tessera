@@ -71,6 +71,7 @@ export async function openCodexSession(
         effort: config.effort,
         sandbox: config.sandbox,
         approvalPolicy: config.approvalPolicy,
+        approvalsReviewer: config.approvalsReviewer ?? "user",
         executablePath: config.executablePath,
       },
       systemPrompt: config.instructions,

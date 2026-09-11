@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../../store/settingsStore';
+import { CodexPermissionSelect } from '../codex/CodexPermissionSelect';
 
 export function GeneralSettings() {
   const { settings, updateSettings } = useSettingsStore();
@@ -67,7 +68,7 @@ export function GeneralSettings() {
       </div>
 
       <div className="form-group">
-        <label className="form-label">Default Permission Mode</label>
+        <label className="form-label">Default Claude Permission Mode</label>
         <select
           className="form-select"
           value={settings.defaultPermissionMode}
@@ -93,7 +94,7 @@ export function GeneralSettings() {
             checked={settings.defaultSkipPermissions}
             onChange={(e) => updateSettings({ defaultSkipPermissions: e.target.checked })}
           />
-          Skip permissions by default
+          Skip Claude permissions by default
         </label>
       </div>
 
@@ -106,6 +107,17 @@ export function GeneralSettings() {
           />
           Agent mode by default
         </label>
+      </div>
+
+      <div>
+        <CodexPermissionSelect
+          label="Default Codex permissions"
+          value={settings.defaultCodexPermissionMode}
+          onChange={(mode) => updateSettings({ defaultCodexPermissionMode: mode })}
+        />
+        <p className="form-hint">
+          Used for new Codex panels. Change an existing panel from its Panel controls menu.
+        </p>
       </div>
 
       <div className="form-group">

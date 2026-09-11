@@ -32,7 +32,7 @@ export interface LlmConfig {
 
 export interface InstanceConfig {
   agentProvider?: AgentProvider;
-  codex?: Partial<Pick<CodexConfig, 'effort' | 'sandbox' | 'approvalPolicy' | 'executablePath'>>;
+  codex?: Partial<Pick<CodexConfig, 'effort' | 'sandbox' | 'approvalPolicy' | 'approvalsReviewer' | 'executablePath'>>;
   cwd: string;
   model: string;
   dangerouslySkipPermissions: boolean;

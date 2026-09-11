@@ -10,9 +10,9 @@ to be a plain API chat. Existing workspaces with no provider field still use Cla
 2. Choose **Chat** or **Terminal**, then **Codex · CLI login**.
 3. Choose a model, reasoning effort, and project folder. Tessera discovers the
    models available to the installed CLI account instead of hardcoding a model list.
-4. Keep **Project edits · ask for additional access** for workspace write access
-   with human approval for additional permissions. Read-only and explicit full
-   access are also available.
+4. Choose permissions, or keep your saved default. **Auto-review** lets Codex
+   review requests for additional access automatically. **Project edits** asks
+   you for those approvals; read-only and explicit full access are also available.
 5. Click **Add Codex panel**, or browse existing Codex conversations and resume one.
 
 Tessera uses the existing Codex CLI login and Codex conversation storage. It does
@@ -20,6 +20,20 @@ not copy authentication tokens, start a second login flow, or require an API key
 If detection fails, install the CLI, run `codex login` in a normal terminal, then
 click **Retry**. An executable-path override is available for nonstandard installs.
 This integration was exercised against `codex-cli 0.154.0` on Windows.
+
+Set **Settings → General → Default Codex permissions** to choose the starting
+mode for new chat and terminal panels. **Auto-review · automatic approval reviews**
+uses a workspace sandbox with `approvalPolicy: on-request` and
+`approvalsReviewer: auto_review`. A denied request can still require your input.
+**Full access · no approval prompts** uses `danger-full-access` with `never`,
+allowing file changes outside the project and network commands without asking.
+See the [official approval documentation](https://learn.chatgpt.com/docs/agent-approvals-security).
+
+Existing panels retain their saved policy, including older workspaces that used
+human approvals. Open a panel's **Panel controls → Codex permissions** to change
+it while idle. This reconnects the same conversation and saves the selected mode;
+finish or cancel a pending turn first. Claude permission defaults are separate.
+Tessera passes these choices to Codex and does not automatically click approval cards.
 
 A **new terminal conversation takes its first message in Tessera**, then attaches
 the native Codex TUI to that exact conversation. Codex creates its transcript only

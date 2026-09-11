@@ -193,6 +193,47 @@ try {
   console.log(
     "PASS missing transcript keeps its ID until explicit recovery; history resumes and empty restart reconnects",
   );
+
+  // Settings defaults affect new panels, while existing conversations preserve
+  // their own permissions until explicitly changed from the panel menu.
+  await page.evaluate(() => window.showPermissionSettings());
+  const defaults = page.getByLabel("Default Codex permissions", { exact: true });
+  await expect(defaults).toHaveValue("workspace-write");
+  await defaults.selectOption("auto-review");
+  expect(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("tessera-settings")).state.settings.defaultCodexPermissionMode,
+  )).toBe("auto-review");
+  expect(await page.evaluate(() => window.settingsStore.getState().settings.defaultPermissionMode)).toBe("auto");
+  expect(await page.evaluate(() => window.instanceStore.getState().instances.get("codex-ui").config.codex.approvalsReviewer)).toBeUndefined();
+
+  for (const panelView of ["chat", "terminal"]) {
+    await page.evaluate((view) => window.showCodexSetup(view), panelView);
+    const setup = page.locator(`#permission-setup-${panelView}`);
+    await expect(setup.getByLabel("Codex permissions", { exact: true })).toHaveValue("auto-review");
+    await setup.getByRole("button", { name: "Add Codex panel", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.command === "codex_configure").at(-1)?.args.config.terminal)).toBe(panelView === "terminal");
+    const call = await page.evaluate(() => window.calls.filter(c => c.command === "codex_configure").at(-1).args);
+    expect(call.config).toMatchObject({ sandbox: "workspace-write", approvalPolicy: "on-request", approvalsReviewer: "auto_review" });
+    expect(await page.evaluate(id => window.instanceStore.getState().instances.get(id).config.codex.approvalsReviewer, call.id)).toBe("auto_review");
+  }
+
+  await page.evaluate(() => {
+    window.instanceStore.getState().updateInstance("codex-ui", { codexThreadId: "keep-conversation", codexHasTurns: true });
+  });
+  await codex.getByTitle("Panel controls").click();
+  const panelPermissions = codex.getByLabel("Codex permissions", { exact: true });
+  await expect(panelPermissions).toHaveValue("workspace-write");
+  await panelPermissions.selectOption("auto-review");
+  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.command === "codex_configure").at(-1).args.threadId)).toBe("keep-conversation");
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "codex_configure").at(-1).args.config.approvalsReviewer)).toBe("auto_review");
+  await page.evaluate(() => window.codexStore.setState(s => ({ sessions: { ...s.sessions, "codex-ui": { ...s.sessions["codex-ui"], busy: true } } })));
+  await expect(panelPermissions).toBeDisabled();
+  await page.evaluate(() => window.codexStore.setState(s => ({ sessions: { ...s.sessions, "codex-ui": { ...s.sessions["codex-ui"], busy: false } } })));
+  await panelPermissions.selectOption("danger-full-access");
+  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.command === "codex_configure").at(-1).args.config.approvalPolicy)).toBe("never");
+  expect(await page.evaluate(() => window.settingsStore.getState().settings.defaultCodexPermissionMode)).toBe("auto-review");
+  expect(errors).toEqual([]);
+  console.log("PASS persisted Codex default, chat/terminal creation, independent Claude settings and thread-preserving permission changes");
 } finally {
   if (errors.length) {
     console.error(errors);

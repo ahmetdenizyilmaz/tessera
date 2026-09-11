@@ -15,6 +15,8 @@ import { MarkdownRenderer } from "../chat/MarkdownRenderer";
 import { ProviderIcon } from "../icons/ProviderIcons";
 import { CodexRequests } from "./CodexRequests";
 import { CodexHistory } from "./CodexHistory";
+import { CodexPermissionSelect } from "./CodexPermissionSelect";
+import { codexPermissionMode, codexPermissions } from "../../lib/codexPermissions";
 import { AgentPanelHeader } from "../terminal/AgentPanelHeader";
 import { ImageAttachmentButton } from "../chat/ImageAttachmentButton";
 import { ImageChip } from "../chat/ImageChip";
@@ -341,7 +343,21 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
               </div>
             )}
             <small>{instance.config.cwd}</small>
-            <small>{instance.config.codex?.sandbox ?? "workspace-write"}</small>
+            <CodexPermissionSelect
+              value={codexPermissionMode(instance.config.codex)}
+              disabled={pending || session?.busy || !!session?.requests.length}
+              onChange={(mode) => {
+                if (pending || session?.busy || session?.requests.length) return;
+                useInstanceStore.getState().updateInstance(instanceId, {
+                  config: {
+                    ...instance.config,
+                    codex: { ...instance.config.codex, ...codexPermissions(mode) },
+                  },
+                });
+                void restart();
+              }}
+            />
+            <small>Changing permissions reconnects this conversation.</small>
             {isTerminal && (
               <small>
                 Change model and effort with /model in the terminal.

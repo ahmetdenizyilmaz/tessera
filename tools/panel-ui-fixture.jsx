@@ -4,10 +4,15 @@ import { createRoot } from "react-dom/client";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { Terminal } from "@xterm/xterm";
 import { CodexPanel } from "../src/components/codex/CodexPanel";
+import { CodexSetup } from "../src/components/codex/CodexSetup";
+import { GeneralSettings } from "../src/components/settings/GeneralSettings";
 import { AgentPanelHeader } from "../src/components/terminal/AgentPanelHeader";
 import { ChatInput } from "../src/components/chat/ChatInput";
 import { useInstanceStore } from "../src/store/instanceStore";
 import { useCodexStore } from "../src/store/codexStore";
+import { useSettingsStore } from "../src/store/settingsStore";
+import { useWizardStore } from "../src/store/wizardStore";
+import { useLayoutStore } from "../src/store/layoutStore";
 import "../src/styles/global.css";
 import "../src/styles/chat.css";
 import "../src/styles/codex.css";
@@ -96,6 +101,21 @@ useInstanceStore.setState({
 window.codexStore = useCodexStore;
 window.instanceStore = useInstanceStore;
 window.Terminal = Terminal;
+window.settingsStore = useSettingsStore;
+window.showPermissionSettings = () => {
+  const node = document.createElement("div");
+  node.id = "permission-settings";
+  document.body.append(node);
+  createRoot(node).render(<GeneralSettings />);
+};
+window.showCodexSetup = (panelView) => {
+  useWizardStore.getState().set({ cwd: "C:\\scratch", panelView });
+  useLayoutStore.getState().addPanel("permissions-wizard", "widget");
+  const node = document.createElement("div");
+  node.id = `permission-setup-${panelView}`;
+  document.body.append(node);
+  createRoot(node).render(<CodexSetup wizardId="permissions-wizard" />);
+};
 createRoot(document.getElementById("root")).render(
   <div style={{ display: "flex", height: "600px", gap: 10, padding: 10 }}>
     <div id="codex" style={{ width: "48%", height: "100%" }}>
