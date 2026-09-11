@@ -10,6 +10,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useCodexStore } from '../../store/codexStore';
 import { installTerminalCursorGuard } from '../../lib/terminalCursor';
+import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
 import { listen } from '@tauri-apps/api/event';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -18,6 +19,7 @@ import { listen } from '@tauri-apps/api/event';
 const terminalBuffers: Map<string, string> =
   (globalThis as Record<string, unknown>).__termBuffers as Map<string, string> ??
   ((globalThis as Record<string, unknown>).__termBuffers = new Map<string, string>());
+const terminalScrollStates = new Map<string, TerminalScrollState>();
 
 /** Background PTY data listeners that buffer output while component is unmounted */
 const bgPtyBuffers: Map<string, { chunks: string[]; cancel: () => void }> =
@@ -78,6 +80,7 @@ function consumeBackgroundBuffer(instanceId: string): string[] {
 /** Call on explicit panel close to clean up saved state */
 export function clearTerminalState(instanceId: string) {
   terminalBuffers.delete(instanceId);
+  terminalScrollStates.delete(instanceId);
   const bg = bgPtyBuffers.get(instanceId);
   if (bg) { bg.cancel(); bgPtyBuffers.delete(instanceId); }
 }
@@ -181,6 +184,9 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    const freshMount = consumeFreshMount(instanceId);
+    if (freshMount) terminalScrollStates.delete(instanceId);
+    const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
     const cursorGuard = installTerminalCursorGuard(terminal, () => {
       if (useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'codex') {
         const session = useCodexStore.getState().sessions[instanceId];
@@ -285,7 +291,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     // A restart/fresh-start marks this id so we DON'T replay the previous
     // conversation's scrollback (the old view's unmount re-saved it after
     // restartPty ran). Clear it and start clean.
-    if (consumeFreshMount(instanceId)) {
+    if (freshMount) {
       terminalBuffers.delete(instanceId);
     } else {
       const savedBuffer = terminalBuffers.get(instanceId);
@@ -473,6 +479,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       // preserves colors/attributes and avoids the O(scrollback) manual
       // line-by-line extraction.
       try {
+        terminalScrollStates.set(instanceId, scrollGuard.snapshot());
         const serialized = serializeAddon.serialize();
         if (serialized.trim()) {
           terminalBuffers.set(instanceId, serialized);
@@ -489,6 +496,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       dataDisposable.dispose();
       unsubscribeCursor();
       cursorGuard.dispose();
+      scrollGuard.dispose();
       if (unlisten) unlisten();
       terminal.dispose();
       termRef.current = null;
