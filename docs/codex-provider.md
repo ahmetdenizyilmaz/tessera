@@ -163,8 +163,14 @@ or `cgui` launcher is changed by preview installation.
 
 The repository lives at `Desktop/Projects/tessera`; `claude_gui_v2` is a Windows
 junction to the same folder for compatibility with existing paths. Work is on
-`feature/codex-provider`; returning to the stable installed app requires no Git
-operation. This branch has not been merged or published.
+`feature/codex-provider`, with the follow-up fixes on `fix/codex-panel-followups`;
+returning to the stable installed app requires no Git operation. Neither branch
+is merged into `master`.
+
+Panel messaging runs inside Tessera's Rust backend; its complete server source
+and bundled Claude instructions are in this repository. It needs no separate
+MCP process or repository. User-configured MCP servers are optional. Codex uses
+the installed Codex CLI and existing login, rather than a custom local Codex MCP.
 
 ## Implementation map
 
@@ -213,6 +219,11 @@ restoration after app restart, new terminal attachment, a second native terminal
 turn on the same thread, Claude-to-Codex and Codex-to-Claude reply waits, turn
 interruption, and exact-thread restart. The stable installed executable's SHA-256
 was checked before and after installation of the preview.
+The follow-up build also passed a full app restart with one chat turn, two native
+terminal turns, and an unsent terminal panel. Both real conversations retained
+their exact IDs and all messages; the empty panel reopened without a resume error.
+The live session/subwindow wording check discovered `list_panels` and
+`send_to_panel`, obtained approval, and received the named Claude panel's reply.
 
 The repository still has dependency audit findings outside this provider change.
 The added test tooling uses patched Vitest 3.2.7; production dependency upgrades
