@@ -29,6 +29,12 @@ scroll intent and component remounts. Claude uses the same `XTermView` integrati
    top as the user's chosen reading position. It also reapplied scroll position
    after every parsed output batch. Saved terminal content was replayed at the
    default width on remount, even if it had been serialized from a narrow panel.
+5. A follow-up report still reproduced old output appearing on a panel switch.
+   The mosaic deliberately shrinks inactive tiles and enlarges the selected one;
+   fitting every tile therefore still resized the native terminal twice per round
+   trip. A real Codex/ConPTY run with a long test conversation and five mosaic
+   panels exposed the transcript replay even while `viewportY === baseY`.
+   Checking only the final scroll position missed this visible failure.
 
 ## Ownership
 
@@ -46,6 +52,12 @@ scroll intent and component remounts. Claude uses the same `XTermView` integrati
   It waits for PTY startup and skips unchanged dimensions. The backend caches
   successful geometry too, including across view remounts. The data listener is
   registered before spawning the CLI; disposed views reject late callbacks.
+  After initial sizing, inactive terminal tiles retain their working geometry and
+  show a clipped preview. Their headers keep the normal tile layout. Reactivating
+  a terminal requests a fit; when its active size is unchanged, no resize reaches
+  the CLI. Window/font/layout changes still fit the active terminal, and inactive
+  terminals pick up the new geometry when selected. This shared behavior applies
+  to Claude and Codex. A first activation at a new size can still require reflow.
 - **Viewport intent:** `terminalScroll.ts` observes actual wheel, scrollbar,
   selection-drag and scroll-key gestures. Focus clicks do not change intent.
   Position is restored only across resize, transcript erase/replay or remount,
@@ -80,6 +92,7 @@ node tools/test-terminal-cursor.mjs
 node tools/test-terminal-protocol.mjs
 # With npm run dev running:
 node tools/test-panel-ui.mjs
+node tools/test-panel-switch.mjs
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1
 npm run build:preview
 ```
@@ -92,3 +105,12 @@ They cover focus clicks during redraw, deliberate history reading, chunked repla
 typing/paste/IME, narrow-view unmount/remount, repeated visibility changes and
 approval arrival/expansion/collapse/dismissal without a single native resize.
 They run no model turns and do not touch saved user sessions.
+
+The panel-switch test mounts the actual five-panel mosaic with real xterm. It
+checks that switching away and back preserves geometry, input following and
+intentional history reading without native resize calls, while actual window
+resizing still works. A separate live test resumed an owned Codex test thread
+through ConPTY: eight switches caused eight resizes and visible replay before
+the change, and zero resizes or replay afterward. User conversations were not
+used or modified by that test. This verifies removal of the repeated-switch
+trigger, not every upstream redraw behavior during a necessary resize.

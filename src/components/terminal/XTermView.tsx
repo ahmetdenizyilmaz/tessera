@@ -8,6 +8,7 @@ import '@xterm/xterm/css/xterm.css';
 import { usePty, isPtySpawned, consumeFreshMount } from '../../hooks/usePty';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useInstanceStore } from '../../store/instanceStore';
+import { useLayoutStore } from '../../store/layoutStore';
 import { useCodexStore } from '../../store/codexStore';
 import { installTerminalCursorGuard } from '../../lib/terminalCursor';
 import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
@@ -103,6 +104,9 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
   const retryIntervalRef = useRef<number | null>(null);
   const [platform, setPlatform] = useState<Pick<ITerminalOptions, 'windowsPty'>>();
   const [platformError, setPlatformError] = useState<string>();
+  const isActive = useLayoutStore(s => !s.tabOrder.includes(instanceId) || s.focusedId === instanceId);
+  const activeRef = useRef(isActive);
+  activeRef.current = isActive;
 
   const { spawn, write, resize, onData } = usePty(instanceId);
 
@@ -135,8 +139,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
   // Re-fit terminal when becoming visible (opacity:0 → 1 doesn't trigger ResizeObserver)
   useEffect(() => {
-    if (isVisible) resizeCoordinatorRef.current?.requestFit();
-  }, [isVisible]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isVisible && isActive) resizeCoordinatorRef.current?.requestFit();
+  }, [isVisible, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let mounted = true;
@@ -218,7 +222,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (session?.busy !== old?.busy || session?.requests.length !== old?.requests.length) cursorGuard.update?.();
     });
     termRef.current = terminal;
-    const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize);
+    const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize, () => activeRef.current);
     resizeCoordinatorRef.current = resizeCoordinator;
 
     // ─── Clipboard ─────────────────────────────────────────────────────
@@ -438,8 +442,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       requestAnimationFrame(() => {
         if (!mounted) return;
         try {
-          resizeCoordinator.fitNow();
           resizeCoordinator.ready();
+          resizeCoordinator.fitNow();
         } catch {
           // Ignore fit errors
         }

@@ -11,6 +11,7 @@ export function createTerminalResize(
   terminal: Terminal,
   fit: FitAddon,
   resize: (cols: number, rows: number) => Promise<void>,
+  isActive: () => boolean = () => true,
 ) {
   let frame = 0;
   let started = false;
@@ -19,7 +20,7 @@ export function createTerminalResize(
   let desired: Size | undefined;
   let sent: Size | undefined;
   const send = async () => {
-    if (disposed || !started || sending || !desired || same(desired, sent)) return;
+    if (disposed || !started || !isActive() || sending || !desired || same(desired, sent)) return;
     const size = desired;
     sending = true;
     try {
@@ -34,6 +35,10 @@ export function createTerminalResize(
   };
   const fitNow = () => {
     if (disposed) return;
+    // Inactive tiles are previews of a live terminal. Shrinking their PTY
+    // makes native TUIs erase/replay history, only to repeat that work when
+    // the user returns. Establish initial geometry, then fit active views.
+    if (started && !isActive()) return;
     const bounds = terminal.element?.parentElement?.getBoundingClientRect();
     // A hidden view has no meaningful geometry. FitAddon otherwise clamps
     // it to 2x1, which would make the CLI rewrite its transcript on return.

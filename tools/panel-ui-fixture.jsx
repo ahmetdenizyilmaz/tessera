@@ -5,6 +5,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { CodexPanel } from "../src/components/codex/CodexPanel";
+import { MosaicLayout } from "../src/components/layout/MosaicLayout";
 import { CodexSetup } from "../src/components/codex/CodexSetup";
 import { GeneralSettings } from "../src/components/settings/GeneralSettings";
 import { AgentPanelHeader } from "../src/components/terminal/AgentPanelHeader";
@@ -17,6 +18,7 @@ import { useLayoutStore } from "../src/store/layoutStore";
 import "../src/styles/global.css";
 import "../src/styles/chat.css";
 import "../src/styles/codex.css";
+import "../src/styles/mosaic.css";
 import "@xterm/xterm/css/xterm.css";
 
 const png =
@@ -37,6 +39,10 @@ window.pick = ["C:\\images\\example.png"];
 mockIPC(
   async (command, args) => {
     window.calls.push({ command, args });
+    // Optional binding supplied only by an opt-in native PTY diagnostic.
+    if (window.nativePtyRequest && args?.id === 'codex-ui' &&
+        ['codex_terminal_spawn', 'pty_resize', 'pty_write'].includes(command))
+      return window.nativePtyRequest(command, args);
     if (command === "pty_capabilities")
       return { windowsPty: { backend: "conpty", buildNumber: 26200 } };
     if (command === "plugin:dialog|open") return window.pick;
@@ -85,6 +91,7 @@ mockIPC(
           } },
         },
         requests: [],
+        materialized: !!window.mosaicMode,
         busy: false,
         alive: true,
       };
@@ -121,9 +128,11 @@ window.Terminal = Terminal;
 // Observe the real public terminal in this isolated fixture. Production code
 // exposes no test hooks and the real parser, renderer and input stay intact.
 const openTerminal = Terminal.prototype.open;
+window.terminals = new Map();
 Terminal.prototype.open = function (container) {
   const result = openTerminal.call(this, container);
   window.nativeTerminal = this;
+  window.terminals.set(container.closest('[data-panel-id]')?.getAttribute('data-panel-id') || 'codex-ui', this);
   return result;
 };
 window.writeTerminalOutput = (data) => emit("pty-data-codex-ui", data);
@@ -142,7 +151,28 @@ window.showCodexSetup = (panelView) => {
   document.body.append(node);
   createRoot(node).render(<CodexSetup wizardId="permissions-wizard" />);
 };
-createRoot(document.getElementById("root")).render(
+const root = createRoot(document.getElementById("root"));
+window.showMosaic = (count = 2) => {
+  window.mosaicMode = true;
+  const ids = ['codex-ui', 'peer-ui', ...Array.from({ length: Math.max(0, count - 2) }, (_, i) => `peer-${i + 2}`)];
+  for (const id of ids) {
+    const base = instance(id, 'codex');
+    useInstanceStore.setState(s => ({
+      instances: new Map([...s.instances, [id, {
+        ...base,
+        name: id === 'codex-ui' ? 'Codex test' : `Peer test ${id}`,
+        config: { ...base.config, panelView: 'terminal' },
+        codexThreadId: `thread-${id}`,
+        codexHasTurns: true,
+      }]]),
+    }));
+    useCodexStore.getState().remove(id);
+  }
+  for (const id of ids) useLayoutStore.getState().addPanel(id, 'terminal');
+  useLayoutStore.getState().setFocused('codex-ui');
+  root.render(<div style={{ width: '100vw', height: '100vh' }}><MosaicLayout /></div>);
+};
+root.render(
   <div style={{ display: "flex", height: "600px", gap: 10, padding: 10 }}>
     <div id="codex" style={{ width: "48%", height: "100%" }}>
       <CodexPanel instanceId="codex-ui" />
