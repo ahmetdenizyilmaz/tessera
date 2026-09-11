@@ -40,6 +40,17 @@ through Codex's `thread/settings/updated` notifications, including replay after 
 group remount. Changing permissions does not resolve an approval already pending
 in an active turn. Finish or cancel that request before reconnecting the panel.
 
+Pending Codex questions and approvals are also shown as GUI cards using Claude's
+question/option styling. Press **Alt+Up** inside a Codex panel to expand and focus
+its requests; **Alt+Down** or **Escape** returns to the input. The shortcut does
+not send a terminal key or approve anything, and answer drafts survive collapsing
+the request area.
+
+Terminal viewports follow new output while at the bottom. Deliberate scrolling
+keeps a text anchor through transcript redraws and panel/group remounts; browser
+scroll resets do not disable following. This does not filter or rewrite the
+native terminal's output, and alternate-screen menus keep their native behavior.
+
 A **new terminal conversation takes its first message in Tessera**, then attaches
 the native Codex TUI to that exact conversation. Codex creates its transcript only
 after the first user turn; attempting to resume an empty thread fails. No artificial
@@ -100,7 +111,19 @@ existing best-effort reply detection limitation.
 
 Cross-panel messages are normal task input, never permission responses. Pending
 Codex requests and active turns block additional delivery. Existing bearer-token
-authentication, self-send prevention, rate limits, and hop limits remain in force.
+authentication and self-send prevention remain in force. Authorized panel
+conversations have no fixed hop or messages-per-minute cutoff. Agents are told
+to send replies back explicitly and stop when no question or action remains.
+
+Claude terminal messages use bracketed paste followed by a separate Enter key,
+preserving newlines and avoiding the CLI's paste debounce. Concurrent messages
+are serialized; a closed/replaced terminal never receives a delayed Enter.
+Codex queues inbound messages while busy and automatically starts them in order
+after the active turn and any pending request finish. `status: "queued"` means
+accepted for automatic delivery, not an unsent draft; do not resend it. Queues
+are bound to the current panel process and are cancelled when it closes.
+`list_panels.queued_messages` reports the waiting Codex message count. Cyclic
+`wait_for_reply` calls fall back to nonblocking delivery to avoid deadlocks.
 Reply waits end on completion, interruption, process exit, pending user input, or
 timeout. Enabled Tessera MCP servers are translated into per-panel Codex overrides;
 global `~/.codex/config.toml` is not rewritten. Legacy SSE servers and unsupported
@@ -149,6 +172,7 @@ silently substitute another thread when a saved transcript is unavailable.
 npm ci
 npm test
 node tools/test-terminal-cursor.mjs
+node tools/test-terminal-scroll.mjs
 # With npm run dev running in another terminal:
 node tools/test-panel-ui.mjs
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1
