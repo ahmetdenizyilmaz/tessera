@@ -6,18 +6,20 @@ export type TerminalScrollState = {
   anchor: string[];
 };
 
-/** Keep user scroll intent separate from scroll events caused by TUI redraws,
- * buffer clears, layout changes, and the browser clamping its scrollbar. */
+/** xterm owns ordinary scrolling and synchronized rendering. Preserve the
+ * user's viewport only across a resize, transcript erase/replay, or remount. */
 export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalScrollState) {
   const element = terminal.element;
-  const viewport = element?.querySelector<HTMLElement>(".xterm-viewport");
   let state: TerminalScrollState = saved ? { ...saved, anchor: [...saved.anchor] }
     : { following: true, top: 0, anchor: [] };
+  let needsRestore = !!saved;
+  let erased = false;
+  let frameEnded = false;
   let applying = false;
   let userScrolling = false;
-  let dragging = false;
+  let pointer: { id: number; x: number; y: number; dragging: boolean } | undefined;
   let frame = 0;
-  let userScrollFrame = 0;
+  let gestureFrame = 0;
   let disposed = false;
   const line = (y: number) => terminal.buffer.normal.getLine(y)?.translateToString(true) ?? "";
   const remember = () => {
@@ -30,89 +32,119 @@ export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalS
     };
   };
   const restore = () => {
-    if (disposed || applying || userScrolling || dragging || terminal.buffer.active.type !== "normal") return;
+    if (disposed || applying || userScrolling || terminal.modes.synchronizedOutputMode ||
+        terminal.buffer.active.type !== "normal") return;
     applying = true;
     try {
       const buffer = terminal.buffer.normal;
       if (state.following) {
-        // Also resets xterm's internal isUserScrolling after an erased buffer,
-        // even when viewportY and baseY are both temporarily zero.
-        terminal.scrollToBottom();
+        // ED3 can leave xterm's user-scroll state set while baseY is zero.
+        // Wait for replay rows, then reattach once; normal output follows
+        // through xterm itself instead of a scrollToBottom on every write.
+        if (erased && buffer.baseY === 0) return;
+        if (erased || buffer.viewportY !== buffer.baseY) terminal.scrollToBottom();
         state.top = buffer.viewportY;
       } else {
-        const matches = (y: number) => state.anchor.length > 0 && state.anchor.some(Boolean) &&
+        const matches = (y: number) => state.anchor.some(Boolean) &&
           state.anchor.every((text, offset) => line(y + offset) === text);
-        if (state.anchor.some(Boolean) && !matches(state.top)) {
-          // Full-screen transcript replay invalidates numeric line positions.
-          // Re-anchor to visible text, choosing the closest repeated match.
-          let closest: number | undefined;
+        let closest: number | undefined;
+        if (matches(state.top)) closest = state.top;
+        else if (state.anchor.some(Boolean)) {
           for (let y = 0; y <= buffer.baseY; y++) {
             if (matches(y) && (closest === undefined || Math.abs(y - state.top) < Math.abs(closest - state.top))) closest = y;
           }
-          if (closest !== undefined) state.top = closest;
         }
-        terminal.scrollToLine(Math.min(state.top, buffer.baseY));
+        // Codex may send the erase before its synchronized replay starts.
+        if (erased && closest === undefined && buffer.baseY < state.top && !frameEnded) return;
+        state.top = closest ?? Math.min(state.top, buffer.baseY);
+        if (buffer.viewportY !== state.top) terminal.scrollToLine(state.top);
       }
+      needsRestore = false;
+      erased = false;
     } finally { applying = false; }
   };
   const schedule = () => {
     if (disposed || frame) return;
-    frame = requestAnimationFrame(() => { frame = 0; restore(); });
+    frame = requestAnimationFrame(() => { frame = 0; if (needsRestore) restore(); });
   };
-  const endUserScroll = () => {
-    cancelAnimationFrame(userScrollFrame);
-    userScrollFrame = requestAnimationFrame(() => {
-      userScrollFrame = 0;
-      if (disposed) return;
-      remember();
+  const resized = () => { needsRestore = true; schedule(); };
+  const endGesture = () => {
+    cancelAnimationFrame(gestureFrame);
+    gestureFrame = requestAnimationFrame(() => {
+      gestureFrame = 0;
       userScrolling = false;
+      if (needsRestore) schedule();
     });
   };
   const revealInput = () => {
     if (disposed || terminal.buffer.active.type !== "normal") return;
-    // Editing ends history browsing. Otherwise our redraw protection undoes
-    // xterm's scroll-on-input and the keystrokes land in an invisible prompt.
-    cancelAnimationFrame(userScrollFrame);
-    userScrollFrame = 0;
+    cancelAnimationFrame(gestureFrame);
+    gestureFrame = 0;
     userScrolling = false;
-    dragging = false;
+    pointer = undefined;
     state = { following: true, top: terminal.buffer.normal.baseY, anchor: [] };
     restore();
   };
-  const wheel = () => { userScrolling = true; endUserScroll(); };
+  const wheel = () => {
+    if (terminal.buffer.active.type !== "normal" || terminal.modes.mouseTrackingMode !== "none") return;
+    userScrolling = true;
+    endGesture();
+  };
   const pointerDown = (event: PointerEvent) => {
-    // Include text-selection drags: xterm scrolls while a selection extends
-    // beyond the viewport, even though the scrollbar itself was not grabbed.
-    if (event.button === 0 && element?.contains(event.target as Node)) {
-      dragging = true; userScrolling = true;
+    if (event.button !== 0) return;
+    const scrollbar = event.target instanceof Element && !!event.target.closest(".scrollbar");
+    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: scrollbar };
+    // A focus click is not scrolling. Only the scrollbar or an actual text
+    // selection drag can change the saved reading position.
+    if (scrollbar) userScrolling = true;
+  };
+  const pointerMove = (event: PointerEvent) => {
+    if (!pointer || event.pointerId !== pointer.id || !(event.buttons & 1)) return;
+    if (Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > 4) {
+      pointer.dragging = true;
+      userScrolling = true;
     }
   };
-  const pointerUp = () => {
-    if (!dragging) return;
-    dragging = false;
-    endUserScroll();
+  const pointerUp = (event: PointerEvent) => {
+    if (!pointer || event.pointerId !== pointer.id) return;
+    const dragging = pointer.dragging;
+    pointer = undefined;
+    if (dragging) endGesture();
   };
+  const blur = () => { pointer = undefined; endGesture(); };
   const key = (event: KeyboardEvent) => {
     if (event.shiftKey && ["PageUp", "PageDown", "Home", "End"].includes(event.key)) wheel();
   };
   const scroll = () => {
-    if (applying) return;
-    if (userScrolling || dragging) remember();
-    else schedule();
+    if (userScrolling && !applying && !needsRestore && !terminal.modes.synchronizedOutputMode) remember();
+  };
+  const erase = (params: (number | number[])[]) => {
+    if (params[0] === 2 || params[0] === 3) {
+      needsRestore = true;
+      erased ||= params[0] === 3;
+      frameEnded = false;
+    }
+    return false; // Observe the protocol; xterm still executes every byte.
   };
   element?.addEventListener("wheel", wheel, { capture: true, passive: true });
   element?.addEventListener("pointerdown", pointerDown, true);
   element?.addEventListener("keydown", key, true);
-  // IMEs and emoji input can bypass onKey. These events only come from the
-  // editor; onData also contains automatic terminal replies and is unsuitable.
   element?.addEventListener("beforeinput", revealInput, true);
   element?.addEventListener("input", revealInput, true);
   element?.addEventListener("compositionstart", revealInput, true);
-  viewport?.addEventListener("scroll", scroll);
+  window.addEventListener("pointermove", pointerMove);
   window.addEventListener("pointerup", pointerUp);
+  window.addEventListener("pointercancel", pointerUp);
+  window.addEventListener("blur", blur);
   const subscriptions = [
-    terminal.onWriteParsed(restore), terminal.onScroll(scroll), terminal.onResize(schedule),
-    terminal.onKey(revealInput),
+    terminal.onWriteParsed(() => { if (needsRestore) restore(); }),
+    terminal.onScroll(scroll), terminal.onResize(resized), terminal.onKey(revealInput),
+    terminal.parser.registerCsiHandler({ final: "J" }, erase),
+    terminal.parser.registerCsiHandler({ prefix: "?", final: "J" }, erase),
+    terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, params => {
+      if (params.includes(2026)) frameEnded = true;
+      return false;
+    }),
   ];
   return {
     snapshot: () => ({ ...state, anchor: [...state.anchor] }),
@@ -121,7 +153,7 @@ export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalS
     dispose() {
       disposed = true;
       cancelAnimationFrame(frame);
-      cancelAnimationFrame(userScrollFrame);
+      cancelAnimationFrame(gestureFrame);
       subscriptions.forEach(s => s.dispose());
       element?.removeEventListener("wheel", wheel, true);
       element?.removeEventListener("pointerdown", pointerDown, true);
@@ -129,8 +161,10 @@ export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalS
       element?.removeEventListener("beforeinput", revealInput, true);
       element?.removeEventListener("input", revealInput, true);
       element?.removeEventListener("compositionstart", revealInput, true);
-      viewport?.removeEventListener("scroll", scroll);
+      window.removeEventListener("pointermove", pointerMove);
       window.removeEventListener("pointerup", pointerUp);
+      window.removeEventListener("pointercancel", pointerUp);
+      window.removeEventListener("blur", blur);
     },
   };
 }

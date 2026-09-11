@@ -37,6 +37,8 @@ window.pick = ["C:\\images\\example.png"];
 mockIPC(
   async (command, args) => {
     window.calls.push({ command, args });
+    if (command === "pty_capabilities")
+      return { windowsPty: { backend: "conpty", buildNumber: 26200 } };
     if (command === "plugin:dialog|open") return window.pick;
     if (command === "read_chat_image") {
       if (window.imageError) throw new Error("Cannot read image");
@@ -102,6 +104,14 @@ useInstanceStore.setState({
 window.codexStore = useCodexStore;
 window.instanceStore = useInstanceStore;
 window.Terminal = Terminal;
+// Observe the real public terminal in this isolated fixture. Production code
+// exposes no test hooks and the real parser, renderer and input stay intact.
+const openTerminal = Terminal.prototype.open;
+Terminal.prototype.open = function (container) {
+  const result = openTerminal.call(this, container);
+  window.nativeTerminal = this;
+  return result;
+};
 window.writeTerminalOutput = (data) => emit("pty-data-codex-ui", data);
 window.settingsStore = useSettingsStore;
 window.showPermissionSettings = () => {

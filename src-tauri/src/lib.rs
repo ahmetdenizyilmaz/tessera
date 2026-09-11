@@ -119,6 +119,7 @@ pub fn run() {
             codex::codex_close,
             codex::codex_terminal_spawn,
             // PTY commands
+            pty::manager::pty_capabilities,
             pty::manager::pty_spawn,
             pty::manager::pty_write,
             pty::manager::pty_resize,

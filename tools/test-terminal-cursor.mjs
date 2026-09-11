@@ -27,6 +27,12 @@ try {
     const savedTop = caret.style.top;
     await write('\x1b[12;5H');
     const footerGuarded = guarded() && caret.style.top === savedTop;
+    // Freeze the display-only caret along with xterm's last completed frame.
+    // A split ConPTY write must not move it over unpainted transcript state.
+    await write('\x1b[?2026h\x1b[2J\x1b[4;1H› temporary prompt');
+    const synchronizedCaretFrozen = guarded() && caret.style.top === savedTop;
+    await write('\x1b[2J\x1b[5;1HThinking...\x1b[10;1H› draft\x1b[12;1H  gpt-test medium\x1b[12;5H\x1b[?2026l');
+    const synchronizedCaretRestored = guarded() && caret.style.top === savedTop;
     await write('\x1b[6n');
     const realCursor = { x: terminal.buffer.active.cursorX, y: terminal.buffer.active.cursorY, reports: writes };
     await write('\x1b[10;8H');
@@ -47,11 +53,11 @@ try {
     guard.dispose();
     const disposed = !terminal.element.querySelector('.terminal-input-caret') && !guarded();
     terminal.dispose();
-    return { inputNormal, thinkingGuarded, footerGuarded, realCursor, restored, multiline, focusKept, menuNormal, claudeGuarded, hiddenRespected, disposed };
+    return { inputNormal, thinkingGuarded, footerGuarded, synchronizedCaretFrozen, synchronizedCaretRestored, realCursor, restored, multiline, focusKept, menuNormal, claudeGuarded, hiddenRespected, disposed };
   });
   const { realCursor, ...checks } = results;
   for (const [name, passed] of Object.entries(checks)) expect(passed, name).toBe(true);
   expect(realCursor).toEqual({ x: 4, y: 11, reports: ['\x1b[12;5R'] });
-  console.log('PASS terminal cursor: thinking/footer redraws, restore, multiline input, focus, menus, Claude prompts, hidden cursor and cleanup');
+  console.log('PASS terminal cursor: thinking/footer redraws, synchronized frames, restore, multiline input, focus, menus, Claude prompts, hidden cursor and cleanup');
   console.log('PASS cursor-position reports and the real terminal buffer remain unchanged');
 } finally { await browser.close(); }

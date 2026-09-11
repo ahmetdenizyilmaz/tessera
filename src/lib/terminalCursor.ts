@@ -26,6 +26,9 @@ export function installTerminalCursorGuard(
     caret.hidden = true;
   };
   const update = () => {
+    // xterm owns synchronized rendering; never paint an overlay from a
+    // half-parsed frame over the previously completed native frame.
+    if (terminal.modes.synchronizedOutputMode) return;
     const buffer = terminal.buffer.active;
     if (
       !isWorking() ||

@@ -14,7 +14,8 @@ try {
     const frames = async () => {
       for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
     };
-    let terminal = new window.Terminal({ cols: 80, rows: 20 });
+    const windowsPty = { backend: 'conpty', buildNumber: 26200 };
+    let terminal = new window.Terminal({ cols: 80, rows: 20, windowsPty });
     terminal.open(document.getElementById('terminal'));
     let guard = window.TesseraScroll.installTerminalScrollGuard(terminal);
     const write = data => new Promise(resolve => terminal.write(data, async () => { await frames(); resolve(); }));
@@ -24,22 +25,31 @@ try {
     const atBottom = () => buffer().viewportY === buffer().baseY;
     const topText = () => buffer().getLine(buffer().viewportY)?.translateToString(true);
     const startsAtBottom = atBottom();
-    const viewport = () => terminal.element.querySelector('.xterm-viewport');
-    // Browser/layout scroll reset without a user gesture.
-    viewport().scrollTop = 0;
-    viewport().dispatchEvent(new Event('scroll'));
-    await frames();
-    const redrawResetRecovers = atBottom();
-    // A scrollbar drag is intentional and must be preserved during output.
-    viewport().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    terminal.scrollToLine(50);
+    const scrollbar = () => terminal.element.querySelector('.scrollbar.vertical');
+    const dragTo = async y => {
+      scrollbar().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      terminal.scrollToLine(y);
+      window.dispatchEvent(new PointerEvent('pointerup'));
+      await frames();
+    };
+    // A focus click during a real resize/redraw must not be saved as a
+    // user's deliberate scroll to the top (the old guard did this).
+    terminal.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    terminal.resize(80, 14);
+    terminal.scrollToLine(0);
     window.dispatchEvent(new PointerEvent('pointerup'));
     await frames();
+    const focusResizeKeepsFollowing = atBottom() && guard.snapshot().following;
+    // A scrollbar drag is intentional and must be preserved during output.
+    await dragTo(50);
     const anchor = topText();
     const userScrollKept = !guard.snapshot().following && buffer().viewportY === 50;
     await write('\r\nnew output\r\nmore output');
     const outputKeepsReadingPosition = topText() === anchor;
-    await write('\x1b[3J\x1b[2J\x1b[H' + history + '\r\nnew output\r\nmore output');
+    // Real ConPTY chunks can separate ED3 from the synchronized replay.
+    await write('\x1b[3J\x1b[2J\x1b[H');
+    await write('\x1b[?2026h' + history.slice(0, 90));
+    await write(history.slice(90) + '\r\nnew output\r\nmore output\x1b[?2026l');
     const transcriptReplayKeepsAnchor = topText() === anchor;
     terminal.resize(60, 14);
     await frames();
@@ -50,17 +60,29 @@ try {
     terminal.loadAddon(serializer);
     const serialized = serializer.serialize();
     guard.dispose(); terminal.dispose();
-    terminal = new window.Terminal({ cols: 60, rows: 14 });
+    terminal = new window.Terminal({ cols: 60, rows: 14, windowsPty });
     terminal.open(document.getElementById('terminal'));
     guard = window.TesseraScroll.installTerminalScrollGuard(terminal, saved);
     await write(serialized);
     const remountKeepsReadingPosition = topText() === anchor;
-    viewport().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    terminal.scrollToBottom();
-    window.dispatchEvent(new PointerEvent('pointerup'));
-    await frames();
+    await dragTo(buffer().baseY);
     await write('\x1b[3J\x1b[2J\x1b[H' + history);
     const bottomFollowingSurvivesReplay = atBottom() && guard.snapshot().following;
+    // Ordinary output belongs to xterm. The integration should not force
+    // scrollToBottom for each chunk, which fights synchronized rendering.
+    let forcedScrolls = 0;
+    const scrollToBottom = terminal.scrollToBottom.bind(terminal);
+    terminal.scrollToBottom = () => { forcedScrolls++; scrollToBottom(); };
+    for (let i = 0; i < 5; i++) await write(`\r\nordinary output ${i}`);
+    const ordinaryOutputUsesNativeFollow = atBottom() && forcedScrolls === 0;
+    terminal.scrollToBottom = scrollToBottom;
+    // Repeated panel size/focus changes retain the input and full history.
+    for (const [cols, rows] of [[60, 28], [80, 10], [40, 22], [80, 20]]) {
+      terminal.resize(cols, rows);
+      terminal.focus();
+      await frames();
+      if (!atBottom()) throw new Error(`Lost bottom after resize to ${cols}x${rows}`);
+    }
     document.getElementById('elsewhere').focus();
     await write('\r\nlatest output');
     const outputKeepsFocus = document.activeElement.id === 'elsewhere';
@@ -70,9 +92,9 @@ try {
     const normalBufferRestored = buffer().type === 'normal' && atBottom();
     window.scrollTestTerminal = terminal;
     window.scrollTestGuard = guard;
-    return { startsAtBottom, redrawResetRecovers, userScrollKept, outputKeepsReadingPosition,
+    return { startsAtBottom, focusResizeKeepsFollowing, userScrollKept, outputKeepsReadingPosition,
       transcriptReplayKeepsAnchor, resizeKeepsReadingPosition, remountKeepsReadingPosition,
-      bottomFollowingSurvivesReplay, outputKeepsFocus, alternateScreenUnaffected, normalBufferRestored };
+      bottomFollowingSurvivesReplay, ordinaryOutputUsesNativeFollow, outputKeepsFocus, alternateScreenUnaffected, normalBufferRestored };
   });
   for (const [name, passed] of Object.entries(result)) expect(passed, name).toBe(true);
   await page.locator('#terminal').hover();
@@ -123,7 +145,7 @@ try {
   await input.dispatchEvent('compositionstart', { data: '' });
   await expect.poll(atInput, { message: 'IME composition must reveal the prompt' }).toBe(true);
   await input.dispatchEvent('compositionend', { data: '' });
-  console.log('PASS terminal scroll: browser resets, output, transcript replay, resize, remount, reading anchors, wheel gestures, alternate screen and focus');
+  console.log('PASS terminal scroll: focus clicks, native following, chunked synchronized replay, ConPTY resize, remount, reading anchors, wheel gestures, alternate screen and focus');
   console.log('PASS terminal input: typing, editing and IME reveal the prompt; scroll keys and terminal replies preserve history');
   await page.evaluate(() => { window.scrollTestGuard.dispose(); window.scrollTestTerminal.dispose(); });
 } finally { await browser.close(); }

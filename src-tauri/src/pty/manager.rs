@@ -20,6 +20,36 @@ pub struct PtyInstance {
     output_buffer: Arc<Mutex<Vec<u8>>>,
     kill_flag: Arc<Mutex<bool>>,
     suppress_events: Arc<AtomicBool>,
+    size: Option<PtySize>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    windows_pty: Option<WindowsPty>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsPty {
+    backend: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    build_number: Option<u32>,
+}
+
+/// portable-pty uses ConPTY on Windows. Give xterm the host's real build so
+/// row growth and line wrapping follow the same rules as the native console.
+#[tauri::command]
+pub fn pty_capabilities() -> PtyCapabilities {
+    #[cfg(windows)]
+    let windows_pty = Some(WindowsPty {
+        backend: "conpty",
+        build_number: sysinfo::System::kernel_version().and_then(|v| v.parse().ok()),
+    });
+    #[cfg(not(windows))]
+    let windows_pty = None;
+    PtyCapabilities { windows_pty }
 }
 
 fn kill_instance(instance: &mut PtyInstance) {
@@ -288,6 +318,7 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
     let kill_flag: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     let suppress_events: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
+    let size = pair.master.get_size().ok();
     let instance = PtyInstance {
         master: pair.master,
         child,
@@ -295,6 +326,7 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
         output_buffer: output_buffer.clone(),
         kill_flag: kill_flag.clone(),
         suppress_events: suppress_events.clone(),
+        size,
     };
 
     {
@@ -473,17 +505,20 @@ pub async fn pty_resize(
     rows: u16,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
-    let instances = state.instances.lock().map_err(|e| e.to_string())?;
-    if let Some(instance) = instances.get(&id) {
+    if cols < 2 || rows == 0 {
+        return Err("Terminal dimensions must be at least 2 columns and 1 row".into());
+    }
+    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+    if let Some(instance) = instances.get_mut(&id) {
+        if instance.size.is_some_and(|size| size.cols == cols && size.rows == rows) {
+            return Ok(());
+        }
+        let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         instance
             .master
-            .resize(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
+            .resize(size)
             .map_err(|e| format!("Resize failed: {}", e))?;
+        instance.size = Some(size);
     } else {
         return Err(format!("PTY instance '{}' not found", id));
     }

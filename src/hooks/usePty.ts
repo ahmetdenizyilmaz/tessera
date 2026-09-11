@@ -135,11 +135,9 @@ export function usePty(instanceId: string) {
   };
 
   const resize = async (cols: number, rows: number) => {
-    try {
-      await invoke('pty_resize', { id: instanceId, cols, rows });
-    } catch (err) {
-      console.error(`Failed to resize PTY ${instanceId}:`, err);
-    }
+    // The resize coordinator records only successful geometry and reports
+    // failures. Swallowing one here would leave xterm and ConPTY out of sync.
+    await invoke('pty_resize', { id: instanceId, cols, rows });
   };
 
   const kill = async () => {
