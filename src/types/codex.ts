@@ -90,4 +90,6 @@ export interface CodexState {
   connected: boolean;
   usage?: Record<string, unknown>;
   materialized?: boolean;
+  /** Effective permissions reported by the native terminal's app-server. */
+  permissions?: Required<Pick<CodexConfig, "sandbox" | "approvalPolicy" | "approvalsReviewer">>;
 }

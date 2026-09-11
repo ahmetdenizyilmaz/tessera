@@ -5,6 +5,7 @@ import type {
   CodexState,
   CodexThread,
 } from "../types/codex";
+import { permissionsFromThreadSettings } from "./codexPermissions";
 
 export function emptyCodexState(generation = ""): CodexState {
   return {
@@ -46,6 +47,8 @@ export function reduceCodex(state: CodexState, event: CodexEvent): CodexState {
     return next;
   }
   switch (event.message.method) {
+    case "thread/settings/updated":
+      return { ...next, permissions: permissionsFromThreadSettings(p.threadSettings) };
     case "tessera/ready":
       return { ...next, threadId: String(p.threadId), connected: true };
     case "item/started":

@@ -35,6 +35,11 @@ it while idle. This reconnects the same conversation and saves the selected mode
 finish or cancel a pending turn first. Claude permission defaults are separate.
 Tessera passes these choices to Codex and does not automatically click approval cards.
 
+Native `/permissions` changes are synchronized back to the panel's saved policy
+through Codex's `thread/settings/updated` notifications, including replay after a
+group remount. Changing permissions does not resolve an approval already pending
+in an active turn. Finish or cancel that request before reconnecting the panel.
+
 A **new terminal conversation takes its first message in Tessera**, then attaches
 the native Codex TUI to that exact conversation. Codex creates its transcript only
 after the first user turn; attempting to resume an empty thread fails. No artificial

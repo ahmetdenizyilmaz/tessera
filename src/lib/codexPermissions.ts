@@ -4,6 +4,36 @@ type Permissions = Required<
   Pick<CodexConfig, "sandbox" | "approvalPolicy" | "approvalsReviewer">
 >;
 
+/** Only persist policies Tessera can faithfully pass back on resume. */
+export function permissionsFromThreadSettings(value: unknown): Permissions | undefined {
+  if (!value || typeof value !== "object") return;
+  const settings = value as Record<string, unknown>;
+  const policy = settings.sandboxPolicy as Record<string, unknown> | undefined;
+  const sandbox = policy?.type === "dangerFullAccess" ? "danger-full-access"
+    : policy?.type === "workspaceWrite" ? "workspace-write"
+    : policy?.type === "readOnly" ? "read-only" : undefined;
+  const approvalPolicy = settings.approvalPolicy;
+  const reviewer = settings.approvalsReviewer === "guardian_subagent"
+    ? "auto_review" : settings.approvalsReviewer;
+  if (!sandbox || (approvalPolicy !== "never" && approvalPolicy !== "on-request") ||
+      (reviewer !== "user" && reviewer !== "auto_review")) return;
+  // Custom roots/network grants need a richer saved config than these presets.
+  // Do not silently turn one of those policies into a standard preset.
+  if (sandbox !== "danger-full-access") {
+    if (policy?.networkAccess === true || policy?.excludeTmpdirEnvVar === true ||
+        policy?.excludeSlashTmp === true) return;
+    const normalize = (p: string) => {
+      const path = p.replace(/\\/g, "/").replace(/\/+$/, "");
+      return /^[a-z]:\//i.test(path) ? path.toLowerCase() : path;
+    };
+    if (Array.isArray(policy?.writableRoots) && policy.writableRoots.some(
+      (root) => typeof root !== "string" || typeof settings.cwd !== "string" ||
+        normalize(root) !== normalize(settings.cwd),
+    )) return;
+  }
+  return { sandbox, approvalPolicy, approvalsReviewer: reviewer };
+}
+
 export const CODEX_PERMISSION_MODES: {
   id: CodexPermissionMode;
   label: string;

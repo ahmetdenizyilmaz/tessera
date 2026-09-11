@@ -117,6 +117,7 @@ export async function restartCodex(
   threadId?: string,
   cwd?: string,
 ): Promise<void> {
+  useInstanceStore.getState().setStatus(id, "starting");
   await invoke("pty_kill", { id }).catch(() => {});
   cleanupPty(id, false);
   clearTerminalState(id);

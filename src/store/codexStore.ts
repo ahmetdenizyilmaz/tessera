@@ -77,6 +77,7 @@ export const useCodexStore = create<{
         // thread explicitly false: undefined used to make autosave persist an
         // ID for which Codex had never written a resumable transcript.
         next.materialized = !!(next.materialized || existing.materialized);
+        next.permissions = existing.permissions;
       }
       return {
         sessions: { ...state.sessions, [id]: next },

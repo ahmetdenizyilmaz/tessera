@@ -7,12 +7,37 @@ import type { InstanceConfig } from "../types/instance";
 
 let listener: Promise<unknown> | undefined;
 const configuring = new Map<string, Promise<void>>();
+
+function syncPermissions(id: string) {
+  const store = useInstanceStore.getState();
+  const instance = store.instances.get(id);
+  const session = useCodexStore.getState().sessions[id];
+  const permissions = session?.permissions;
+  // Ignore a retiring terminal while an explicit panel change reconnects it.
+  if (!permissions || !session.connected || instance?.status === "starting" ||
+      instance?.config.agentProvider !== "codex") return;
+  const current = codexConfig(instance.config);
+  if (current.sandbox === permissions.sandbox &&
+      current.approvalPolicy === permissions.approvalPolicy &&
+      current.approvalsReviewer === permissions.approvalsReviewer) return;
+  store.updateInstance(id, {
+    config: {
+      ...instance.config,
+      codex: { ...instance.config.codex, ...permissions },
+    },
+  });
+}
+
 export function initCodexBridge() {
   return (listener ??= listen<CodexEvent>("codex-event", ({ payload }) => {
     const instance = useInstanceStore.getState().instances.get(payload.id);
     if (instance?.config.agentProvider !== "codex") return;
     useCodexStore.getState().receive(payload);
     const session = useCodexStore.getState().sessions[payload.id];
+    if (payload.message.method === "thread/settings/updated" &&
+        session?.generation === payload.generation && session.sequence === payload.sequence &&
+        payload.message.params.threadId === session.threadId)
+      syncPermissions(payload.id);
     if (session?.threadId)
       useInstanceStore
         .getState()
@@ -61,6 +86,8 @@ export async function ensureCodex(id: string): Promise<void> {
         codexHasTurns: useCodexStore.getState().sessions[id]?.materialized,
         status: "running",
       });
+    // Native changes may be in replay when a previously hidden panel mounts.
+    syncPermissions(id);
   })();
   configuring.set(id, task);
   try {
