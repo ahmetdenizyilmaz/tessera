@@ -231,7 +231,9 @@ Answer in your own panel instead of forwarding again.",
     }
 
     if target.kind == "terminal" {
-        return deliver_to_terminal(app, &target, &wrapped, wait);
+        let result = deliver_to_terminal(app, &target, &wrapped, wait).await?;
+        bus.record_inbound_hop(&target.id, hop);
+        return Ok(result);
     }
 
     let stream_state = app.state::<StreamJsonManager>();
@@ -311,26 +313,26 @@ Use read_panel later to see what it said.",
     }
 }
 
-fn deliver_to_terminal(
+async fn deliver_to_terminal(
     app: &AppHandle,
     target: &super::registry::PanelInfo,
     text: &str,
     wait: bool,
 ) -> Result<Value, String> {
     let pty = app.state::<PtyManager>();
-    // Terminal panels drive the interactive TUI, so this is literally typing.
-    // A trailing CR submits the line.
-    let line = format!("{}\r", text.replace('\n', " "));
-    crate::pty::manager::write_to_instance(&pty, &target.id, &line)?;
+    if target.awaiting_user {
+        return Err("That panel is waiting for a permission response or question; a message cannot answer that prompt.".into());
+    }
+    crate::pty::manager::submit_to_instance(&pty, &target.id, text).await?;
     Ok(json!({
         "delivered": true,
         "panel": target.name,
         "delivery": "best_effort",
         "note": if wait {
-            "Typed into that panel's terminal. Terminal panels give no completion signal, \
+            "Pasted the message and sent Enter. Terminal panels give no completion signal, \
 so wait_for_reply was ignored — use read_panel or ask the person."
         } else {
-            "Typed into that panel's terminal. Terminal panels give no completion signal."
+            "Pasted the message and sent Enter. Terminal panels give no completion signal."
         },
     }))
 }
