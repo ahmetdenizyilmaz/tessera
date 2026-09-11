@@ -445,6 +445,67 @@ mod tests {
         assert!(c.requests.lock().unwrap().is_empty());
     }
     #[tokio::test]
+    async fn panel_messages_queue_in_order_until_the_current_turn_and_request_finish() {
+        let (client, mut wire) = mock();
+        let client = Arc::new(client);
+        client.busy.store(true, Ordering::Release);
+        let queue = super::super::panel_delivery::PanelDelivery::new(client.clone());
+        let first = queue.enqueue("first message".into()).unwrap();
+        let second = queue.enqueue("second message".into()).unwrap();
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert!(wire.try_recv().is_err());
+        client.requests.lock().unwrap().insert("approval".into(), json!({}));
+        client.busy.store(false, Ordering::Release);
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert!(wire.try_recv().is_err(), "a queued message cannot answer an approval");
+        client.requests.lock().unwrap().clear();
+        let one = tokio::time::timeout(Duration::from_secs(2), wire.recv()).await.unwrap().unwrap();
+        assert_eq!(one["params"]["input"][0]["text"], "first message");
+        client.receive(json!({"id":one["id"],"result":{"turn":{"id":"first"}}}));
+        assert_eq!(first.await.unwrap().unwrap()["turn"]["id"], "first");
+        assert_eq!(queue.pending(), 1);
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert!(wire.try_recv().is_err());
+        client.receive(json!({"method":"turn/completed","params":{"threadId":"thread-a","turn":{"id":"first","status":"completed"}}}));
+        let two = tokio::time::timeout(Duration::from_secs(2), wire.recv()).await.unwrap().unwrap();
+        assert_eq!(two["params"]["input"][0]["text"], "second message");
+        client.receive(json!({"id":two["id"],"result":{"turn":{"id":"second"}}}));
+        second.await.unwrap().unwrap();
+        assert_eq!(queue.pending(), 0);
+        client.fail("test finished");
+    }
+
+    #[tokio::test]
+    async fn closing_codex_cancels_queued_messages_without_replaying_into_another_thread() {
+        let (client, mut wire) = mock();
+        let client = Arc::new(client);
+        client.busy.store(true, Ordering::Release);
+        let queue = super::super::panel_delivery::PanelDelivery::new(client.clone());
+        let first = queue.enqueue("first".into()).unwrap();
+        let second = queue.enqueue("second".into()).unwrap();
+        client.fail("closed");
+        assert!(first.await.unwrap().is_err());
+        assert!(second.await.unwrap().is_err());
+        assert_eq!(queue.pending(), 0);
+        assert_eq!(wire.try_recv().unwrap(), Value::Null); // transport shutdown
+        assert!(wire.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn failed_turn_start_is_reported_without_duplicate_delivery() {
+        let (client, mut wire) = mock();
+        let client = Arc::new(client);
+        let queue = super::super::panel_delivery::PanelDelivery::new(client.clone());
+        let receipt = queue.enqueue("one message".into()).unwrap();
+        let request = wire.recv().await.unwrap();
+        client.receive(json!({"id":request["id"],"error":{"code":-1,"message":"failed start"}}));
+        assert!(receipt.await.unwrap().unwrap_err().contains("failed start"));
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert!(wire.try_recv().is_err());
+        client.fail("test finished");
+    }
+
+    #[tokio::test]
     #[ignore = "Uses the installed Codex CLI and account for two tiny model turns"]
     async fn live_transports_and_exact_thread_resume() {
         for terminal in [false, true] {

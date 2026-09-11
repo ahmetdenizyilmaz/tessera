@@ -1,5 +1,6 @@
 pub mod executable;
 pub mod rpc;
+mod panel_delivery;
 
 use rpc::Client;
 use serde::{Deserialize, Serialize};
@@ -91,6 +92,7 @@ pub struct Session {
     pub client: Arc<Client>,
     pub config: Config,
     pub initial: Value,
+    panel_delivery: panel_delivery::PanelDelivery,
 }
 
 #[derive(Default)]
@@ -425,6 +427,7 @@ pub async fn configure(
     };
     *client.thread.lock().unwrap() = Some(sid.clone());
     let session = Session {
+        panel_delivery: panel_delivery::PanelDelivery::new(client.clone()),
         client: client.clone(),
         config,
         initial,
@@ -462,6 +465,19 @@ pub async fn send(
     model: Option<String>,
     effort: Option<String>,
 ) -> Result<Value, String> {
+    send_to_client(&manager.client(id)?, text, images, model, effort).await
+}
+
+const BUSY_ERROR: &str = "This Codex panel is already working. Stop or wait for it to finish.";
+const PENDING_REQUEST_ERROR: &str = "Answer this panel's pending request before sending another message.";
+
+async fn send_to_client(
+    client: &Arc<Client>,
+    text: &str,
+    images: Vec<String>,
+    model: Option<String>,
+    effort: Option<String>,
+) -> Result<Value, String> {
     let mut input = Vec::new();
     if !text.trim().is_empty() {
         input.push(json!({"type":"text","text":text,"text_elements":[]}));
@@ -478,9 +494,8 @@ pub async fn send(
     if input.is_empty() {
         return Err("Write a message or attach an image.".into());
     }
-    let client = manager.client(id)?;
     if !client.requests.lock().unwrap().is_empty() {
-        return Err("Answer this panel's pending request before sending another message.".into());
+        return Err(PENDING_REQUEST_ERROR.into());
     }
     let sid = client
         .thread
@@ -493,7 +508,7 @@ pub async fn send(
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
     {
-        return Err("This Codex panel is already working. Stop or wait for it to finish.".into());
+        return Err(BUSY_ERROR.into());
     }
     let mut params = json!({"threadId":sid,"input":input});
     if let Some(m) = model.filter(|m| !m.is_empty()) {
@@ -673,13 +688,35 @@ pub async fn deliver(
     }
     let c = manager.client(id)?;
     let mut watcher = c.outcomes.subscribe();
-    let result = send(&manager, id, text, vec![], None, None).await?;
+    let delivery = manager.sessions.lock().unwrap().get(id)
+        .ok_or("Codex panel closed before delivery")?.panel_delivery.clone();
+    let queued = delivery.pending() > 0 || c.busy.load(Ordering::Acquire) ||
+        !c.requests.lock().unwrap().is_empty();
+    let receipt = delivery.enqueue(text.into())?;
+    let accepted = || json!({"accepted":true,"delivered":false,"status":"queued",
+        "note":"Queued for automatic delivery when this Codex turn finishes. Do not resend. Continue your work; use send_to_panel for follow-up messages."});
+    if queued { return Ok(accepted()); }
+    // A turn can start after the idle check. Release the caller rather than
+    // leaving two agents blocked waiting for one another's current turns.
+    let result = match tokio::time::timeout(std::time::Duration::from_secs(2), receipt).await {
+        Ok(Ok(result)) => result?,
+        Ok(Err(_)) => return Err("Codex panel closed before delivery".into()),
+        Err(_) => return Ok(accepted()),
+    };
     if !wait {
         return Ok(json!({"delivered":true,"turnId":result["turn"]["id"]}));
     }
     match tokio::time::timeout(
         std::time::Duration::from_secs(timeout.clamp(5, 120)),
-        watcher.recv(),
+        async {
+            loop {
+                let outcome = watcher.recv().await?;
+                if outcome["turn"]["id"] == result["turn"]["id"] ||
+                    outcome["status"] == "awaiting_user_input" || outcome["status"] == "process_ended" {
+                    return Ok::<_, tokio::sync::broadcast::error::RecvError>(outcome);
+                }
+            }
+        },
     )
     .await
     {
@@ -689,6 +726,11 @@ pub async fn deliver(
         }
         _ => Ok(json!({"delivered":true,"status":"timed_out"})),
     }
+}
+
+pub fn pending_panel_messages(app: &AppHandle, id: &str) -> usize {
+    app.state::<CodexManager>().sessions.lock().unwrap().get(id)
+        .map(|s| s.panel_delivery.pending()).unwrap_or(0)
 }
 
 pub async fn read_recent(app: &AppHandle, id: &str, limit: usize) -> Result<Value, String> {

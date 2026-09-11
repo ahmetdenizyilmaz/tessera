@@ -36,7 +36,11 @@ backend subwindow', 'ask the other tab', or 'message the other agent'. Panel, se
 sub-window, pane, tab, chat and conversation mean the same destination here. Call list_panels \
 to identify the recipient, then pass its returned name or id in panel. If several recipients \
 match, clarify; do not guess or broadcast. The message arrives as a visible user turn in that \
-session. Returns after delivery; set wait_for_reply when the user's task needs its answer. \
+session and is submitted automatically. Reply to a panel-message with this tool, not only in \
+your own conversation. Continue the authorized discussion without asking the user to relay replies. \
+Use wait_for_reply=false for back-and-forth exchanges. Busy Codex recipients queue messages for \
+automatic delivery; a queued response means accepted, so do not resend. Stop when the task is \
+resolved, avoiding acknowledgement loops. Set wait_for_reply for an isolated request needing its answer. \
 Sending a message does not approve permissions or bypass a pending prompt.",
             "inputSchema": {
                 "type": "object",
@@ -114,6 +118,9 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
                     "status": p.status,
                     "busy": p.busy,
                     "awaiting_user_input": p.awaiting_user,
+                    "queued_messages": if p.provider.as_deref() == Some("codex") {
+                        crate::codex::pending_panel_messages(app, &p.id)
+                    } else { 0 },
                     "reachable": p.reachable(),
                     "is_self": p.id == caller_id,
                 })
@@ -198,18 +205,8 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
         ));
     }
 
-    // Loop control. Hop depth is tracked server-side against the calling panel
-    // id; a model that rewrites the message text cannot reset it.
+    // Retain hop provenance without cutting off an authorized conversation.
     let hop = bus.next_hop(caller_id);
-    if PanelBus::hop_exceeded(hop) {
-        return Err(format!(
-            "message chain is {} panels deep (limit {}) — stopping here to avoid a loop. \
-Answer in your own panel instead of forwarding again.",
-            hop,
-            PanelBus::max_hop()
-        ));
-    }
-    bus.check_rate(caller_id)?;
 
     let sender_name = bus
         .with_registry(|r| r.get(caller_id).map(|p| p.name.clone()))
@@ -223,6 +220,8 @@ Answer in your own panel instead of forwarding again.",
         .get("wait_for_reply")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let wait_guard = if wait { bus.begin_wait(caller_id, &target.id) } else { None };
+    let wait = wait_guard.is_some();
 
     if target.provider.as_deref() == Some("codex") {
         bus.record_inbound_hop(&target.id, hop);
