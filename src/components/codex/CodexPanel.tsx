@@ -115,6 +115,9 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     [images, setImages] = useState<string[]>([]);
   const [models, setModels] = useState<CodexDiscovery["models"]>([]);
   const body = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const requestArea = useRef<HTMLDivElement>(null);
+  const [requestsExpanded, setRequestsExpanded] = useState(false);
   const composer = useRef<HTMLTextAreaElement>(null);
   const [attaching, setAttaching] = useState(false);
   const [recoverHistory, setRecoverHistory] = useState(false);
@@ -241,11 +244,37 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     !session?.busy &&
     !session?.requests.length &&
     (!!text.trim() || images.length > 0);
+  const showRequests = () => {
+    setRequestsExpanded(true);
+    requestAnimationFrame(() => {
+      requestArea.current?.scrollTo({ top: 0 });
+      requestArea.current?.querySelector<HTMLElement>(".codex-request")?.focus({ preventScroll: true });
+    });
+  };
+  const returnToInput = () => {
+    setRequestsExpanded(false);
+    requestAnimationFrame(() => panel.current?.querySelector<HTMLTextAreaElement>(
+      ".xterm-helper-textarea, .chat-textarea",
+    )?.focus({ preventScroll: true }));
+  };
   if (!instance) return null;
   return (
     <section
+      ref={panel}
       className="terminal-panel codex-panel"
       style={{ borderTopColor: instance.color }}
+      onKeyDownCapture={(event) => {
+        if (event.altKey && !event.ctrlKey && !event.metaKey && event.key === "ArrowUp" && session?.requests.length) {
+          event.preventDefault();
+          event.stopPropagation();
+          showRequests();
+        } else if (requestsExpanded && requestArea.current?.contains(event.target as Node) &&
+          (event.key === "Escape" || (event.altKey && event.key === "ArrowDown"))) {
+          event.preventDefault();
+          event.stopPropagation();
+          returnToInput();
+        }
+      }}
     >
       <AgentPanelHeader
         instanceId={instanceId}
@@ -472,7 +501,14 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
         </>
       )}
       {!!session?.requests.length && (
-        <div className="codex-requests">
+        <div ref={requestArea} className={`codex-requests${requestsExpanded ? " codex-requests--expanded" : ""}`}>
+          <div className="codex-request-toolbar">
+            <button type="button" className="control-btn control-btn--neutral"
+              aria-expanded={requestsExpanded}
+              onClick={requestsExpanded ? returnToInput : showRequests}>
+              {requestsExpanded ? "Back to input · Esc" : `Questions & approvals (${session.requests.length}) · Alt+↑`}
+            </button>
+          </div>
           <CodexRequests requests={session.requests} instanceId={instanceId} />
         </div>
       )}

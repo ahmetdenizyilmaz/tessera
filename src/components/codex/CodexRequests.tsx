@@ -60,8 +60,8 @@ function RequestCard({
     cancel: "Cancel turn",
   };
   return (
-    <section className="codex-request" aria-label="Codex request">
-      <strong>
+    <section className="control-card codex-request" aria-label="Codex request" tabIndex={-1}>
+      <strong className="control-card__title">
         {request.method.includes("commandExecution")
           ? "Command approval"
           : request.method.includes("fileChange")
@@ -74,19 +74,19 @@ function RequestCard({
       </strong>
       {!!p.reason && <p>{String(p.reason)}</p>}
       {!!p.message && <p>{String(p.message)}</p>}
-      {!!p.command && <pre>{String(p.command)}</pre>}
+      {!!p.command && <pre className="control-card__input">{String(p.command)}</pre>}
       {!!p.cwd && <small>Folder: {String(p.cwd)}</small>}
       {!!p.networkApprovalContext && (
         <pre>{JSON.stringify(p.networkApprovalContext, null, 2)}</pre>
       )}
       {!!p.grantRoot && <p>Requested folder: {String(p.grantRoot)}</p>}
       {approval && (
-        <div className="form-row">
+        <div className="control-card__actions">
           {decisions
             .filter((d) => titles[d])
             .map((d) => (
               <button
-                className="btn btn-secondary"
+                className={`control-btn ${d === "accept" || d === "acceptForSession" ? "control-btn--allow" : "control-btn--deny"}`}
                 key={d}
                 disabled={pending}
                 onClick={() => void respond({ decision: d })}
@@ -122,33 +122,40 @@ function RequestCard({
       {request.method === "item/tool/requestUserInput" && (
         <>
           {questions.map((q) => (
-            <label className="form-label" key={q.id}>
-              {q.header && <strong>{q.header}: </strong>}
-              {q.question}
+            <div className="control-question" key={q.id}>
+              {q.header && <div className="control-question__header">{q.header}</div>}
+              <div className="control-question__text">{q.question}</div>
+              <div className="control-question__options">
               {q.options?.map((o) => (
                 <button
-                  className="btn btn-secondary"
+                  className={`control-option${answers[q.id] === o.label ? " control-option--selected" : ""}`}
+                  aria-pressed={answers[q.id] === o.label}
                   type="button"
                   key={o.label}
                   disabled={pending}
                   title={o.description}
                   onClick={() => setAnswers((a) => ({ ...a, [q.id]: o.label }))}
                 >
-                  {o.label}
+                  <span className="control-option__label">{o.label}</span>
+                  {o.description && <span className="control-option__description">{o.description}</span>}
                 </button>
               ))}
+              </div>
               <input
-                className="form-input"
+                className="control-question__freetext"
+                aria-label={q.question}
+                placeholder="Or type your own answer…"
+                disabled={pending}
                 type={q.isSecret ? "password" : "text"}
                 value={answers[q.id] ?? ""}
                 onChange={(e) =>
                   setAnswers((a) => ({ ...a, [q.id]: e.target.value }))
                 }
               />
-            </label>
+            </div>
           ))}
           <button
-            className="btn btn-primary"
+            className="control-btn control-btn--allow"
             disabled={pending || questions.some((q) => !answers[q.id]?.trim())}
             onClick={() =>
               void respond({

@@ -39,18 +39,21 @@
 .codex-recovery-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .codex-requests {
   max-height: 55%;
+  flex-shrink: 0;
+  min-height: 0;
   overflow: auto;
 }
+.codex-requests--expanded { max-height: calc(100% - 60px); }
+.codex-request-toolbar { position: sticky; top: 0; z-index: 1; padding: 4px 8px; background: var(--bg-primary); }
+.codex-request-toolbar button { font-size: 11px; }
 .codex-request {
-  background: var(--bg-surface);
-  border: 1px solid #a88a4b;
-  border-radius: 6px;
-  padding: 12px;
   margin: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+.codex-request:focus { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: -2px; }
+.codex-request .control-card__actions { flex-wrap: wrap; }
 .codex-request .form-row {
   flex-wrap: wrap;
   gap: 8px;

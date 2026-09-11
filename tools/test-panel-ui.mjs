@@ -234,6 +234,57 @@ try {
   expect(await page.evaluate(() => window.settingsStore.getState().settings.defaultCodexPermissionMode)).toBe("auto-review");
   expect(errors).toEqual([]);
   console.log("PASS persisted Codex default, chat/terminal creation, independent Claude settings and thread-preserving permission changes");
+
+  await codex.getByTitle("Panel controls").click();
+  await codex.getByLabel("Message Codex").fill("keep this unsent draft");
+  await page.evaluate(() => window.codexStore.setState(s => ({ sessions: { ...s.sessions,
+    "codex-ui": { ...s.sessions["codex-ui"], busy: true, requests: [{ id: 81,
+      method: "item/tool/requestUserInput", params: { questions: [{ id: "choice", header: "Approach",
+        question: "Which approach should Codex use?", options: [
+          { label: "Small change", description: "Keep the existing behavior." },
+          { label: "Larger change", description: "Replace the implementation." },
+        ] }]} }] },
+  }})));
+  const question = codex.getByLabel("Codex request");
+  await expect(question).toContainText("Keep the existing behavior.");
+  await expect(codex.getByLabel("Message Codex")).toBeFocused();
+  await codex.getByLabel("Message Codex").press("Alt+ArrowUp");
+  await expect(question).toBeFocused();
+  await expect(codex.locator(".codex-requests--expanded")).toBeVisible();
+  await question.getByRole("button", { name: /Small change/ }).click();
+  await expect(question.getByRole("button", { name: /Small change/ })).toHaveAttribute("aria-pressed", "true");
+  await question.getByLabel("Which approach should Codex use?").fill("custom answer");
+  await question.getByLabel("Which approach should Codex use?").press("Escape");
+  await expect(codex.getByLabel("Message Codex")).toBeFocused();
+  await expect(codex.getByLabel("Message Codex")).toHaveValue("keep this unsent draft");
+  await codex.getByLabel("Message Codex").press("Alt+ArrowUp");
+  await expect(question.getByLabel("Which approach should Codex use?")).toHaveValue("custom answer");
+  await question.getByRole("button", { name: "Submit answers" }).click();
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "codex_respond").at(-1)?.args))
+    .toEqual({ id: "codex-ui", requestId: 81, response: { answers: { choice: { answers: ["custom answer"] } } } });
+
+  // The shortcut must be caught before xterm turns Alt+Up into PTY bytes.
+  await page.evaluate(() => {
+    const inst = window.instanceStore.getState().instances.get("codex-ui");
+    window.instanceStore.getState().updateInstance("codex-ui", { config: { ...inst.config, panelView: "terminal" } });
+    window.codexStore.setState(s => ({ sessions: { ...s.sessions, "codex-ui": {
+      ...s.sessions["codex-ui"], materialized: true, requests: [{ id: 82,
+        method: "item/commandExecution/requestApproval", params: { command: "echo test\n".repeat(80), availableDecisions: ["accept", "cancel"] },
+      }],
+    }}}));
+  });
+  const nativeInput = codex.locator(".xterm-helper-textarea");
+  await nativeInput.focus();
+  await page.evaluate(() => { window.calls = []; });
+  await nativeInput.press("Alt+ArrowUp");
+  await expect(question).toBeFocused();
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "pty_write"))).toEqual([]);
+  await expect(question.getByRole("button", { name: "Allow once" })).toBeVisible();
+  await question.press("Alt+ArrowDown");
+  await expect(nativeInput).toBeFocused();
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === "codex_respond"))).toEqual([]);
+  expect(errors).toEqual([]);
+  console.log("PASS Codex questions share Claude styling; Alt+Up/Alt+Down reveal requests without sending terminal keys or answering prompts");
 } finally {
   if (errors.length) {
     console.error(errors);
