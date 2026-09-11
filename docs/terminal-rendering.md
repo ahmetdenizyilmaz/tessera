@@ -42,6 +42,10 @@ scroll intent and component remounts. Claude uses the same `XTermView` integrati
    animation size instead of using final pixel dimensions. Eight switches sent
    95 terminal resizes. The empty and populated states now share the measured root;
    the regression test starts empty before restoring five panels.
+   The corrected Preview was then checked in that same restored workspace:
+   eight switches produced zero terminal resizes, zero transcript erases and
+   zero transcript render frames, with the viewport at the bottom throughout.
+   All five conversation identities and the Codex Full access policy survived.
 
 ## Ownership
 
