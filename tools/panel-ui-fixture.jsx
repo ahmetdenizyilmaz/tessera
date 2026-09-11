@@ -40,11 +40,27 @@ mockIPC(
       return "C:\\scratch\\.tessera-images\\test.png";
     if (command === "codex_discover")
       return { models: [model], account: { account: { type: "chatgpt" } } };
+    if (command === "codex_history")
+      return {
+        data: [
+          {
+            id: "recoverable-thread",
+            name: "Saved conversation",
+            cwd: "C:\\scratch",
+            updatedAt: 1,
+          },
+        ],
+        nextCursor: null,
+      };
     if (command === "codex_configure")
       return {
         generation: "fixture",
-        threadId: "thread-fixture",
-        thread: { id: "thread-fixture", cwd: "C:\\scratch", turns: [] },
+        threadId: args.threadId || "thread-fixture",
+        thread: {
+          id: args.threadId || "thread-fixture",
+          cwd: "C:\\scratch",
+          turns: [],
+        },
         events: [],
         requests: [],
         busy: false,

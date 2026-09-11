@@ -14,6 +14,7 @@ export function emptyCodexState(generation = ""): CodexState {
     requests: [],
     busy: false,
     connected: true,
+    materialized: false,
   };
 }
 export function historyItems(thread: CodexThread): CodexItem[] {

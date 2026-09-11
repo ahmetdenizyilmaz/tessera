@@ -109,21 +109,19 @@ try {
   await input.evaluate((node) => node.setSelectionRange(4, 4));
   await page.evaluate(() => {
     for (let sequence = 1; sequence <= 20; sequence++)
-      window.codexStore
-        .getState()
-        .receive({
-          id: "codex-ui",
-          generation: "fixture",
-          sequence,
-          message: {
-            method: "item/reasoning/summaryTextDelta",
-            params: {
-              threadId: "thread-fixture",
-              itemId: "thinking",
-              delta: " reasoning",
-            },
+      window.codexStore.getState().receive({
+        id: "codex-ui",
+        generation: "fixture",
+        sequence,
+        message: {
+          method: "item/reasoning/summaryTextDelta",
+          params: {
+            threadId: "thread-fixture",
+            itemId: "thinking",
+            delta: " reasoning",
           },
-        });
+        },
+      });
   });
   await expect(input).toBeFocused();
   expect(await input.evaluate((node) => node.selectionStart)).toBe(4);
@@ -133,6 +131,67 @@ try {
   expect(errors).toEqual([]);
   console.log(
     "PASS draft focus during streamed thinking and narrow-panel controls",
+  );
+  await page.setViewportSize({ width: 1200, height: 800 });
+  const missingThread = async () =>
+    page.evaluate(() => {
+      window.instanceStore.getState().updateInstance("codex-ui", {
+        codexThreadId: "missing-thread",
+        codexHasTurns: true,
+      });
+      const store = window.codexStore;
+      store.setState((state) => ({
+        sessions: {
+          ...state.sessions,
+          "codex-ui": {
+            ...state.sessions["codex-ui"],
+            connected: false,
+            error: "no rollout found for thread id missing-thread",
+          },
+        },
+      }));
+    });
+  await missingThread();
+  await expect(codex.getByRole("alert")).toContainText(
+    "This saved conversation has no transcript",
+  );
+  const countBefore = await page.evaluate(
+    () =>
+      window.calls.filter((call) => call.command === "codex_configure").length,
+  );
+  await codex
+    .getByRole("button", { name: "Find saved conversation", exact: true })
+    .click();
+  expect(
+    await page.evaluate(
+      () =>
+        window.calls.filter((call) => call.command === "codex_configure")
+          .length,
+    ),
+  ).toBe(countBefore);
+  await codex.getByRole("button", { name: /Saved conversation C:/ }).click();
+  await expect(codex.getByRole("alert")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () =>
+        window.calls.filter((call) => call.command === "codex_configure").at(-1)
+          .args.threadId,
+    ),
+  ).toBe("recoverable-thread");
+  await missingThread();
+  await codex
+    .getByRole("button", { name: "Start a new conversation", exact: true })
+    .click();
+  await expect(codex.getByRole("alert")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () =>
+        window.calls.filter((call) => call.command === "codex_configure").at(-1)
+          .args.threadId,
+    ),
+  ).toBeNull();
+  console.log(
+    "PASS missing transcript keeps its ID until explicit recovery; history resumes and empty restart reconnects",
   );
 } finally {
   if (errors.length) {

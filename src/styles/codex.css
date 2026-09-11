@@ -35,6 +35,8 @@
   overflow-wrap: anywhere;
   font-size: 12px;
 }
+.codex-error p { margin: 6px 0; }
+.codex-recovery-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .codex-requests {
   max-height: 55%;
   overflow: auto;

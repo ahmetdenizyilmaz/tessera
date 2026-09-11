@@ -73,7 +73,10 @@ export const useCodexStore = create<{
         const items = new Map(next.items.map((item) => [item.id, item]));
         for (const item of existing.items) items.set(item.id, item);
         next.items = [...items.values()];
-        next.materialized ||= existing.materialized;
+        // An early ready/status event can predate hydration. Keep an empty
+        // thread explicitly false: undefined used to make autosave persist an
+        // ID for which Codex had never written a resumable transcript.
+        next.materialized = !!(next.materialized || existing.materialized);
       }
       return {
         sessions: { ...state.sessions, [id]: next },

@@ -116,6 +116,14 @@ Provider configuration and exact thread IDs persist through mixed workspaces and
 groups. A restored legacy Claude workspace does not migrate into Codex. Duplicate
 Codex IDs in malformed snapshots are not resumed twice.
 
+Empty panels keep an explicit `materialized: false` state, including when ready
+events beat the configure response. Previously, merging an undefined event state
+could erase that flag and make autosave retain an ID with no rollout. Regression
+tests cover both an empty panel and a real first turn arriving during startup.
+Existing missing-rollout errors show recovery choices: retry the same ID, find a
+saved conversation, or explicitly start a new conversation. Tessera does not
+silently substitute another thread when a saved transcript is unavailable.
+
 ## Build and test
 
 ```powershell
@@ -195,6 +203,9 @@ normal menus, focus, hidden cursors, disposal, and unchanged cursor reports.
 The browser component checks cover the shared header, rename/cancel, color picker,
 model/effort controls, native-picker IPC, image-only sends for both providers,
 cancellation/errors, stream-time draft selection, and narrow panels.
+They also verify missing-transcript recovery without automatically replacing
+the saved identity. Native Windows image selection was exercised for both
+providers with a real PNG; both models correctly identified its color.
 
 On the development PC, the preview was also exercised through its actual WebView2
 UI: CLI login and model discovery, chat output, MCP approval submission, history

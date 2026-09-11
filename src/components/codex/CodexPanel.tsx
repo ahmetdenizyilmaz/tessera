@@ -3,13 +3,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useCodexStore } from "../../store/codexStore";
 import { ensureCodex } from "../../lib/codexBridge";
-import { restartCodex } from "../../lib/codexSessions";
+import {
+  findCodexPanel,
+  focusCodexPanel,
+  restartCodex,
+} from "../../lib/codexSessions";
 import { closePanel } from "../../lib/panelCleanup";
 
 import { XTermView } from "../terminal/XTermView";
 import { MarkdownRenderer } from "../chat/MarkdownRenderer";
 import { ProviderIcon } from "../icons/ProviderIcons";
 import { CodexRequests } from "./CodexRequests";
+import { CodexHistory } from "./CodexHistory";
 import { AgentPanelHeader } from "../terminal/AgentPanelHeader";
 import { ImageAttachmentButton } from "../chat/ImageAttachmentButton";
 import { ImageChip } from "../chat/ImageChip";
@@ -110,10 +115,16 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
   const body = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const [attaching, setAttaching] = useState(false);
+  const [recoverHistory, setRecoverHistory] = useState(false);
   const follow = useRef(true);
   const isTerminal = instance?.config.panelView === "terminal";
   const terminalAttached = isTerminal && session?.materialized;
   const model = models.find((m) => m.model === instance?.config.model);
+  const missingThread =
+    !!instance?.codexThreadId &&
+    !!session?.error?.includes(
+      `no rollout found for thread id ${instance.codexThreadId}`,
+    );
   const error = (e: unknown) =>
     useCodexStore.getState().setError(instanceId, String(e));
   useEffect(() => {
@@ -138,13 +149,14 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     if (follow.current && body.current)
       body.current.scrollTop = body.current.scrollHeight;
   }, [session?.items, session?.requests]);
-  const restart = async () => {
+  const restart = async (fresh = false, threadId?: string, cwd?: string) => {
     if (pending || session?.busy) return;
     setPending(true);
     setReady(false);
     try {
-      await restartCodex(instanceId);
+      await restartCodex(instanceId, fresh, threadId, cwd);
       setRestartKey((k) => k + 1);
+      setRecoverHistory(false);
       setReady(true);
     } catch (e) {
       error(e);
@@ -177,7 +189,8 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
       setText("");
       setImages([]);
       if (composer.current) composer.current.style.height = "40px";
-      if (document.activeElement === focusedBeforeSend) composer.current?.focus({ preventScroll: true });
+      if (document.activeElement === focusedBeforeSend)
+        composer.current?.focus({ preventScroll: true });
       follow.current = true;
     } catch (e) {
       error(e);
@@ -345,13 +358,67 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
       />
       {session?.error && (
         <div role="alert" className="codex-error">
-          {session.error}
-          {!session.connected && (
-            <button onClick={() => void restart()} disabled={pending}>
-              Retry / resume
-            </button>
+          {missingThread ? (
+            <>
+              <strong>This saved conversation has no transcript.</strong>
+              <p>
+                An earlier Tessera version could save an empty Codex panel as
+                resumable. If this panel had messages, look for the conversation
+                in saved history before starting a new one.
+              </p>
+              <details>
+                <summary>Conversation ID</summary>
+                {instance.codexThreadId}
+              </details>
+              <div className="codex-recovery-actions">
+                <button
+                  className="btn btn-secondary"
+                  disabled={pending}
+                  onClick={() => setRecoverHistory((value) => !value)}
+                >
+                  {recoverHistory
+                    ? "Hide saved conversations"
+                    : "Find saved conversation"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  disabled={pending}
+                  onClick={() => void restart(true)}
+                >
+                  Start a new conversation
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  disabled={pending}
+                  onClick={() => void restart()}
+                >
+                  Retry resume
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {session.error}
+              {(!ready || !session.connected) && (
+                <button onClick={() => void restart()} disabled={pending}>
+                  Retry / resume
+                </button>
+              )}
+            </>
           )}
         </div>
+      )}
+      {missingThread && recoverHistory && (
+        <CodexHistory
+          executablePath={instance.config.codex?.executablePath}
+          currentThreadId={instance.codexThreadId}
+          disabled={pending}
+          onSelect={(thread) => {
+            const open = findCodexPanel(thread.id);
+            if (open && open !== instanceId) focusCodexPanel(open);
+            else void restart(false, thread.id, thread.cwd);
+          }}
+        />
       )}
       {terminalAttached ? (
         <div className="codex-terminal">
@@ -380,7 +447,9 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
                   ? isTerminal
                     ? "Send your first message to open this conversation in the Codex terminal."
                     : "Ask Codex to work in this project."
-                  : "Connecting to Codex…"}
+                  : session?.error
+                    ? "Reconnect this panel to continue."
+                    : "Connecting to Codex…"}
               </p>
             )}
           </div>

@@ -89,6 +89,30 @@ describe("Codex event isolation and recovery", () => {
       useCodexStore.getState().sessions.panel.items.map((i) => i.text),
     ).toEqual(["History", "Hello world"]);
   });
+  it("keeps an unsent thread non-resumable when ready arrives before the configure reply", () => {
+    const store = useCodexStore.getState();
+    const ready = event(1, "tessera/ready", { threadId: "thread" });
+    store.receive(ready);
+    const empty = {
+      ...snapshot(),
+      thread: { ...snapshot().thread, turns: [] },
+    };
+    store.hydrate("panel", empty);
+    expect(useCodexStore.getState().sessions.panel.materialized).toBe(false);
+    // Remounting a hidden/grouped panel must not change its persistence state.
+    store.hydrate("panel", empty);
+    expect(useCodexStore.getState().sessions.panel.materialized).toBe(false);
+  });
+  it("retains a real first turn that arrives before the configure reply", () => {
+    const store = useCodexStore.getState();
+    store.receive(event(1, "tessera/ready", { threadId: "thread" }));
+    store.receive(event(2, "turn/started", { threadId: "thread" }));
+    store.hydrate("panel", {
+      ...snapshot(),
+      thread: { ...snapshot().thread, turns: [] },
+    });
+    expect(useCodexStore.getState().sessions.panel.materialized).toBe(true);
+  });
   it("retains transcript older than the replay buffer when a hidden panel remounts", () => {
     const store = useCodexStore.getState();
     store.hydrate("panel", snapshot());

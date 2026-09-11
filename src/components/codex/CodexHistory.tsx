@@ -7,10 +7,12 @@ export function CodexHistory({
   onSelect,
   executablePath = "",
   currentThreadId,
+  disabled = false,
 }: {
   onSelect: (thread: CodexThread) => void;
   executablePath?: string;
   currentThreadId?: string;
+  disabled?: boolean;
 }) {
   const [threads, setThreads] = useState<CodexThread[]>([]);
   const [query, setQuery] = useState("");
@@ -81,7 +83,7 @@ export function CodexHistory({
             <button
               className="codex-history-row"
               key={t.id}
-              disabled={active && !open}
+              disabled={disabled || (active && !open)}
               onClick={() => onSelect(t)}
             >
               <strong>{t.name || t.preview || t.id}</strong>
