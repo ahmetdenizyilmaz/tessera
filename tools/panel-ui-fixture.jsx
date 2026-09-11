@@ -2,6 +2,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { CodexPanel } from "../src/components/codex/CodexPanel";
 import { CodexSetup } from "../src/components/codex/CodexSetup";
@@ -101,6 +102,7 @@ useInstanceStore.setState({
 window.codexStore = useCodexStore;
 window.instanceStore = useInstanceStore;
 window.Terminal = Terminal;
+window.writeTerminalOutput = (data) => emit("pty-data-codex-ui", data);
 window.settingsStore = useSettingsStore;
 window.showPermissionSettings = () => {
   const node = document.createElement("div");

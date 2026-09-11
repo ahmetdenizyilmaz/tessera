@@ -17,6 +17,7 @@ export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalS
   let userScrolling = false;
   let dragging = false;
   let frame = 0;
+  let userScrollFrame = 0;
   let disposed = false;
   const line = (y: number) => terminal.buffer.normal.getLine(y)?.translateToString(true) ?? "";
   const remember = () => {
@@ -58,11 +59,26 @@ export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalS
     if (disposed || frame) return;
     frame = requestAnimationFrame(() => { frame = 0; restore(); });
   };
-  const endUserScroll = () => requestAnimationFrame(() => {
-    if (disposed) return;
-    remember();
+  const endUserScroll = () => {
+    cancelAnimationFrame(userScrollFrame);
+    userScrollFrame = requestAnimationFrame(() => {
+      userScrollFrame = 0;
+      if (disposed) return;
+      remember();
+      userScrolling = false;
+    });
+  };
+  const revealInput = () => {
+    if (disposed || terminal.buffer.active.type !== "normal") return;
+    // Editing ends history browsing. Otherwise our redraw protection undoes
+    // xterm's scroll-on-input and the keystrokes land in an invisible prompt.
+    cancelAnimationFrame(userScrollFrame);
+    userScrollFrame = 0;
     userScrolling = false;
-  });
+    dragging = false;
+    state = { following: true, top: terminal.buffer.normal.baseY, anchor: [] };
+    restore();
+  };
   const wheel = () => { userScrolling = true; endUserScroll(); };
   const pointerDown = (event: PointerEvent) => {
     // Include text-selection drags: xterm scrolls while a selection extends
@@ -87,21 +103,32 @@ export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalS
   element?.addEventListener("wheel", wheel, { capture: true, passive: true });
   element?.addEventListener("pointerdown", pointerDown, true);
   element?.addEventListener("keydown", key, true);
+  // IMEs and emoji input can bypass onKey. These events only come from the
+  // editor; onData also contains automatic terminal replies and is unsuitable.
+  element?.addEventListener("beforeinput", revealInput, true);
+  element?.addEventListener("input", revealInput, true);
+  element?.addEventListener("compositionstart", revealInput, true);
   viewport?.addEventListener("scroll", scroll);
   window.addEventListener("pointerup", pointerUp);
   const subscriptions = [
     terminal.onWriteParsed(restore), terminal.onScroll(scroll), terminal.onResize(schedule),
+    terminal.onKey(revealInput),
   ];
   return {
     snapshot: () => ({ ...state, anchor: [...state.anchor] }),
     restore,
+    revealInput,
     dispose() {
       disposed = true;
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(userScrollFrame);
       subscriptions.forEach(s => s.dispose());
       element?.removeEventListener("wheel", wheel, true);
       element?.removeEventListener("pointerdown", pointerDown, true);
       element?.removeEventListener("keydown", key, true);
+      element?.removeEventListener("beforeinput", revealInput, true);
+      element?.removeEventListener("input", revealInput, true);
+      element?.removeEventListener("compositionstart", revealInput, true);
       viewport?.removeEventListener("scroll", scroll);
       window.removeEventListener("pointerup", pointerUp);
     },

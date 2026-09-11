@@ -285,6 +285,54 @@ try {
   expect(await page.evaluate(() => window.calls.filter(c => c.command === "codex_respond"))).toEqual([]);
   expect(errors).toEqual([]);
   console.log("PASS Codex questions share Claude styling; Alt+Up/Alt+Down reveal requests without sending terminal keys or answering prompts");
+
+  await page.evaluate(() => {
+    window.codexStore.setState(s => ({ sessions: { ...s.sessions, "codex-ui": {
+      ...s.sessions["codex-ui"], busy: false, requests: [],
+    }}}));
+    Object.defineProperty(navigator, "clipboard", { configurable: true,
+      value: { readText: async () => "clipboard draft", writeText: async () => {} },
+    });
+  });
+  await expect(question).toHaveCount(0);
+  await page.evaluate(() => window.writeTerminalOutput(
+    Array.from({ length: 300 }, (_, i) => `history row ${i}`).join("\r\n") + "\r\nPROMPT> ",
+  ));
+  const promptVisible = () => codex.locator(".xterm-rows").textContent().then(text => text.includes("PROMPT>"));
+  const browseHistory = async () => {
+    await codex.locator(".xterm").hover();
+    await page.mouse.wheel(0, -500);
+    await expect.poll(promptVisible).toBe(false);
+    await nativeInput.focus();
+    await page.evaluate(() => { window.calls = []; });
+  };
+  const sentKeys = () => page.evaluate(() => window.calls.filter(c => c.command === "pty_write").map(c => c.args.data).join(""));
+  await expect.poll(promptVisible).toBe(true);
+  await browseHistory();
+  await nativeInput.pressSequentially("editable draft");
+  await expect.poll(promptVisible).toBe(true);
+  await nativeInput.press("Enter");
+  await expect.poll(sentKeys).toBe("editable draft\r");
+  for (const shortcut of ["Control+V", "Control+Shift+V", "Shift+Insert"]) {
+    await browseHistory();
+    await nativeInput.press(shortcut);
+    await expect.poll(promptVisible).toBe(true);
+    await expect.poll(sentKeys).toBe("clipboard draft");
+  }
+  await browseHistory();
+  await codex.locator(".xterm").click({ button: "right" });
+  await expect.poll(promptVisible).toBe(true);
+  await expect.poll(sentKeys).toBe("clipboard draft");
+  await browseHistory();
+  await nativeInput.evaluate(node => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "native paste\nsecond line");
+    node.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }));
+  });
+  await expect.poll(promptVisible).toBe(true);
+  await expect.poll(sentKeys).toBe("native paste\nsecond line");
+  expect(errors).toEqual([]);
+  console.log("PASS native panel typing/Enter and all paste paths reveal input from history and send exactly once");
 } finally {
   if (errors.length) {
     console.error(errors);

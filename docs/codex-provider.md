@@ -50,6 +50,9 @@ Terminal viewports follow new output while at the bottom. Deliberate scrolling
 keeps a text anchor through transcript redraws and panel/group remounts; browser
 scroll resets do not disable following. This does not filter or rewrite the
 native terminal's output, and alternate-screen menus keep their native behavior.
+Typing, editing, IME composition, or pasting ends history browsing and reveals
+the input again in both Claude and Codex terminals. Automatic terminal replies
+and history-scrolling shortcuts leave the reading position intact.
 
 A **new terminal conversation takes its first message in Tessera**, then attaches
 the native Codex TUI to that exact conversation. Codex creates its transcript only

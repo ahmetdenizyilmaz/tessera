@@ -80,6 +80,50 @@ try {
   await expect.poll(() => page.evaluate(() => window.scrollTestGuard.snapshot().following)).toBe(false);
   await page.mouse.wheel(0, 100000);
   await expect.poll(() => page.evaluate(() => window.scrollTestGuard.snapshot().following)).toBe(true);
+
+  const input = page.locator('.xterm-helper-textarea');
+  const atInput = () => page.evaluate(() => {
+    const buffer = window.scrollTestTerminal.buffer.active;
+    return window.scrollTestGuard.snapshot().following && buffer.viewportY === buffer.baseY;
+  });
+  const readHistory = async () => {
+    await page.locator('#terminal').hover();
+    await page.mouse.wheel(0, -400);
+    await expect.poll(() => page.evaluate(() => window.scrollTestGuard.snapshot().following)).toBe(false);
+    await input.focus();
+  };
+  await page.evaluate(() => {
+    window.terminalInput = [];
+    window.scrollTestTerminal.onData(data => window.terminalInput.push(data));
+  });
+  await readHistory();
+  const readingRow = await page.evaluate(() => window.scrollTestTerminal.buffer.active.viewportY);
+  // A terminal's cursor-position reply is output-driven, not a user editing
+  // the prompt. Treating every onData callback as typing would undo the fix.
+  await page.evaluate(() => new Promise(resolve => window.scrollTestTerminal.write('\x1b[6n', resolve)));
+  await input.press('Shift');
+  await expect.poll(() => page.evaluate(() => window.scrollTestTerminal.buffer.active.viewportY)).toBe(readingRow);
+  await expect.poll(atInput).toBe(false);
+  await page.evaluate(() => { window.terminalInput = []; });
+  await input.pressSequentially('draft');
+  await expect.poll(atInput, { message: 'Typing must bring the prompt back into view' }).toBe(true);
+  expect(await page.evaluate(() => window.terminalInput.join(''))).toBe('draft');
+  await page.evaluate(() => new Promise(resolve => window.scrollTestTerminal.write('\r\nworking output', resolve)));
+  await expect.poll(atInput).toBe(true);
+  await readHistory();
+  await input.press('Shift+PageUp');
+  await expect.poll(atInput).toBe(false);
+  await input.press('Backspace');
+  await expect.poll(atInput).toBe(true);
+  await readHistory();
+  await page.keyboard.insertText('\u00dc\u0131');
+  await expect.poll(atInput, { message: 'Text input without keydown must reveal the prompt' }).toBe(true);
+  expect(await page.evaluate(() => window.terminalInput.join(''))).toContain('\u00dc\u0131');
+  await readHistory();
+  await input.dispatchEvent('compositionstart', { data: '' });
+  await expect.poll(atInput, { message: 'IME composition must reveal the prompt' }).toBe(true);
+  await input.dispatchEvent('compositionend', { data: '' });
   console.log('PASS terminal scroll: browser resets, output, transcript replay, resize, remount, reading anchors, wheel gestures, alternate screen and focus');
+  console.log('PASS terminal input: typing, editing and IME reveal the prompt; scroll keys and terminal replies preserve history');
   await page.evaluate(() => { window.scrollTestGuard.dispose(); window.scrollTestTerminal.dispose(); });
 } finally { await browser.close(); }

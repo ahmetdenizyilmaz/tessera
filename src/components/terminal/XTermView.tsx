@@ -226,7 +226,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const pasteClipboard = () => {
       navigator.clipboard.readText()
         .then((text) => {
-          if (text) write(text);
+          if (text && isMountedRef.current) {
+            scrollGuard.revealInput();
+            write(text);
+          }
         })
         .catch((err) => console.error('Paste failed:', err));
     };
@@ -274,6 +277,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (text) {
         e.preventDefault();
         e.stopPropagation();
+        scrollGuard.revealInput();
         write(text);
       }
     };
