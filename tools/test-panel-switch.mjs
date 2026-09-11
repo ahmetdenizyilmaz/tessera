@@ -4,6 +4,9 @@ import { chromium, expect } from '@playwright/test';
 
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+page.on('pageerror', error => {
+  if (!error.message.includes('WebSocket closed without opened')) console.error(error.message);
+});
 await page.route('**/panel-ui-test', route => route.fulfill({
   contentType: 'text/html',
   body: `<div id="root"></div>
@@ -24,8 +27,15 @@ const resizeCalls = () => page.evaluate(() => window.calls.filter(c =>
 try {
   await page.goto(`${process.argv[2] || 'http://127.0.0.1:1420'}/panel-ui-test`);
   await page.waitForFunction(() => !!window.showMosaic);
+  // Real startup first renders an empty workspace; autosave restores panels
+  // afterward. Container measurement must already be observing that root.
+  await page.evaluate(() => window.showEmptyMosaic());
+  await page.locator('.mosaic-empty').waitFor();
+  await page.waitForTimeout(100);
   await page.evaluate(() => window.showMosaic(5));
   await page.waitForFunction(() => window.terminals.has('codex-ui'));
+  expect(await page.locator('[data-panel-id="codex-ui"]').evaluate(e =>
+    e.firstElementChild.style.width.endsWith('px')), 'Restored panels must use final pixel geometry during the tile animation').toBe(true);
   await expect.poll(async () => (await state()).cols).toBeGreaterThan(80);
   await page.evaluate(() => new Promise(resolve => window.terminals.get('codex-ui').write(
     Array.from({ length: 250 }, (_, i) => `History ${i}: ${'long output '.repeat(16)}`).join('\r\n'), resolve)));

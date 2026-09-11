@@ -152,6 +152,9 @@ window.showCodexSetup = (panelView) => {
   createRoot(node).render(<CodexSetup wizardId="permissions-wizard" />);
 };
 const root = createRoot(document.getElementById("root"));
+window.showEmptyMosaic = () => {
+  root.render(<div style={{ width: '100vw', height: '100vh' }}><MosaicLayout /></div>);
+};
 window.showMosaic = (count = 2) => {
   window.mosaicMode = true;
   const ids = ['codex-ui', 'peer-ui', ...Array.from({ length: Math.max(0, count - 2) }, (_, i) => `peer-${i + 2}`)];

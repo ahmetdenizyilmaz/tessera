@@ -409,10 +409,11 @@ export function MosaicLayout() {
     };
   }, [startResizeLock]);
 
-  // Empty state
+  // Keep the same measured root while empty: autosave restoration happens
+  // after mount, and the container observer is registered only once.
   if (tabOrder.length === 0) {
     return (
-      <div className="mosaic-container">
+      <div ref={containerRef} className="mosaic-container">
         <div className="mosaic-empty">
           <div className="mosaic-empty-text">
             Click + to create a new instance

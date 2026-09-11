@@ -35,6 +35,13 @@ scroll intent and component remounts. Claude uses the same `XTermView` integrati
    trip. A real Codex/ConPTY run with a long test conversation and five mosaic
    panels exposed the transcript replay even while `viewportY === baseY`.
    Checking only the final scroll position missed this visible failure.
+6. Verification in the restored user workspace exposed a second sizing trigger:
+   the empty mosaic root had no container ref. Its mount-only measurement effect
+   therefore returned before autosave loaded the panels, leaving container size
+   at zero. Panel contents fell back to `100%` and followed every intermediate
+   animation size instead of using final pixel dimensions. Eight switches sent
+   95 terminal resizes. The empty and populated states now share the measured root;
+   the regression test starts empty before restoring five panels.
 
 ## Ownership
 
