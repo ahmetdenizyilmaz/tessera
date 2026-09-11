@@ -24,6 +24,8 @@ pub struct Client {
     pub turn: Mutex<Option<String>>,
     pub requests: Mutex<HashMap<String, Value>>,
     pub events: Mutex<VecDeque<Value>>,
+    // Effective policy is session state, not expendable transcript replay.
+    pub(super) settings_event: Mutex<Option<Value>>,
     pub outcomes: broadcast::Sender<Value>,
     pub endpoint: Option<String>,
     pub token: String,
@@ -98,6 +100,7 @@ impl Client {
             turn: Mutex::new(None),
             requests: Mutex::new(HashMap::new()),
             events: Mutex::new(VecDeque::new()),
+            settings_event: Mutex::new(None),
             outcomes,
             endpoint: endpoint.clone(),
             token,
@@ -210,7 +213,10 @@ impl Client {
         }
         if let Err(e) = client.call("initialize", json!({
             "clientInfo": {"name":"tessera","title":"Tessera","version":env!("CARGO_PKG_VERSION")},
-            "capabilities": {"experimentalApi":false,"requestAttestation":false}
+            // Native /permissions uses thread/settings/updated. Codex gates
+            // that notification behind experimentalApi; without this the TUI
+            // changes policy but Tessera silently saves the old one on close.
+            "capabilities": {"experimentalApi":true,"requestAttestation":false}
         })).await {
             client.stop(); return Err(format!("Codex initialization failed: {e}"));
         }
@@ -317,16 +323,42 @@ impl Client {
         self.publish(value);
     }
 
+    pub(super) fn capture_initial_settings(&self, initial: &Value) {
+        // A settings notification can arrive before the start/resume reply.
+        // Keep it when present; otherwise hydrate from the server's effective
+        // policy, never from the policy the GUI merely requested.
+        self.publish_inner(json!({"method":"thread/settings/updated","params":{
+            "threadId":initial["thread"]["id"],
+            "threadSettings":{
+                "cwd":initial["cwd"],
+                "approvalPolicy":initial["approvalPolicy"],
+                "approvalsReviewer":initial["approvalsReviewer"],
+                "sandboxPolicy":initial["sandbox"]
+            }
+        }}), true);
+    }
+
     pub fn publish(&self, message: Value) {
-        let event = json!({"id":self.id,"generation":self.generation,"sequence":self.sequence.fetch_add(1,Ordering::Relaxed),"message":message});
-        {
+        self.publish_inner(message, false);
+    }
+
+    fn publish_inner(&self, message: Value, initial_settings: bool) {
+        let event = {
             let mut events = self.events.lock().unwrap();
+            // Serialize the initial fallback with native notifications, so a
+            // notification arriving during configure cannot be overwritten.
+            if initial_settings && self.settings_event.lock().unwrap().is_some() { return; }
+            let event = json!({"id":self.id,"generation":self.generation,"sequence":self.sequence.fetch_add(1,Ordering::Relaxed),"message":message});
+            if event["message"]["method"] == "thread/settings/updated" {
+                *self.settings_event.lock().unwrap() = Some(event.clone());
+            }
             events.push_back(event.clone());
             // Completed transcripts are recoverable through thread/read.
             while events.len() > 4096 {
                 events.pop_front();
             }
-        }
+            event
+        };
         if let Some(app) = &self.app {
             let _ = app.emit("codex-event", event);
         }
@@ -382,6 +414,7 @@ mod tests {
                 turn: Mutex::new(None),
                 requests: Mutex::new(HashMap::new()),
                 events: Mutex::new(VecDeque::new()),
+                settings_event: Mutex::new(None),
                 outcomes,
                 endpoint: None,
                 token: String::new(),
@@ -410,6 +443,34 @@ mod tests {
         c.receive(json!({"id":2,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread-b"}}));
         assert!(c.requests.lock().unwrap().is_empty());
     }
+    #[test]
+    fn effective_permissions_survive_replay_eviction_and_ignore_other_threads() {
+        let (c, mut wire) = mock();
+        c.capture_initial_settings(&json!({"thread":{"id":"thread-a"},"cwd":"C:/project",
+            "approvalPolicy":"on-request","approvalsReviewer":"user","sandbox":{"type":"workspaceWrite"}}));
+        c.receive(json!({"method":"thread/settings/updated","params":{"threadId":"thread-a",
+            "threadSettings":{"cwd":"C:/project","approvalPolicy":"never","approvalsReviewer":"user","sandboxPolicy":{"type":"dangerFullAccess"}}}}));
+        let latest = c.settings_event.lock().unwrap().clone().unwrap();
+        c.receive(json!({"method":"thread/settings/updated","params":{"threadId":"thread-b",
+            "threadSettings":{"approvalPolicy":"on-request"}}}));
+        for _ in 0..4100 { c.publish(json!({"method":"thread/tokenUsage/updated","params":{}})); }
+        assert_eq!(c.events.lock().unwrap().len(), 4096);
+        assert!(c.events.lock().unwrap().iter().all(|e| e["message"]["method"] != "thread/settings/updated"));
+        assert_eq!(c.settings_event.lock().unwrap().as_ref(), Some(&latest));
+        assert_eq!(latest["message"]["params"]["threadSettings"]["approvalPolicy"], "never");
+        assert!(wire.try_recv().is_err(), "Observing policy must not grant or send any request");
+    }
+
+    #[test]
+    fn initial_response_does_not_replace_a_newer_native_policy() {
+        let (c, _) = mock();
+        c.receive(json!({"method":"thread/settings/updated","params":{"threadId":"thread-a",
+            "threadSettings":{"approvalPolicy":"never","approvalsReviewer":"user","sandboxPolicy":{"type":"dangerFullAccess"}}}}));
+        let latest = c.settings_event.lock().unwrap().clone();
+        c.capture_initial_settings(&json!({"thread":{"id":"thread-a"},"approvalPolicy":"on-request"}));
+        assert_eq!(*c.settings_event.lock().unwrap(), latest);
+    }
+
     #[test]
     fn completion_clears_pending_requests_and_resolves_watchers() {
         let (c, _) = mock();
@@ -503,6 +564,46 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(120)).await;
         assert!(wire.try_recv().is_err());
         client.fail("test finished");
+    }
+
+    #[tokio::test]
+    #[ignore = "Uses the installed Codex CLI; no model turns or user threads"]
+    async fn live_native_permission_notifications() {
+        for terminal in [false, true] {
+            let c = Client::spawn("permission-smoke", super::super::executable::resolve(None).unwrap(),
+                terminal, HashMap::new(), None).await.unwrap();
+            let initial = c.call("thread/start", json!({
+                "cwd":std::env::temp_dir(), "ephemeral":true,
+                "sandbox":"workspace-write", "approvalPolicy":"on-request", "approvalsReviewer":"user"
+            })).await.unwrap();
+            let sid = initial["thread"]["id"].as_str().unwrap();
+            *c.thread.lock().unwrap() = Some(sid.into());
+            c.capture_initial_settings(&initial);
+            // This is the same experimental RPC used by the native TUI's
+            // /permissions menu. The previous capability negotiation rejects
+            // it and suppresses the corresponding settings notification.
+            for (sandbox, approval, reviewer) in [
+                ("dangerFullAccess", "never", "user"),
+                ("workspaceWrite", "on-request", "auto_review"),
+                ("readOnly", "on-request", "user"),
+            ] {
+                c.call("thread/settings/update", json!({"threadId":sid,
+                    "sandboxPolicy":{"type":sandbox}, "approvalPolicy":approval, "approvalsReviewer":reviewer
+                })).await.unwrap();
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    loop {
+                        let settings = c.settings_event.lock().unwrap().clone().unwrap();
+                        let policy = &settings["message"]["params"]["threadSettings"];
+                        if policy["sandboxPolicy"]["type"] == sandbox && policy["approvalPolicy"] == approval &&
+                            policy["approvalsReviewer"] == reviewer { break; }
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                }).await.expect("Native policy notification did not reach Tessera");
+                assert!(c.requests.lock().unwrap().is_empty());
+                assert!(!c.busy.load(Ordering::Acquire));
+            }
+            c.stop();
+        }
     }
 
     #[tokio::test]

@@ -36,7 +36,11 @@ export const useCodexStore = create<{
       const queued = (state.events[id] ?? []).filter(
         (e) => e.generation === snapshot.generation,
       );
-      const events = [...snapshot.events, ...queued].sort(
+      const snapshotEvents = [
+        ...snapshot.events,
+        ...(snapshot.settingsEvent ? [snapshot.settingsEvent] : []),
+      ].sort((a, b) => a.sequence - b.sequence);
+      const events = [...snapshotEvents, ...queued].sort(
         (a, b) => a.sequence - b.sequence,
       );
       // Group switches remount panels. Keep the accumulated transcript, including
@@ -54,7 +58,7 @@ export const useCodexStore = create<{
         connected: snapshot.alive,
         materialized: snapshot.materialized ?? !!snapshot.thread.turns?.length,
       };
-      for (const event of snapshot.events) next = reduceCodex(next, event);
+      for (const event of snapshotEvents) next = reduceCodex(next, event);
       // Requests and activity in the snapshot already include its replay events.
       next = {
         ...next,
@@ -77,7 +81,9 @@ export const useCodexStore = create<{
         // thread explicitly false: undefined used to make autosave persist an
         // ID for which Codex had never written a resumable transcript.
         next.materialized = !!(next.materialized || existing.materialized);
-        next.permissions = existing.permissions;
+        // New backends retain a sequenced settings event independently of
+        // replay. Older snapshots may only have the frontend's known policy.
+        if (!snapshot.settingsEvent) next.permissions = existing.permissions ?? next.permissions;
       }
       return {
         sessions: { ...state.sessions, [id]: next },

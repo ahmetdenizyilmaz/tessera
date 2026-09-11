@@ -74,6 +74,8 @@ export interface CodexSnapshot {
   thread: CodexThread;
   threadId: string;
   events: CodexEvent[];
+  /** Latest effective policy, retained even after it leaves transcript replay. */
+  settingsEvent?: CodexEvent | null;
   requests: CodexRequest[];
   busy: boolean;
   alive: boolean;

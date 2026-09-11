@@ -40,6 +40,27 @@ through Codex's `thread/settings/updated` notifications, including replay after 
 group remount. Changing permissions does not resolve an approval already pending
 in an active turn. Finish or cancel that request before reconnecting the panel.
 
+The app-server connection opts into `experimentalApi` because Codex 0.154.0 gates
+these settings notifications behind that capability. Previously the native menu
+changed to Full Access while Tessera received no event and saved the old
+Ask-for-approval policy; restarting restored that older policy. Two subscribed
+connections to the same live server reproduced the difference: the stable-only
+connection received no policy events, while the opted-in connection received both
+native changes. See [API capability negotiation](https://learn.chatgpt.com/docs/app-server#experimental-api-opt-in).
+Attestation remains disabled and unsupported server requests retain their
+existing handling; capability negotiation does not automatically grant approvals.
+
+The start/resume response now supplies the effective policy, and snapshots retain
+the latest sequenced settings event independently of the 4096-event replay log.
+Hydration preserves newer native restrictions and ignores another thread's policy.
+The global permission default still applies to new panels; existing panels keep
+their own explicitly selected mode.
+
+Run `powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1 -Permissions`
+to exercise the real native settings RPC and notifications over both stdio and
+authenticated WebSockets. This creates only ephemeral test threads, verifies
+Full access, Auto-review and Read only, and runs no model turns.
+
 Pending Codex questions and approvals are also shown as GUI cards using Claude's
 question/option styling. Press **Alt+Up** inside a Codex panel to expand and focus
 its requests; **Alt+Down** or **Escape** returns to the input. The shortcut does

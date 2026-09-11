@@ -70,6 +70,20 @@ mockIPC(
           turns: [],
         },
         events: [],
+        settingsEvent: {
+          id: args.id, generation: "fixture", sequence: 1,
+          message: { method: "thread/settings/updated", params: {
+            threadId: args.threadId || "thread-fixture",
+            threadSettings: {
+              cwd: args.config.cwd,
+              approvalPolicy: args.config.approvalPolicy,
+              approvalsReviewer: args.config.approvalsReviewer,
+              sandboxPolicy: { type: {
+                "danger-full-access": "dangerFullAccess", "workspace-write": "workspaceWrite", "read-only": "readOnly",
+              }[args.config.sandbox] },
+            },
+          } },
+        },
         requests: [],
         busy: false,
         alive: true,

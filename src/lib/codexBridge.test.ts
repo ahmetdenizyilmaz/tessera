@@ -100,3 +100,33 @@ it("does not collapse unsupported custom permissions into a broader preset", () 
   expect(permissionsFromThreadSettings({ ...base, sandboxPolicy: { type: "workspaceWrite", networkAccess: true } })).toBeUndefined();
   expect(permissionsFromThreadSettings({ ...base, approvalsReviewer: "auto_review", sandboxPolicy: { type: "workspaceWrite", writableRoots: ["C:\\project"] } })).toMatchObject({ approvalsReviewer: "auto_review", sandbox: "workspace-write" });
 });
+
+it("restores the effective server policy when the update is older than replay", async () => {
+  useCodexStore.getState().remove(id);
+  // A ready event may reach the frontend before the configure reply. It must
+  // not erase a settings event retained only in the backend snapshot.
+  listener.receive({ payload: { id, generation: "active", sequence: 5000,
+    message: { method: "tessera/ready", params: { threadId: "thread" } },
+  } });
+  vi.mocked(invoke).mockResolvedValueOnce({ ...snapshot(), settingsEvent: settings() });
+  await ensureCodex(id);
+  expect(useInstanceStore.getState().instances.get(id)!.config.codex).toMatchObject({
+    sandbox: "danger-full-access", approvalPolicy: "never", approvalsReviewer: "user",
+  });
+  expect(useInstanceStore.getState().instances.get(id)!.codexThreadId).toBe("thread");
+});
+
+it("keeps a newer native restriction when an older full-access snapshot arrives", async () => {
+  useCodexStore.getState().remove(id);
+  const newer = settings(6000);
+  newer.message.params.threadSettings = {
+    cwd: "C:/project", approvalPolicy: "on-request", approvalsReviewer: "user",
+    sandboxPolicy: { type: "readOnly" },
+  };
+  listener.receive({ payload: newer });
+  vi.mocked(invoke).mockResolvedValueOnce({ ...snapshot(), settingsEvent: settings() });
+  await ensureCodex(id);
+  expect(useInstanceStore.getState().instances.get(id)!.config.codex).toMatchObject({
+    sandbox: "read-only", approvalPolicy: "on-request",
+  });
+});

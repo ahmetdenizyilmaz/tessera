@@ -426,6 +426,7 @@ pub async fn configure(
         }
     };
     *client.thread.lock().unwrap() = Some(sid.clone());
+    client.capture_initial_settings(&initial);
     let session = Session {
         panel_delivery: panel_delivery::PanelDelivery::new(client.clone()),
         client: client.clone(),
@@ -442,6 +443,7 @@ fn snapshot_session(s: &Session) -> Value {
     json!({"generation":s.client.generation,"thread":s.initial["thread"],
         "threadId":s.client.thread.lock().unwrap().clone(),
         "events":s.client.events.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
+        "settingsEvent":s.client.settings_event.lock().unwrap().clone(),
         "requests":s.client.requests.lock().unwrap().values().cloned().collect::<Vec<_>>(),
         "busy":s.client.busy.load(Ordering::Acquire),"alive":s.client.alive.load(Ordering::Acquire)})
 }
