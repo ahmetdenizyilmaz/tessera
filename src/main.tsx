@@ -1,3 +1,5 @@
+import './styles/codex.css';
+import { initCodexBridge } from './lib/codexBridge';
 import './lib/brandMigration'; // must run before any store hydrates
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -16,6 +18,7 @@ import './styles/mosaic.css';
 // Register global callbacks for Rust → JS stream data delivery
 initStreamBridge();
 initPanelBus();
+void initCodexBridge();
 initLaunchBridge();
 initThemeManager();
 

@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ImageChip } from './ImageChip';
+import { ImageAttachmentButton } from './ImageAttachmentButton';
 import { FileMentionPopup } from './FileMentionPopup';
 import { SlashCommandPopup } from './SlashCommandPopup';
 import { QueueDisplay } from './QueueDisplay';
@@ -86,6 +87,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
   const [value, setValue] = useState(() => draftStore.get(instanceId) ?? '');
   const [images, setImages] = useState<PendingImage[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string>();
   const [isDragging, setIsDragging] = useState(false);
   const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 
@@ -498,6 +500,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
           onSelect={selectSlashCommand}
           visible={slashState.active}
         />
+        <ImageAttachmentButton
+          remaining={Math.max(0, 8 - images.length)}
+          disabled={isSaving}
+          onError={(error) => setAttachmentError(String(error))}
+          onAttach={async (picked) => {
+            setAttachmentError(undefined);
+            // Keep a project-local copy, just as pasted images do, so queued
+            // messages do not depend on the original file remaining in place.
+            setIsSaving(true);
+            try {
+              const saved = await Promise.all(picked.map(async (image) => {
+                const raw = atob(image.dataUrl.split(',')[1]);
+                const data = Array.from(raw, (char) => char.charCodeAt(0));
+                const ext = image.dataUrl.slice(11, image.dataUrl.indexOf(';'));
+                const path = await invoke<string>('save_chat_image', { data, projectDir: cwd, ext });
+                return { path, previewUrl: image.dataUrl, filename: image.name };
+              }));
+              setImages((old) => [...old, ...saved]);
+            } finally { setIsSaving(false); }
+          }}
+        />
         <textarea
           ref={textareaRef}
           className="chat-textarea"
@@ -541,6 +564,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
         onClear={clearQueue}
       />
       {isSaving && <div className="chat-input-saving">Saving image&hellip;</div>}
+      {attachmentError && <div className="chat-attachment-error" role="alert">{attachmentError}</div>}
     </div>
   );
 };

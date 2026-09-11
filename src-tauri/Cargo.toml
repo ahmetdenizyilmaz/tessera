@@ -11,6 +11,9 @@ crate-type = ["lib"]
 name = "tessera"
 path = "src/main.rs"
 
+[features]
+preview = []
+
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-build = { version = "2", features = [] }

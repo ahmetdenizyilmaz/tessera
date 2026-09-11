@@ -9,9 +9,7 @@ pub struct Database {
 
 impl Database {
     pub fn new() -> Result<Self, String> {
-        let db_dir = dirs::home_dir()
-            .ok_or("Could not find home directory")?
-            .join(".tessera");
+        let db_dir = crate::app_paths::data_dir();
 
         std::fs::create_dir_all(&db_dir)
             .map_err(|e| format!("Failed to create database directory: {}", e))?;

@@ -264,9 +264,7 @@ pub fn generate_mcp_config(db: &Database) -> Result<Option<String>, String> {
     let mut mcp_config = serde_json::Map::new();
     mcp_config.insert("mcpServers".to_string(), serde_json::Value::Object(servers));
 
-    let dir = dirs::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".tessera");
+    let dir = crate::app_paths::data_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let config_path = dir.join("mcp_config.json");
 

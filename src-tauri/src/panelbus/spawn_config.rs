@@ -48,7 +48,7 @@ pub fn write_for_panel(app: &AppHandle, panel_id: &str) -> Option<String> {
         return None;
     }
 
-    let dir = dirs::home_dir()?.join(".tessera").join("panel-mcp");
+    let dir = crate::app_paths::data_dir().join("panel-mcp");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         eprintln!("[panelbus] could not create config dir: {}", e);
         return None;
@@ -69,9 +69,8 @@ pub fn write_for_panel(app: &AppHandle, panel_id: &str) -> Option<String> {
 /// Delete a panel's mcp-config file (called on close) so the directory — and
 /// the live token inside each file — doesn't accumulate for the app's life.
 pub fn remove_for_panel(panel_id: &str) {
-    if let Some(dir) = dirs::home_dir() {
-        let path = dir
-            .join(".tessera")
+    {
+        let path = crate::app_paths::data_dir()
             .join("panel-mcp")
             .join(format!("{}.json", sanitize(panel_id)));
         let _ = std::fs::remove_file(path);

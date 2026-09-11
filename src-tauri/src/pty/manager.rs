@@ -1,11 +1,12 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize, MasterPty};
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::util::claude_paths;
+use super::input::TerminalInput;
 
 const BUFFER_MAX: usize = 1024 * 1024; // 1MB
 const BUFFER_KEEP: usize = 512 * 1024; // 512KB on drain
@@ -15,13 +16,44 @@ pub struct PtyInstance {
     master: Box<dyn MasterPty + Send>,
     /// Handle to the spawned claude process — required to actually kill it.
     child: Box<dyn portable_pty::Child + Send + Sync>,
-    writer: Option<Box<dyn Write + Send>>,
+    input: Arc<TerminalInput>,
     output_buffer: Arc<Mutex<Vec<u8>>>,
     kill_flag: Arc<Mutex<bool>>,
     suppress_events: Arc<AtomicBool>,
+    size: Option<PtySize>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    windows_pty: Option<WindowsPty>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsPty {
+    backend: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    build_number: Option<u32>,
+}
+
+/// portable-pty uses ConPTY on Windows. Give xterm the host's real build so
+/// row growth and line wrapping follow the same rules as the native console.
+#[tauri::command]
+pub fn pty_capabilities() -> PtyCapabilities {
+    #[cfg(windows)]
+    let windows_pty = Some(WindowsPty {
+        backend: "conpty",
+        build_number: sysinfo::System::kernel_version().and_then(|v| v.parse().ok()),
+    });
+    #[cfg(not(windows))]
+    let windows_pty = None;
+    PtyCapabilities { windows_pty }
 }
 
 fn kill_instance(instance: &mut PtyInstance) {
+    instance.input.close();
     if let Ok(mut flag) = instance.kill_flag.lock() {
         *flag = true;
     }
@@ -31,7 +63,6 @@ fn kill_instance(instance: &mut PtyInstance) {
         crate::util::proc::kill_tree(pid);
     }
     let _ = instance.child.kill();
-    instance.writer = None;
 }
 
 pub struct PtyManager {
@@ -259,6 +290,17 @@ pub async fn pty_spawn(
         .spawn_command(cmd)
         .map_err(|e| format!("Failed to spawn claude: {}", e))?;
 
+    install_pair(id, pair, child, &app, &state)
+}
+
+/// Codex supplies its own command; Claude argument and environment construction stays above.
+pub fn spawn_prepared(id: String, cmd: CommandBuilder, cols: u16, rows: u16, app: &AppHandle, state: &PtyManager) -> Result<(), String> {
+    let pair = native_pty_system().openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| format!("Cannot start terminal: {e}"))?;
+    install_pair(id, pair, child, app, state)
+}
+
+fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable_pty::Child + Send + Sync>, app: &AppHandle, state: &PtyManager) -> Result<(), String> {
     // Drop slave after spawning - we only need the master side
     drop(pair.slave);
 
@@ -276,13 +318,15 @@ pub async fn pty_spawn(
     let kill_flag: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     let suppress_events: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
+    let size = pair.master.get_size().ok();
     let instance = PtyInstance {
         master: pair.master,
         child,
-        writer: Some(writer),
+        input: Arc::new(TerminalInput::new(writer)),
         output_buffer: output_buffer.clone(),
         kill_flag: kill_flag.clone(),
         suppress_events: suppress_events.clone(),
+        size,
     };
 
     {
@@ -430,28 +474,28 @@ pub async fn pty_write(
     write_to_instance(&state, &id, &data)
 }
 
-/// The body of `pty_write`, callable from Rust. The panel bus uses it to type
-/// a cross-panel message into a terminal panel's TUI.
+/// Raw keyboard input. Cross-panel messages use `submit_to_instance` instead.
 pub fn write_to_instance(
     state: &tauri::State<'_, PtyManager>,
     id: &str,
     data: &str,
 ) -> Result<(), String> {
-    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-    let instance = instances.get_mut(id).ok_or_else(|| {
+    input_for_instance(state, id)?.write(data)
+}
+
+fn input_for_instance(state: &PtyManager, id: &str) -> Result<Arc<TerminalInput>, String> {
+    let instances = state.instances.lock().map_err(|e| e.to_string())?;
+    let instance = instances.get(id).ok_or_else(|| {
         format!(
             "that panel's terminal has not started yet — open it once so its \
 Claude session spawns, then try again"
         )
     })?;
-    let writer = instance
-        .writer
-        .as_mut()
-        .ok_or_else(|| "that panel's terminal is not accepting input".to_string())?;
-    writer
-        .write_all(data.as_bytes())
-        .map_err(|e| format!("Write failed: {}", e))?;
-    writer.flush().map_err(|e| format!("Flush failed: {}", e))
+    Ok(instance.input.clone())
+}
+
+pub async fn submit_to_instance(state: &PtyManager, id: &str, text: &str) -> Result<(), String> {
+    input_for_instance(state, id)?.submit(text).await
 }
 
 #[tauri::command]
@@ -461,17 +505,20 @@ pub async fn pty_resize(
     rows: u16,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
-    let instances = state.instances.lock().map_err(|e| e.to_string())?;
-    if let Some(instance) = instances.get(&id) {
+    if cols < 2 || rows == 0 {
+        return Err("Terminal dimensions must be at least 2 columns and 1 row".into());
+    }
+    let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
+    if let Some(instance) = instances.get_mut(&id) {
+        if instance.size.is_some_and(|size| size.cols == cols && size.rows == rows) {
+            return Ok(());
+        }
+        let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         instance
             .master
-            .resize(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
+            .resize(size)
             .map_err(|e| format!("Resize failed: {}", e))?;
+        instance.size = Some(size);
     } else {
         return Err(format!("PTY instance '{}' not found", id));
     }
@@ -548,15 +595,9 @@ pub async fn pty_query_command(
 
     // 3. Write command + \r to PTY
     {
-        let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-        if let Some(instance) = instances.get_mut(&id) {
-            if let Some(ref mut writer) = instance.writer {
-                let cmd_with_cr = format!("{}\r", command);
-                writer
-                    .write_all(cmd_with_cr.as_bytes())
-                    .map_err(|e| format!("Write failed: {}", e))?;
-                writer.flush().map_err(|e| format!("Flush failed: {}", e))?;
-            }
+        let instances = state.instances.lock().map_err(|e| e.to_string())?;
+        if let Some(instance) = instances.get(&id) {
+            instance.input.write(&format!("{}\r", command))?;
         }
     }
 

@@ -1,3 +1,4 @@
+import { CodexSetup } from '../codex/CodexSetup';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -30,7 +31,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   lmstudio: '#9B59B6',
 };
 
-const TERMINAL_ROUTES: WizardRoute[] = ['claude-sub', 'gw-openrouter', 'gw-ollama', 'gw-custom'];
+const TERMINAL_ROUTES: WizardRoute[] = ['claude-sub', 'codex', 'gw-openrouter', 'gw-ollama', 'gw-custom'];
 const CHAT_ROUTES: WizardRoute[] = [
   ...TERMINAL_ROUTES,
   'api-anthropic', 'api-openai', 'api-gemini', 'api-lmstudio', 'api-ollama',
@@ -40,7 +41,7 @@ const CHAT_ROUTES: WizardRoute[] = [
  *  everything else its provider's logo. */
 function routeIconProvider(route: WizardRoute): string {
   const meta = routeMeta(route);
-  return meta.provider ?? 'claude';
+  return route === 'codex' ? 'openai' : meta.provider ?? 'claude';
 }
 
 interface NewSessionWizardProps {
@@ -179,6 +180,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
   };
 
   const applyPreset = async (preset: LastSessionPreset) => {
+    if (preset.kind === 'codex') {
+      s.set({ panelView: preset.panelView, route: 'codex', cwd: preset.cwd });
+      return;
+    }
     if (preset.kind === 'claude') {
       const route: WizardRoute =
         preset.gateway === 'openrouter' ? 'gw-openrouter'
@@ -270,7 +275,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           weight and schematic language as the session-type tiles below */}
       {preset && (() => {
         const authVariant =
-          (preset.kind === 'claude' && preset.gateway === 'anthropic') ? 'subscription' as const
+          (preset.kind === 'codex' || (preset.kind === 'claude' && preset.gateway === 'anthropic')) ? 'subscription' as const
           : ((preset.kind === 'llm' && ['anthropic', 'openai', 'gemini'].includes(preset.llmProvider!)) || preset.gateway === 'openrouter') ? 'apikey' as const
           : 'local' as const;
         const authTitle = authVariant === 'subscription' ? 'Subscription login'
@@ -282,7 +287,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               <span className="nsw-quick__badges">
                 <AuthBadgePreview variant={authVariant} size={32} />
                 {(() => {
-                  const p = preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
+                  const p = preset.kind === 'codex' ? 'openai' : preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
                   return <ProviderIcon provider={p} size={17} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
                 })()}
               </span>
@@ -313,7 +318,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               <PanelViewPreview kind={kind} size={52} />
               <span className="panel-view-option__label">{kind === 'chat' ? 'Chat' : 'Terminal'}</span>
               <span className="panel-view-option__hint">
-                {kind === 'chat' ? 'Rich GUI — widgets, cards, images' : 'Full Claude Code TUI'}
+                {kind === 'chat' ? 'Rich GUI — widgets, cards, images' : 'Native coding-agent terminal'}
               </span>
             </button>
           ))}
@@ -377,8 +382,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         </div>
       )}
 
+      {s.route === 'codex' && <CodexSetup wizardId={instanceId} />}
+
       {/* Step 3: model */}
-      {s.route && meta && (
+      {s.route && meta && meta.branch !== 'codex' && (
         <div className="nsw-step">
           <div className="nsw-step__label">3 · Model</div>
           {s.route === 'claude-sub' ? (
@@ -496,7 +503,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       )}
 
       {/* Footer: Advanced + Add */}
-      {s.route && meta && (
+      {s.route && meta && meta.branch !== 'codex' && (
         <div className="nsw-step">
           <button
             className="btn btn-secondary btn-sm"

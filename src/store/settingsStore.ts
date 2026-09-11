@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'auto',
   defaultSkipPermissions: false,
   defaultAgentMode: false,
+  defaultCodexPermissionMode: 'workspace-write',
   lastModel: '',
   lastPanelView: 'chat',
   lastCwd: '',

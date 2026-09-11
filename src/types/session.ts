@@ -1,10 +1,12 @@
+import type { CodexConfig, CodexPermissionMode } from './codex';
 import type { InstanceConfig, LlmProvider } from './instance';
 import type { WorkspaceSnapshotV3 } from '../lib/workspaceSerializer';
 
 /** Everything the new-session wizard's "last used" quick tile needs to
  *  recreate the previous session in one click. */
 export interface LastSessionPreset {
-  kind: 'claude' | 'llm';
+  kind: 'claude' | 'llm' | 'codex';
+  codex?: CodexConfig;
   panelView: 'chat' | 'terminal';
   /** Claude branch: which gateway the CLI was routed through. */
   gateway?: 'anthropic' | 'openrouter' | 'ollama' | 'custom';
@@ -59,6 +61,8 @@ export interface AppSettings {
   defaultPermissionMode: string;
   defaultSkipPermissions: boolean;
   defaultAgentMode: boolean;
+  /** Only new Codex panels inherit this; restored panels retain their policy. */
+  defaultCodexPermissionMode: CodexPermissionMode;
   /** What the New Instance dialog opens with, carried over from the last
    *  instance actually created. Kept separate from the `default*` fields so
    *  creating an instance never silently rewrites the configured defaults. */
@@ -100,6 +104,7 @@ export interface AdyFile {
     color: string;
     config: InstanceConfig;
     claudeSessionId?: string;
+    codexThreadId?: string;
   }>;
   settings?: Partial<AppSettings>;
   layout?: {
@@ -131,6 +136,7 @@ export interface SavedWorkspace {
     color: string;
     config: InstanceConfig;
     claudeSessionId?: string;
+    codexThreadId?: string;
   }>;
   savedAt: number;
   layout?: {

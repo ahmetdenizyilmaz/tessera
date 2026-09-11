@@ -168,7 +168,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       ) : (
         <img
           className="tab-provider-icon"
-          src={PROVIDER_ICONS[instance!.config.llmConfig?.provider ?? 'claude'] ?? claudeIcon}
+          src={PROVIDER_ICONS[instance!.config.llmConfig?.provider ?? (instance!.config.agentProvider === 'codex' ? 'openai' : 'claude')] ?? claudeIcon}
           alt=""
           style={{ filter: `drop-shadow(0 0 3px ${instance!.color})` }}
         />

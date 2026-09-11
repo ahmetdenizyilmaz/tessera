@@ -382,8 +382,12 @@ export function MosaicLayout() {
           startResizeLock();
           applySnapRef.current(ds.panelId, ds.currentSnap);
         } else if (!ds.started) {
-          startResizeLock();
-          setFocusedRef.current(ds.panelId);
+          // An already focused panel does not resize. Locking it here swallowed
+          // the second click on its title, preventing double-click rename.
+          if (useLayoutStore.getState().focusedId !== ds.panelId) {
+            startResizeLock();
+            setFocusedRef.current(ds.panelId);
+          }
         }
 
         dragState.current = null;

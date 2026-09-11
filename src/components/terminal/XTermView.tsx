@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Terminal } from '@xterm/xterm';
+import { useEffect, useRef, useState } from 'react';
+import { Terminal, type ITerminalOptions } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { SerializeAddon } from '@xterm/addon-serialize';
@@ -8,6 +8,11 @@ import '@xterm/xterm/css/xterm.css';
 import { usePty, isPtySpawned, consumeFreshMount } from '../../hooks/usePty';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useInstanceStore } from '../../store/instanceStore';
+import { useCodexStore } from '../../store/codexStore';
+import { installTerminalCursorGuard } from '../../lib/terminalCursor';
+import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
+import { terminalPlatform } from '../../lib/terminalPlatform';
+import { createTerminalResize } from '../../lib/terminalResize';
 import { listen } from '@tauri-apps/api/event';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -16,6 +21,8 @@ import { listen } from '@tauri-apps/api/event';
 const terminalBuffers: Map<string, string> =
   (globalThis as Record<string, unknown>).__termBuffers as Map<string, string> ??
   ((globalThis as Record<string, unknown>).__termBuffers = new Map<string, string>());
+const terminalScrollStates = new Map<string, TerminalScrollState>();
+const terminalSizes = new Map<string, { cols: number; rows: number }>();
 
 /** Background PTY data listeners that buffer output while component is unmounted */
 const bgPtyBuffers: Map<string, { chunks: string[]; cancel: () => void }> =
@@ -76,6 +83,8 @@ function consumeBackgroundBuffer(instanceId: string): string[] {
 /** Call on explicit panel close to clean up saved state */
 export function clearTerminalState(instanceId: string) {
   terminalBuffers.delete(instanceId);
+  terminalScrollStates.delete(instanceId);
+  terminalSizes.delete(instanceId);
   const bg = bgPtyBuffers.get(instanceId);
   if (bg) { bg.cancel(); bgPtyBuffers.delete(instanceId); }
 }
@@ -90,11 +99,22 @@ interface XTermViewProps {
 export function XTermView({ instanceId, isVisible }: XTermViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const isMountedRef = useRef(true);
+  const resizeCoordinatorRef = useRef<ReturnType<typeof createTerminalResize> | null>(null);
   const retryIntervalRef = useRef<number | null>(null);
+  const [platform, setPlatform] = useState<Pick<ITerminalOptions, 'windowsPty'>>();
+  const [platformError, setPlatformError] = useState<string>();
 
   const { spawn, write, resize, onData } = usePty(instanceId);
+
+  useEffect(() => {
+    let active = true;
+    terminalPlatform().then(value => {
+      if (active) setPlatform(value);
+    }).catch(error => {
+      if (active) setPlatformError(String(error));
+    });
+    return () => { active = false; };
+  }, []);
 
   // Subscribe to settings changes for font size and font family
   const fontSize = useSettingsStore((s) => s.settings.fontSize);
@@ -107,7 +127,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     term.options.fontSize = fontSize;
     term.options.fontFamily = fontFamily;
     try {
-      fitAddonRef.current?.fit();
+      resizeCoordinatorRef.current?.requestFit();
     } catch {
       // Ignore fit errors
     }
@@ -115,34 +135,33 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
   // Re-fit terminal when becoming visible (opacity:0 → 1 doesn't trigger ResizeObserver)
   useEffect(() => {
-    if (isVisible && fitAddonRef.current && termRef.current) {
-      try {
-        fitAddonRef.current.fit();
-        const c = termRef.current.cols;
-        const r = termRef.current.rows;
-        if (c > 0 && r > 0) {
-          resize(c, r);
-        }
-      } catch {
-        // Ignore fit errors
-      }
-    }
+    if (isVisible) resizeCoordinatorRef.current?.requestFit();
   }, [isVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    isMountedRef.current = true;
+    let mounted = true;
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !platform) return;
 
     const settings = useSettingsStore.getState().settings;
+    const freshMount = consumeFreshMount(instanceId);
+    if (freshMount) {
+      terminalScrollStates.delete(instanceId);
+      terminalSizes.delete(instanceId);
+    }
 
     // Create Terminal
     const terminal = new Terminal({
+      ...platform,
+      ...terminalSizes.get(instanceId),
       theme: {
         background: '#1a1a2e',
         foreground: '#e0e0e0',
         cursor: '#4a9eff',
         selectionBackground: 'rgba(74, 158, 255, 0.3)',
+        scrollbarSliderBackground: 'rgba(255, 255, 255, 0.15)',
+        scrollbarSliderHoverBackground: 'rgba(255, 255, 255, 0.25)',
+        scrollbarSliderActiveBackground: 'rgba(255, 255, 255, 0.30)',
         black: '#2d2d2d',
         brightBlack: '#555555',
         red: '#ff6b6b',
@@ -179,8 +198,28 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
+    const cursorGuard = installTerminalCursorGuard(terminal, () => {
+      if (useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'codex') {
+        const session = useCodexStore.getState().sessions[instanceId];
+        return !!session?.busy && !session.requests.length;
+      }
+      // Claude terminal status is owned by its native TUI. Its interrupt hint
+      // is present only during an active turn; approval/selection menus keep
+      // xterm's ordinary cursor behavior.
+      const buffer = terminal.buffer.active;
+      for (let y = Math.max(0, terminal.rows - 12); y < terminal.rows; y++) {
+        if (/esc to (?:interrupt|cancel)/i.test(buffer.getLine(buffer.baseY + y)?.translateToString(true) || '')) return true;
+      }
+      return false;
+    });
+    const unsubscribeCursor = useCodexStore.subscribe((state, previous) => {
+      const session = state.sessions[instanceId], old = previous.sessions[instanceId];
+      if (session?.busy !== old?.busy || session?.requests.length !== old?.requests.length) cursorGuard.update?.();
+    });
     termRef.current = terminal;
-    fitAddonRef.current = fitAddon;
+    const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize);
+    resizeCoordinatorRef.current = resizeCoordinator;
 
     // ─── Clipboard ─────────────────────────────────────────────────────
     // xterm sends every keystroke to the PTY, so copy/paste needs explicit
@@ -200,7 +239,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const pasteClipboard = () => {
       navigator.clipboard.readText()
         .then((text) => {
-          if (text) write(text);
+          if (text && mounted) {
+            scrollGuard.revealInput();
+            write(text);
+          }
         })
         .catch((err) => console.error('Paste failed:', err));
     };
@@ -248,6 +290,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (text) {
         e.preventDefault();
         e.stopPropagation();
+        scrollGuard.revealInput();
         write(text);
       }
     };
@@ -265,7 +308,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     // A restart/fresh-start marks this id so we DON'T replay the previous
     // conversation's scrollback (the old view's unmount re-saved it after
     // restartPty ran). Clear it and start clean.
-    if (consumeFreshMount(instanceId)) {
+    if (freshMount) {
       terminalBuffers.delete(instanceId);
     } else {
       const savedBuffer = terminalBuffers.get(instanceId);
@@ -288,19 +331,28 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       write(data);
     });
 
-    // PTY event listener setup with async IIFE + isMounted guard
+    // The mount-local flag also rejects callbacks from a disposed view when
+    // React immediately mounts a replacement for the same panel.
     let unlisten: (() => void) | null = null;
-    (async () => {
+    const listening = (async () => {
       const fn = await onData((data) => {
-        if (!isMountedRef.current) return;
+        if (!mounted) return;
         terminal.write(data);
       });
-      if (!isMountedRef.current) {
+      if (!mounted) {
         fn();
         return;
       }
       unlisten = fn;
     })();
+
+    const startTerminal = async (cols: number, rows: number) => {
+      // The initial transcript must not race the listener registration.
+      await listening;
+      if (!mounted) return;
+      await spawn(cols, rows);
+      resizeCoordinator.ready({ cols, rows });
+    };
 
     // ─── Spawn PTY (only if not already running) ───────────────────────
 
@@ -310,10 +362,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       // Double-RAF spawn sequence
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (!isMountedRef.current) return;
+          if (!mounted) return;
 
           try {
-            fitAddon.fit();
+            resizeCoordinator.fitNow();
           } catch {
             // Ignore fit errors
           }
@@ -322,21 +374,22 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
           const rows = terminal.rows;
 
           if (cols > 0 && rows > 0) {
-            spawn(cols, rows)
+            startTerminal(cols, rows)
               .then(() => {
-                if (isMountedRef.current) {
+                if (mounted) {
                   useInstanceStore.getState().setStatus(instanceId, 'running');
                 }
               })
               .catch((err) => {
+                if (!mounted) return;
                 useInstanceStore.getState().setStatus(instanceId, 'error');
-                terminal.writeln(`\r\n\x1b[31mFailed to start claude: ${err}\x1b[0m`);
+                terminal.writeln(`\r\n\x1b[31mFailed to start coding agent: ${err}\x1b[0m`);
               });
           } else {
             // Retry up to 5 times at 200ms intervals
             let retries = 0;
             retryIntervalRef.current = window.setInterval(() => {
-              if (!isMountedRef.current) {
+              if (!mounted) {
                 if (retryIntervalRef.current !== null) {
                   clearInterval(retryIntervalRef.current);
                   retryIntervalRef.current = null;
@@ -346,7 +399,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
               retries++;
               try {
-                fitAddon.fit();
+                resizeCoordinator.fitNow();
               } catch {
                 // Ignore
               }
@@ -358,15 +411,16 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
                   clearInterval(retryIntervalRef.current);
                   retryIntervalRef.current = null;
                 }
-                spawn(c, r)
+                startTerminal(c, r)
                   .then(() => {
-                    if (isMountedRef.current) {
+                    if (mounted) {
                       useInstanceStore.getState().setStatus(instanceId, 'running');
                     }
                   })
                   .catch((err) => {
+                    if (!mounted) return;
                     useInstanceStore.getState().setStatus(instanceId, 'error');
-                    terminal.writeln(`\r\n\x1b[31mFailed to start claude: ${err}\x1b[0m`);
+                    terminal.writeln(`\r\n\x1b[31mFailed to start coding agent: ${err}\x1b[0m`);
                   });
               } else if (retries >= 5) {
                 if (retryIntervalRef.current !== null) {
@@ -382,69 +436,29 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     } else {
       // PTY already running (remount after group move) — just fit
       requestAnimationFrame(() => {
-        if (!isMountedRef.current) return;
+        if (!mounted) return;
         try {
-          fitAddon.fit();
-          const c = terminal.cols;
-          const r = terminal.rows;
-          if (c > 0 && r > 0) {
-            resize(c, r);
-          }
+          resizeCoordinator.fitNow();
+          resizeCoordinator.ready();
         } catch {
           // Ignore fit errors
         }
       });
     }
 
-    // ResizeObserver -> fit immediately (visual feel). The pty_resize IPC is
-    // leading + trailing debounced: a DISCRETE jump (focus change — the
-    // content wrapper snaps to final size in one step) reaches ConPTY at
-    // once, so the CLI redraws its TUI during the tile animation instead of
-    // after it. Rapid sequences (gutter drags fire the observer every
-    // pointer-move frame) still coalesce on the 100ms trailing edge — each
-    // ConPTY resize makes the CLI redraw its whole TUI, feeding back into
-    // the output event storm.
-    let resizeDebounce: number | null = null;
-    let lastPtyResize = 0;
-    const sendPtyResize = () => {
-      const c = terminal.cols;
-      const r = terminal.rows;
-      if (c > 0 && r > 0) {
-        lastPtyResize = Date.now();
-        resize(c, r);
-      }
-    };
     const resizeObserver = new ResizeObserver(() => {
-      if (!isMountedRef.current) return;
-      try {
-        fitAddon.fit();
-      } catch {
-        // Ignore fit errors
-      }
-      if (resizeDebounce === null && Date.now() - lastPtyResize > 150) {
-        sendPtyResize();
-        return;
-      }
-      if (resizeDebounce !== null) clearTimeout(resizeDebounce);
-      resizeDebounce = window.setTimeout(() => {
-        resizeDebounce = null;
-        if (!isMountedRef.current) return;
-        sendPtyResize();
-      }, 100);
+      if (mounted) resizeCoordinator.requestFit();
     });
     resizeObserver.observe(container);
 
     // Cleanup — preserve PTY process for potential group-move remount
     return () => {
-      isMountedRef.current = false;
+      mounted = false;
       if (retryIntervalRef.current !== null) {
         clearInterval(retryIntervalRef.current);
         retryIntervalRef.current = null;
       }
-      if (resizeDebounce !== null) {
-        clearTimeout(resizeDebounce);
-        resizeDebounce = null;
-      }
+      resizeCoordinator.dispose();
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('paste', handleNativePaste, true);
       resizeObserver.disconnect();
@@ -453,6 +467,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       // preserves colors/attributes and avoids the O(scrollback) manual
       // line-by-line extraction.
       try {
+        terminalScrollStates.set(instanceId, scrollGuard.snapshot());
+        terminalSizes.set(instanceId, { cols: terminal.cols, rows: terminal.rows });
         const serialized = serializeAddon.serialize();
         if (serialized.trim()) {
           terminalBuffers.set(instanceId, serialized);
@@ -467,14 +483,17 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       }
 
       dataDisposable.dispose();
+      unsubscribeCursor();
+      cursorGuard.dispose();
+      scrollGuard.dispose();
       if (unlisten) unlisten();
       terminal.dispose();
       termRef.current = null;
-      fitAddonRef.current = null;
+      resizeCoordinatorRef.current = null;
 
       // DON'T kill PTY here — it's killed explicitly via handleClose/closePanel
     };
-  }, [instanceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instanceId, platform]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -483,7 +502,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         width: '100%',
         height: '100%',
         overflow: 'hidden',
+        isolation: 'isolate',
       }}
-    />
+    >
+      {platformError && <div role="alert">Cannot initialize terminal: {platformError}</div>}
+    </div>
   );
 }

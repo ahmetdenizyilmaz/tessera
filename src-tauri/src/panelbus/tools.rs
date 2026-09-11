@@ -20,20 +20,32 @@ pub fn definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "list_panels",
-            "description": "List the other Claude panels open in this Tessera window, including \
-their name, working directory and whether they are currently busy. Use this before messaging \
-another panel so you address it correctly.",
+            "description": "Find the Claude and Codex sessions open in this Tessera window, including \
+panels inside groups. Panel, session, subwindow, sub-window, pane, tab, chat, conversation, and \
+other agent refer to these same destinations. Call this when the user says 'the other session', \
+'another subwindow', or 'the other one', before sending a message or reading its context. \
+Returns names, ids, providers, working directories, busy/reachable state and is_self. \
+Choose the matching non-self recipient; ask which one if several match. Does not list closed history.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         }),
         json!({
             "name": "send_to_panel",
-            "description": "Send a message to another Claude panel in this window. It arrives as a \
-user turn in that panel and the person can see it. Returns as soon as it is delivered; pass \
-wait_for_reply if you need that panel's answer before continuing.",
+            "description": "Send, tell, ask, message, or forward text to another open Claude or Codex \
+session in Tessera. Use for requests such as 'send the other session this message', 'tell the \
+backend subwindow', 'ask the other tab', or 'message the other agent'. Panel, session, subwindow, \
+sub-window, pane, tab, chat and conversation mean the same destination here. Call list_panels \
+to identify the recipient, then pass its returned name or id in panel. If several recipients \
+match, clarify; do not guess or broadcast. The message arrives as a visible user turn in that \
+session and is submitted automatically. Reply to a panel-message with this tool, not only in \
+your own conversation. Continue the authorized discussion without asking the user to relay replies. \
+Use wait_for_reply=false for back-and-forth exchanges. Busy Codex recipients queue messages for \
+automatic delivery; a queued response means accepted, so do not resend. Stop when the task is \
+resolved, avoiding acknowledgement loops. Set wait_for_reply for an isolated request needing its answer. \
+Sending a message does not approve permissions or bypass a pending prompt.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "panel": { "type": "string", "description": "Panel name or id, from list_panels." },
+                    "panel": { "type": "string", "description": "The destination session/subwindow/pane/tab's exact panel name or id returned by list_panels. Use its id if names are duplicated; do not pass the literal words 'other session'." },
                     "message": { "type": "string", "description": "What to say. Include the context the other panel needs — it cannot see your conversation." },
                     "wait_for_reply": { "type": "boolean", "description": "Block until that panel finishes its turn and return what it said. Default false." },
                     "timeout_seconds": { "type": "number", "description": "Only with wait_for_reply. Default 60, maximum 300." }
@@ -44,12 +56,13 @@ wait_for_reply if you need that panel's answer before continuing.",
         }),
         json!({
             "name": "read_panel",
-            "description": "Read the recent conversation from another Claude panel, so you can pick \
-up context without interrupting it.",
+            "description": "Read the recent conversation from another open Claude or Codex session \
+(also called a panel, subwindow, sub-window, pane, tab, chat, or other agent) without interrupting it. \
+Use when asked what the other session said or decided. Call list_panels to identify it first.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "panel": { "type": "string", "description": "Panel name or id, from list_panels." },
+                    "panel": { "type": "string", "description": "The destination session/subwindow/pane/tab's exact panel name or id from list_panels." },
                     "limit": { "type": "number", "description": "How many recent messages to return. Default 20." }
                 },
                 "required": ["panel"],
@@ -84,7 +97,7 @@ pub async fn call(app: &AppHandle, caller_id: &str, name: &str, args: Value) -> 
     match name {
         "list_panels" => list_panels(app, caller_id),
         "send_to_panel" => send_to_panel(app, caller_id, args).await,
-        "read_panel" => read_panel(app, caller_id, args),
+        "read_panel" => read_panel(app, caller_id, args).await,
         other => Err(format!("unknown tool: {}", other)),
     }
 }
@@ -99,11 +112,15 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
                     "id": p.id,
                     "name": p.name,
                     "kind": p.kind,
+                    "provider": p.provider.as_deref().unwrap_or("claude"),
                     "cwd": p.cwd,
                     "model": p.model,
                     "status": p.status,
                     "busy": p.busy,
                     "awaiting_user_input": p.awaiting_user,
+                    "queued_messages": if p.provider.as_deref() == Some("codex") {
+                        crate::codex::pending_panel_messages(app, &p.id)
+                    } else { 0 },
                     "reachable": p.reachable(),
                     "is_self": p.id == caller_id,
                 })
@@ -188,18 +205,8 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
         ));
     }
 
-    // Loop control. Hop depth is tracked server-side against the calling panel
-    // id; a model that rewrites the message text cannot reset it.
+    // Retain hop provenance without cutting off an authorized conversation.
     let hop = bus.next_hop(caller_id);
-    if PanelBus::hop_exceeded(hop) {
-        return Err(format!(
-            "message chain is {} panels deep (limit {}) — stopping here to avoid a loop. \
-Answer in your own panel instead of forwarding again.",
-            hop,
-            PanelBus::max_hop()
-        ));
-    }
-    bus.check_rate(caller_id)?;
 
     let sender_name = bus
         .with_registry(|r| r.get(caller_id).map(|p| p.name.clone()))
@@ -213,9 +220,19 @@ Answer in your own panel instead of forwarding again.",
         .get("wait_for_reply")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let wait_guard = if wait { bus.begin_wait(caller_id, &target.id) } else { None };
+    let wait = wait_guard.is_some();
+
+    if target.provider.as_deref() == Some("codex") {
+        bus.record_inbound_hop(&target.id, hop);
+        return crate::codex::deliver(app, &target.id, &wrapped, wait,
+            args.get("timeout_seconds").and_then(Value::as_u64).unwrap_or(DEFAULT_WAIT_SECS)).await;
+    }
 
     if target.kind == "terminal" {
-        return deliver_to_terminal(app, &target, &wrapped, wait);
+        let result = deliver_to_terminal(app, &target, &wrapped, wait).await?;
+        bus.record_inbound_hop(&target.id, hop);
+        return Ok(result);
     }
 
     let stream_state = app.state::<StreamJsonManager>();
@@ -295,31 +312,31 @@ Use read_panel later to see what it said.",
     }
 }
 
-fn deliver_to_terminal(
+async fn deliver_to_terminal(
     app: &AppHandle,
     target: &super::registry::PanelInfo,
     text: &str,
     wait: bool,
 ) -> Result<Value, String> {
     let pty = app.state::<PtyManager>();
-    // Terminal panels drive the interactive TUI, so this is literally typing.
-    // A trailing CR submits the line.
-    let line = format!("{}\r", text.replace('\n', " "));
-    crate::pty::manager::write_to_instance(&pty, &target.id, &line)?;
+    if target.awaiting_user {
+        return Err("That panel is waiting for a permission response or question; a message cannot answer that prompt.".into());
+    }
+    crate::pty::manager::submit_to_instance(&pty, &target.id, text).await?;
     Ok(json!({
         "delivered": true,
         "panel": target.name,
         "delivery": "best_effort",
         "note": if wait {
-            "Typed into that panel's terminal. Terminal panels give no completion signal, \
+            "Pasted the message and sent Enter. Terminal panels give no completion signal, \
 so wait_for_reply was ignored — use read_panel or ask the person."
         } else {
-            "Typed into that panel's terminal. Terminal panels give no completion signal."
+            "Pasted the message and sent Enter. Terminal panels give no completion signal."
         },
     }))
 }
 
-fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, String> {
+async fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
     let target = resolve_target(&bus, caller_id, &args)?;
     let limit = args
@@ -327,6 +344,11 @@ fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, St
         .and_then(|v| v.as_u64())
         .unwrap_or(20)
         .clamp(1, 100) as usize;
+
+    if target.provider.as_deref() == Some("codex") {
+        let messages = crate::codex::read_recent(app, &target.id, limit).await?;
+        return Ok(json!({"panel":target.name,"messages":messages}));
+    }
 
     // Prefer the live session id the stream manager refreshes from every
     // system/init event; fall back to whatever the registry last mirrored.

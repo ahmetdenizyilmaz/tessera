@@ -4,6 +4,7 @@ import { useLayoutStore, getDefaultConfig, computeRects, type PanelType } from '
 import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
 import { useLlmChatStore } from '../store/llmChatStore';
+import { useCodexStore } from '../store/codexStore';
 import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
 
@@ -24,6 +25,7 @@ export interface SavedInstance {
   color: string;
   config: InstanceConfig;
   claudeSessionId?: string;
+  codexThreadId?: string;
 }
 
 export interface SerializedGroup {
@@ -115,6 +117,9 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
       color: inst.color,
       config: inst.config,
       claudeSessionId: inst.claudeSessionId,
+      // Codex has no resumable transcript until its first user turn. An empty
+      // panel restores as empty rather than trying to resume a nonexistent file.
+      codexThreadId: inst.codexHasTurns === false ? undefined : inst.codexThreadId,
     })),
     layout: {
       tabOrder: [...layoutSrc.tabOrder],
@@ -243,14 +248,16 @@ export function deserializeWorkspace(raw: unknown): void {
   // invisible orphans, old groups merge in, and the old panels' CLI processes
   // are never killed (zombie claude.exe). On initial boot the workspace is
   // empty, so this is a no-op.
-  const openIds = useLayoutStore.getState().tabOrder;
-  if (openIds.length > 0) {
+  const openIds = new Set([...useLayoutStore.getState().tabOrder, ...useInstanceStore.getState().instances.keys()]);
+  if (openIds.size > 0) {
     for (const id of openIds) {
+      invoke('codex_close', { id }).catch(() => {});
       invoke('stream_kill', { id }).catch(() => {});
       invoke('pty_kill', { id }).catch(() => {});
       invoke('llm_destroy_session', { id }).catch(() => {});
     }
     useLlmChatStore.setState({ conversations: {} });
+    useCodexStore.setState({ sessions: {}, events: {}, hydrated: {} });
     useInstanceStore.setState({ instances: new Map() });
     useGroupStore.setState({ groups: new Map(), groupStack: [] });
   }
@@ -286,6 +293,13 @@ export function deserializeWorkspace(raw: unknown): void {
     const newId = useInstanceStore.getState().addInstance(inst.config, inst.name);
     idMap.set(inst.id, newId);
 
+    if (inst.config.agentProvider === 'codex' && inst.codexThreadId) {
+      const identity = 'codex:' + inst.codexThreadId;
+      if (!seenSessionIds.has(identity)) {
+        useInstanceStore.getState().updateInstance(newId, { codexThreadId: inst.codexThreadId, codexHasTurns: true });
+        seenSessionIds.add(identity);
+      }
+    }
     // Restore color and session ID
     if (inst.color) {
       useInstanceStore.getState().setColor(newId, inst.color);

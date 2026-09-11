@@ -1,3 +1,4 @@
+import { useCodexStore } from '../store/codexStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { useGroupStore } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
@@ -15,6 +16,10 @@ import { invoke } from '@tauri-apps/api/core';
  * Handles resource teardown based on panel type, then removes the panel.
  */
 export async function closePanel(id: string): Promise<void> {
+  if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'codex') {
+    await invoke('codex_close', { id }).catch(() => {});
+    useCodexStore.getState().remove(id);
+  }
   const panelType = useLayoutStore.getState().panelTypes[id];
 
   if (panelType === 'group') {

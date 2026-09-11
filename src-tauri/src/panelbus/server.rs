@@ -164,7 +164,7 @@ async fn handle(
                         "name": "tessera-panels",
                         "version": env!("CARGO_PKG_VERSION"),
                     },
-                    "instructions": "Tools for seeing and messaging the other Claude panels open in this Tessera window.",
+                    "instructions": super::MESSAGING_INSTRUCTIONS,
                 }),
             )))
         }

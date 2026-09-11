@@ -83,11 +83,59 @@ pub fn encode_project_path(path: &str) -> String {
     encoded
 }
 
-/// Returns the path to a session file:
-/// ~/.claude/projects/{encoded_project}/{session_id}.jsonl
+/// The on-disk project directory for an encoded name, tolerating case
+/// differences. Windows resolves `C:\Works` and `c:\Works` to the same
+/// directory, but the CLI encodes whatever case its cwd happened to carry —
+/// both `C--Works-…` and `c--Works-…` exist side by side in practice, and an
+/// exact-only match loses whichever one the caller didn't guess.
+pub fn find_project_dir(encoded: &str) -> Option<PathBuf> {
+    let root = projects_dir();
+    let exact = root.join(encoded);
+    if exact.is_dir() {
+        return Some(exact);
+    }
+    for entry in std::fs::read_dir(&root).ok()?.flatten() {
+        if entry.file_name().to_string_lossy().eq_ignore_ascii_case(encoded) {
+            let path = entry.path();
+            if path.is_dir() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// Returns the path to a session's transcript, looking in:
+/// 1. ~/.claude/projects/{encoded_project}/ (or a case variant of it),
+/// 2. failing that, every project directory — session ids are UUIDs, so a
+///    hit elsewhere is the same session filed under a project string we can't
+///    reproduce (case drift, the CLI's >200-char hash cap, moved projects).
+/// If the transcript exists anywhere at depth 1, this finds it; otherwise the
+/// exact-encoded path is returned so existence checks and error messages
+/// still point at the canonical location.
 pub fn session_file_path(project_path: &str, session_id: &str) -> PathBuf {
     let encoded = encode_project_path(project_path);
-    projects_dir().join(encoded).join(format!("{}.jsonl", session_id))
+    let file_name = format!("{}.jsonl", session_id);
+
+    if let Some(dir) = find_project_dir(&encoded) {
+        let candidate = dir.join(&file_name);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    if !session_id.is_empty() {
+        if let Ok(entries) = std::fs::read_dir(projects_dir()) {
+            for entry in entries.flatten() {
+                let candidate = entry.path().join(&file_name);
+                if candidate.exists() {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    projects_dir().join(encoded).join(file_name)
 }
 
 /// Resolve a possibly-empty or relative cwd to an absolute path string.
@@ -119,7 +167,7 @@ mod tests {
     #[test]
     fn test_encode_project_path() {
         assert_eq!(
-            encode_project_path("C:\\Users\\foo\\project"),
+            encode_project_path(r"C:\Users\foo\project"),
             "C--Users-foo-project"
         );
         assert_eq!(

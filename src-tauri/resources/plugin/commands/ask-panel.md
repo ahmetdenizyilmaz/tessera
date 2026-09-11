@@ -1,10 +1,13 @@
 ---
-description: Ask another panel a question and wait for its answer — /ask-panel <panel> <question>
+description: Ask another session, panel, subwindow, pane, or tab and wait — /ask-panel <panel> <question>
 argument-hint: <panel> <question>
 allowed-tools: mcp__panels__list_panels, mcp__panels__send_to_panel
 ---
 
-Ask another Claude panel a question and wait for its reply.
+Ask another Claude or Codex session a question and wait for its reply. Panel,
+session, subwindow, sub-window, pane, tab, chat, and conversation mean the same
+destination. Identify the non-self recipient using `list_panels`; ask which one
+if several match instead of guessing or broadcasting.
 
 Arguments: $ARGUMENTS
 

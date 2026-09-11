@@ -364,6 +364,36 @@ body,
   flex-shrink: 0;
 }
 
+.agent-panel-toolbar { height: 40px; gap: 6px; container-type: inline-size; }
+.agent-panel-heading { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.agent-panel-metadata { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--text-muted); font-size: 10px; overflow: hidden; white-space: nowrap; }
+.agent-panel-provider-icon { display: inline-flex; flex-shrink: 0; }
+.agent-panel-metadata-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.agent-panel-color { width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; cursor: pointer; flex-shrink: 0; }
+.agent-panel-toolbar .toolbar-actions { gap: 3px; flex-shrink: 0; }
+.agent-panel-toolbar .toolbar-menu { max-width: min(320px, 80vw); }
+.agent-panel-toolbar .toolbar-menu small { overflow-wrap: anywhere; color: var(--text-muted); }
+.agent-panel-toolbar .toolbar-menu pre { white-space: pre-wrap; overflow: auto; max-height: 180px; }
+@container (max-width: 430px) { .agent-panel-status .status-label { display: none; } }
+
+/* Hide only the temporary painted caret, retaining the text underneath it. */
+.terminal-cursor-guarded .xterm-cursor {
+  background: transparent !important;
+  color: inherit !important;
+  outline: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+.terminal-input-caret {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(74, 158, 255, 0.6);
+  z-index: 4;
+}
+.xterm:not(.focus) .terminal-input-caret { background: transparent; outline: 1px solid #4a9eff; outline-offset: -1px; }
+.terminal-input-caret[hidden] { display: none; }
+
 /* Status never half-clips into "STA…" — inline it either fits or the whole
    toolbar is in compact (☰) mode */
 .status-badge {

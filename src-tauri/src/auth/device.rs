@@ -5,7 +5,7 @@ const SERVICE_NAME: &str = "tessera";
 const DEVICE_ID_KEY: &str = "device_id";
 
 fn get_entry(key: &str) -> Result<Entry, String> {
-    Entry::new(SERVICE_NAME, key).map_err(|e| format!("Keyring error: {}", e))
+    Entry::new(&crate::app_paths::keyring_service(SERVICE_NAME), key).map_err(|e| format!("Keyring error: {}", e))
 }
 
 #[tauri::command]

@@ -22,6 +22,9 @@ $target = Join-Path $dest 'Tessera.exe'
 if (-not (Test-Path $source)) {
     throw "No release build found at $source. Build it first with: npx tauri build --config src-tauri/tauri.stable.conf.json"
 }
+if ((Get-Item -LiteralPath $source).VersionInfo.ProductName -eq 'Tessera Preview') {
+    throw 'Refusing to promote a preview build over stable Tessera. Use tools\promote-preview.ps1.'
+}
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
