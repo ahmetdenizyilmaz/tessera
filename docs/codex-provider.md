@@ -220,6 +220,9 @@ the installed Codex CLI and existing login, rather than a custom local Codex MCP
 
 ## Implementation map
 
+For the terminal scroll investigation, rendering/resize ownership and regression
+checks, see [Terminal rendering](terminal-rendering.md).
+
 - `src-tauri/src/codex/`: executable discovery, owned JSON-RPC transports, session
   lifecycle, model/history discovery, approvals, MCP configuration, terminal setup.
 - `src/components/codex/`: provider setup, history browser, chat/terminal panel,
