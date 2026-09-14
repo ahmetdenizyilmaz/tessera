@@ -61,6 +61,25 @@ scroll intent and component remounts. Claude uses the same `XTermView` integrati
 
 ## Ownership
 
+### URL activation
+
+A pointer-down in an already focused panel used to start the mosaic's 270 ms
+resize lock anyway. That disables pointer events before mouse-up, so a quick
+terminal link click could lose its activation. The lock now runs only when
+focus actually changes, as it already did for title clicks. A real mouse-click
+regression failed with no open request before this change and passes afterward.
+
+Plain URLs and explicit OSC 8 links also share `activateTerminalLink` in both
+terminal constructors. It calls Tauri's existing
+[native browser opener](https://v2.tauri.app/reference/javascript/shell/#open)
+directly instead of xterm's `window.open` popup path. HTTP(S) restrictions remain
+in place, and opening failures produce a toast. `tools/test-terminal-links.mjs`
+checks actual clicks in the mosaic, one native request per click, intact query
+parameters/fragments, no popups/confirmation dialogs, and rejection of file links.
+This verifies the application handoff, not browser startup or website load time.
+
+### Rendering
+
 - **Native rendering:** pinned stable xterm 6.0 and matching addons execute all
   PTY bytes, own ordinary following/scrolling and paint synchronized frames.
   The existing display caret also waits for a completed frame. No escape bytes

@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { activateTerminalLink } from '../lib/terminalLinks';
 
 interface TerminalEntry {
   terminal: Terminal;
@@ -51,11 +52,12 @@ export function useTerminal() {
       cursorStyle: 'block',
       allowTransparency: true,
       scrollback: 10000,
+      linkHandler: { activate: activateTerminalLink },
     });
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon();
+    const webLinksAddon = new WebLinksAddon(activateTerminalLink);
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);

@@ -14,6 +14,7 @@ import { installTerminalCursorGuard } from '../../lib/terminalCursor';
 import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
 import { terminalPlatform } from '../../lib/terminalPlatform';
 import { createTerminalResize } from '../../lib/terminalResize';
+import { activateTerminalLink } from '../../lib/terminalLinks';
 import { listen } from '@tauri-apps/api/event';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -189,11 +190,12 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       cursorStyle: 'block',
       allowTransparency: true,
       scrollback: 10000,
+      linkHandler: { activate: activateTerminalLink },
     });
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon();
+    const webLinksAddon = new WebLinksAddon(activateTerminalLink);
     const serializeAddon = new SerializeAddon();
 
     terminal.loadAddon(fitAddon);

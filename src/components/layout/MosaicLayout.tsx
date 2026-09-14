@@ -262,9 +262,13 @@ export function MosaicLayout() {
       return;
     }
 
-    // Otherwise just focus
-    startResizeLock();
-    setFocused(panelId);
+    // Only a focus change animates the layout. Locking an already focused
+    // panel on pointer-down swallows mouse-up, including terminal link clicks
+    // and selection gestures.
+    if (useLayoutStore.getState().focusedId !== panelId) {
+      startResizeLock();
+      setFocused(panelId);
+    }
   }, [setFocused, startResizeLock]);
 
   // Global pointer listeners for drag and resize
