@@ -80,6 +80,27 @@ This verifies the application handoff, not browser startup or website load time.
 
 ### Rendering
 
+Cold resume has a separate long-frame case: Codex emits a synchronized history
+redraw that can take seconds to pass through ConPTY. xterm 6's
+[`SYNCHRONIZED_OUTPUT_TIMEOUT_MS`](https://github.com/xtermjs/xterm.js/blob/6.0.0/src/browser/services/RenderService.ts)
+is 1000 ms; afterward it clears its synchronization flag and paints intermediate
+history. The viewport can remain correctly at `baseY` while old rows visibly
+scroll past. An isolated native resume reproduced that behavior without a resize.
+
+`terminalFrame.ts` observes the explicit begin/end markers independently of that
+watchdog. If a Codex redraw lasts 800 ms, it preserves the last painted DOM screen
+over the live renderer and shows “Restoring view…”. It removes the snapshot after
+the completed frame is painted. Normal short frames do not clone or cover the
+screen. Parsing, CPR replies, PTY bytes, scrollback and model state are unchanged.
+Keyboard/input, pointer, wheel and resize events release it immediately; a 30 s
+limit prevents a missing end marker from leaving the view covered indefinitely.
+This is presentation stabilization, not a reduction in native history-loading time.
+
+The native smoke test held 174 intermediate render frames and exposed zero
+partially restored history frames. `tools/test-terminal-frame.mjs` additionally
+checks identical visible pixels after the renderer watchdog expires, unchanged
+cursor reports/input, short-frame behavior, completion and missing-end recovery.
+
 - **Native rendering:** pinned stable xterm 6.0 and matching addons execute all
   PTY bytes, own ordinary following/scrolling and paint synchronized frames.
   The existing display caret also waits for a completed frame. No escape bytes

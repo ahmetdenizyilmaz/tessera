@@ -26,6 +26,7 @@ try {
   await page.locator('.mosaic-empty').waitFor();
   await page.evaluate(() => window.showMosaic(2));
   await page.waitForFunction(() => window.terminals.has('codex-ui'));
+  await page.evaluate(() => { window.terminals.get('codex-ui').options.cursorBlink = false; });
   await page.waitForTimeout(350); // Mosaic's initial tile animation.
   const write = data => page.evaluate(data => new Promise(resolve =>
     window.terminals.get('codex-ui').write(data, resolve)), data);
@@ -34,10 +35,15 @@ try {
     const link = page.locator('[data-panel-id="codex-ui"] .xterm-rows').getByText(text, { exact: true });
     await expect(link).toBeVisible();
     // xterm's screen handles mouse events; its text spans are pointer-events:none.
-    const box = await link.boundingBox();
-    const x = box.x + box.width / 2, y = box.y + box.height / 2;
+    // Read geometry in one browser callback; cursor blink can replace the span.
+    const box = await link.evaluate(node => node.getBoundingClientRect().toJSON());
+    // xterm may group a whole row into one span; click within the link text.
+    const x = box.x + 4, y = box.y + box.height / 2;
     await page.mouse.move(x, y);
     await page.evaluate(() => new Promise(requestAnimationFrame));
+    const screen = page.locator('[data-panel-id="codex-ui"] .xterm-screen');
+    if (text === 'Local file') await expect(screen).not.toHaveClass(/xterm-cursor-pointer/);
+    else await expect(screen).toHaveClass(/xterm-cursor-pointer/);
     await page.mouse.click(x, y);
   };
   const plain = 'https://example.com/plain?q=one&other=two#section';
