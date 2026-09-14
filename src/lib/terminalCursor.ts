@@ -3,13 +3,14 @@ import type { Terminal } from "@xterm/xterm";
 /**
  * ConPTY can expose a redraw's temporary cursor at the spinner/footer even
  * when Codex restores it correctly in the next write. Keep the display caret
- * in the composer during a working turn. Never move the terminal's real
+ * in the composer during redraws, including idle Codex typing. Never move the terminal's real
  * cursor or rewrite PTY bytes: CPR responses, selection, typing and IME still
- * belong to xterm. Menus and idle sessions keep the native cursor.
+ * belong to xterm. Menus keep the native cursor.
  */
 export function installTerminalCursorGuard(
   terminal: Terminal,
   isWorking: () => boolean,
+  guardIdleComposer: () => boolean = () => false,
 ) {
   const element = terminal.element;
   const screen = element?.querySelector<HTMLElement>(".xterm-screen");
@@ -30,8 +31,9 @@ export function installTerminalCursorGuard(
     // half-parsed frame over the previously completed native frame.
     if (terminal.modes.synchronizedOutputMode) return;
     const buffer = terminal.buffer.active;
+    const working = isWorking();
     if (
-      !isWorking() ||
+      (!working && !guardIdleComposer()) ||
       !requestedVisible ||
       buffer.type !== "normal" ||
       buffer.viewportY !== buffer.baseY
@@ -64,6 +66,13 @@ export function installTerminalCursorGuard(
           line,
         ),
     );
+    // Idle protection requires the actual Codex composer and its footer.
+    // Selection dialogs also use a chevron; slash-command menus can retain
+    // the footer. Leave both to the native TUI rather than guessing a caret.
+    if (!working && (footer < 0 || /^\s*[›❯]\s+(?:\/|\d+[.)]\s)/.test(lines[prompt]))) {
+      reset();
+      return;
+    }
     let end = footer > prompt ? Math.max(prompt, footer - 2) : prompt;
     while (
       end + 1 < terminal.rows &&

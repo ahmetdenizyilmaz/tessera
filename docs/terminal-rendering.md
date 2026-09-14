@@ -46,6 +46,18 @@ scroll intent and component remounts. Claude uses the same `XTermView` integrati
    eight switches produced zero terminal resizes, zero transcript erases and
    zero transcript render frames, with the viewport at the bottom throughout.
    All five conversation identities and the Codex Full access policy survived.
+7. Cursor protection originally depended on Codex's `busy` flag, so it stopped
+   after an interruption even while the user edited the next draft. Idle Codex
+   composers now receive the same display-only protection when a model/shortcut
+   footer identifies the input. Pending requests, slash menus and numbered
+   selections retain the native cursor. This covers the brief visible cursor
+   above the draft described in the
+   [upstream Windows cursor report](https://github.com/openai/codex/issues/39710).
+   A real-xterm regression reproduces the interrupted-input frame and checks
+   middle/multiline editing, recovery and menu exclusions. An isolated native
+   Codex/ConPTY typing run also preserved the input caret, but did not reproduce
+   the intermittent upstream flash; verification in the user's running app is
+   still needed after installing this change.
 
 ## Ownership
 

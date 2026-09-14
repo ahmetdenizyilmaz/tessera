@@ -216,6 +216,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         if (/esc to (?:interrupt|cancel)/i.test(buffer.getLine(buffer.baseY + y)?.translateToString(true) || '')) return true;
       }
       return false;
+    }, () => {
+      if (useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider !== 'codex') return false;
+      const session = useCodexStore.getState().sessions[instanceId];
+      return !!session && !session.requests.length;
     });
     const unsubscribeCursor = useCodexStore.subscribe((state, previous) => {
       const session = state.sessions[instanceId], old = previous.sessions[instanceId];
