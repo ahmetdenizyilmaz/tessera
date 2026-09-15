@@ -53,16 +53,6 @@ try {
   await expect(snapshot).toHaveCount(0);
   expect(await page.evaluate(() => window.replies.at(-1))).toBe('x');
   await write('\x1b[?2026l');
-  await write('\x1b[?2026h\r\nclick to reveal');
-  await expect(snapshot).toBeVisible();
-  await page.evaluate(() => {
-    window.mouseDowns = 0;
-    window.terminal.element.addEventListener('mousedown', () => window.mouseDowns++);
-  });
-  await page.locator('.xterm-screen').first().click({ position: { x: 30, y: 12 } });
-  await expect(snapshot).toHaveCount(0);
-  expect(await page.evaluate(() => window.mouseDowns), 'Revealing a held frame must not activate a different link underneath').toBe(0);
-  await write('\x1b[?2026l');
   await page.clock.install();
   await write('\x1b[?2026h\r\nmissing end');
   await page.clock.runFor(850);

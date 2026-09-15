@@ -76,21 +76,12 @@ export function installTerminalFrameGuard(terminal: Terminal) {
     terminal.onResize(discard),
   ];
   const events = ['keydown', 'beforeinput', 'compositionstart', 'pointerdown', 'wheel'] as const;
-  const interact = (event: Event) => {
-    if (event.type === 'pointerdown' && snapshot?.isConnected) {
-      // The visible link/text belongs to the held frame. Reveal live output
-      // on this click without activating a different link underneath it.
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    discard();
-  };
-  events.forEach(event => element.addEventListener(event, interact, true));
+  events.forEach(event => element.addEventListener(event, discard, true));
   return {
     dispose() {
       discard();
       subscriptions.forEach(subscription => subscription.dispose());
-      events.forEach(event => element.removeEventListener(event, interact, true));
+      events.forEach(event => element.removeEventListener(event, discard, true));
     },
   };
 }
