@@ -37,12 +37,33 @@ jobs:
 
       - run: npm ci
 
+      - name: Cache Codex terminal renderer
+        id: codex-renderer-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/resources/codex-terminal/*.exe
+            src-tauri/resources/codex-terminal/*.dll
+            src-tauri/resources/codex-terminal/manifest.json
+          key: codex-renderer-windows-msvc-1.95.0-${{ hashFiles('patches/codex-terminal/buffer-history.patch', 'tools/build-codex-terminal.ps1') }}
+
+      # Include the same native history-rendering fix as the tested desktop build.
+      # The installed official Codex CLI still handles models and tools.
+      - name: Build patched Codex terminal renderer
+        if: steps.codex-renderer-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.95.0-x86_64-pc-windows-msvc --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the pinned renderer toolchain.' }
+          ./tools/build-codex-terminal.ps1 -Toolchain '1.95.0-x86_64-pc-windows-msvc'
+
       # On a tag: builds, creates a draft release for that tag, uploads the
       # NSIS installer to it. On workflow_dispatch: build only (no release).
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          args: --config src-tauri/tauri.stable.conf.json
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Tessera {0}', github.ref_name) || '' }}
           releaseDraft: true

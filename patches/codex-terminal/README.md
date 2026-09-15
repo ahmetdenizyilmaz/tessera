@@ -33,6 +33,9 @@ excluded from Git. Tauri packages the `codex-terminal` resource directory, inclu
 the upstream license and notice.
 The GNU build also packages MSYS2's `liblzma-5.dll` and its 0BSD license, so the
 installed renderer does not require MSYS2 on the user's PATH.
+On a Windows machine using Visual Studio Build Tools instead of MSYS2, pass
+`-Toolchain 1.95.0-x86_64-pc-windows-msvc` to the renderer build script after
+installing that Rust toolchain. GitHub's regular release build uses this target.
 
 Only the terminal attachment uses this executable. Discovery, history operations,
 the app-server, tools, approvals, and model execution use the installed official

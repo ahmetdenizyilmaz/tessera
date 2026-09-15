@@ -116,10 +116,15 @@ Only needed if you want to hack on Tessera itself:
 ```bash
 npm install            # install frontend dependencies
 npm run tauri dev      # run the app (hot-reloads the UI)
-npm run tauri build    # optimized build + installer
+npm run build:stable   # regular Tessera app + installer
 ```
 
 Build output and the NSIS installer land under `src-tauri/target/release/`.
+
+`main` is the production branch. For a Windows build with the bundled Codex
+history-rendering fix, prepare the renderer with
+`tools/build-codex-terminal.ps1` before building Tessera. The release workflow
+does this automatically. See [renderer build instructions](patches/codex-terminal/README.md).
 
 Use `npm run build:preview` to build **Tessera Preview**, which has its own app identity and state
 directory. See [Preview build and installation](docs/codex-provider.md) for details.

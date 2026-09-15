@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "build:preview": "tauri build --config src-tauri/tauri.preview.conf.json --features preview"
+    "build:preview": "tauri build --config src-tauri/tauri.preview.conf.json --features preview",
+    "build:stable": "tauri build --config src-tauri/tauri.stable.conf.json"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
