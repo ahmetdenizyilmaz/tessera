@@ -54,6 +54,8 @@ defaults, and the separate Preview build.
   area and reach the rest with `Ctrl+Tab` / `Ctrl+Shift+Tab`.
 - **Panel-to-panel messaging** — an in-app MCP server lets coding-agent sessions list the other open panels
   and message them (delegate, ask a peer, hand off a result), fire-and-forget or awaiting a reply.
+- **Encrypted LAN subgroups** — pair two Tessera computers on the same private subnet and use each
+  computer's existing Claude and Codex panels as a persistent remote group. No internet relay is involved.
 - **`cgui` command-line launcher** — run `cgui` in any directory to open a new tab rooted there,
   like `code .`; if the app is already running it just adds a tab.
 - **Session management** — resume Claude Code and Codex conversations and save whole workspaces.
@@ -99,6 +101,11 @@ Set up the connections you want to use:
 
 For API keys and local connection settings, open **Settings → LLM Providers**. Codex's starting
 permission mode is under **Settings → General → Default Codex permissions**.
+
+To connect another Tessera computer, enable **Settings → Local Network → Share on local network**
+on both PCs. Generate a one-time code on one computer, then enter its displayed address and code on
+the other. Windows may ask for firewall access; allow **Private networks** only. Paired devices
+reconnect automatically and remain visible as offline groups when unavailable.
 
 ---
 
@@ -164,6 +171,7 @@ src-tauri/                Rust backend (Tauri)
   src/codex/              Codex app-server, sessions, permissions, and terminal setup
   src/pty/                terminal (PTY) sessions
   src/panelbus/           in-app MCP server for panel-to-panel messaging
+  src/lan/                encrypted same-subnet pairing and remote-panel transport
   src/sessions/           session files, history, usage parsing
   src/llm/                cloud API and local model chat providers
   src/db/                 local SQLite storage
@@ -180,6 +188,11 @@ tools/                    cgui launcher + release/promote scripts
   Ollama or LM Studio endpoint.
 - API keys entered in **Settings → LLM Providers** are stored in the OS keychain via the system
   keyring — never in the repo or plaintext config.
+- LAN device identities are stored in the OS keychain. Paired-computer names, addresses, and public
+  keys are stored locally under `~/.tessera/`; one-time pairing codes remain in memory and expire.
+- LAN sharing accepts only directly connected private IPv4 subnets. It has no discovery broadcast,
+  cloud relay, UPnP, or automatic router configuration. Paired devices can see panel metadata, read
+  recent transcripts, and deliver messages, but cannot access files, raw shells, or approval controls.
 - Product analytics are **off unless an analytics key is supplied at runtime**; none is bundled here.
 
 ---
