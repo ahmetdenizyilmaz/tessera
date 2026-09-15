@@ -1,10 +1,11 @@
-import { Folder, Monitor, LayoutGrid, Puzzle, LogIn, MessageSquare, Brain, X } from 'lucide-react';
+import { Folder, Monitor, LayoutGrid, Puzzle, LogIn, MessageSquare, Brain, X, WifiOff } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore, type PanelType } from '../../store/layoutStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { ProviderIcon, ClaudeIcon } from '../icons/ProviderIcons';
 import { closePanel } from '../../lib/panelCleanup';
+import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 
 interface GroupPreviewProps {
   groupId: string;
@@ -24,6 +25,11 @@ function ChildTile({ childId }: { childId: string }) {
   const group = useGroupStore((s) => s.groups.get(childId));
   const widgetKind = useLayoutStore((s) => s.widgetKinds[childId]);
   const pluginInstance = usePluginStore((s) => s.instances.get(childId));
+  const remoteAddress = splitRemotePanelId(childId);
+  const lanStatus = useLanStore((s) => s.status);
+  const remotePeer = lanStatus?.peers.find((p) => p.deviceId === remoteAddress?.deviceId);
+  const remotePanel = remotePeer?.panels.find((p) => p.id === remoteAddress?.panelId);
+  const remote = remotePeer && remotePanel ? { peer: remotePeer, panel: remotePanel } : null;
 
   const isGroup = panelType === 'group';
   const isWidget = panelType === 'widget';
@@ -33,7 +39,12 @@ function ChildTile({ childId }: { childId: string }) {
   let name: string;
   let color: string;
 
-  if (isGroup && group) {
+  if (panelType === 'remote' && remote) {
+    color = remote.peer.connected ? '#51cf66' : '#868e96';
+    icon = <ProviderIcon provider={remote.panel.provider} size={ICON_SIZE} />;
+    badge = remote.peer.connected ? <Monitor size={BADGE_SIZE} /> : <WifiOff size={BADGE_SIZE} />;
+    name = remote.panel.name;
+  } else if (isGroup && group) {
     color = group.color ?? '#4a9eff';
     icon = <Folder size={ICON_SIZE} />;
     name = group.name;
@@ -137,6 +148,7 @@ function ChildTile({ childId }: { childId: string }) {
 
 export function GroupPreview({ groupId }: GroupPreviewProps) {
   const group = useGroupStore((s) => s.groups.get(groupId));
+  const remotePeer = useLanStore((s) => s.status?.peers.find((p) => p.deviceId === group?.remotePeerId));
   const childIds = group?.childIds ?? EMPTY_CHILD_IDS;
   const enterGroup = useGroupStore((s) => s.enterGroup);
   const isBeingEntered = useGroupStore(
@@ -175,7 +187,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
         onDoubleClick={handleEnter}
       >
         <span style={{ color: group?.color ?? 'var(--accent)', display: 'flex', alignItems: 'center' }}>
-          <Folder size={14} />
+          {group?.remotePeerId ? <Monitor size={14} /> : <Folder size={14} />}
         </span>
         <span
           style={{
@@ -194,8 +206,13 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
               {childIds.length}
             </span>
           )}
+          {group?.remotePeerId && (
+            <span style={{ fontWeight: 400, color: remotePeer?.connected ? '#51cf66' : 'var(--text-muted)', marginLeft: 6 }}>
+              {remotePeer?.connected ? 'online' : 'offline'}
+            </span>
+          )}
         </span>
-        <button
+        {!group?.remotePeerId && <button
           onClick={(e) => { e.stopPropagation(); handleEnter(); }}
           style={{
             display: 'flex',
@@ -214,7 +231,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
         >
           <LogIn size={12} />
           Enter
-        </button>
+        </button>}
         <button
           onClick={(e) => { e.stopPropagation(); closePanel(groupId); }}
           style={{

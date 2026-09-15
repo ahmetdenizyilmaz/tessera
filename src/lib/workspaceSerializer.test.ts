@@ -133,3 +133,32 @@ it("does not resume the same Codex thread twice from a duplicated snapshot", () 
     ),
   ).toHaveLength(1);
 });
+
+it("round-trips a LAN subgroup without creating local agent instances", () => {
+  const groupId = useGroupStore.getState().createGroup(null, "Workshop PC");
+  const remoteId = "lan:peer-1:panel-1";
+  useGroupStore.setState((state) => {
+    const groups = new Map(state.groups);
+    groups.set(groupId, {
+      ...groups.get(groupId)!,
+      remotePeerId: "peer-1",
+      childIds: [remoteId],
+      activeChildId: remoteId,
+      focusedChildId: remoteId,
+    });
+    return { groups };
+  });
+  useLayoutStore.getState().addPanel(groupId, "group");
+  useLayoutStore.setState((state) => ({ panelTypes: { ...state.panelTypes, [remoteId]: "remote" } }));
+
+  const saved = serializeWorkspace();
+  deserializeWorkspace(saved);
+  const restored = serializeWorkspace();
+  expect(restored.instances).toHaveLength(0);
+  expect(restored.groups[groupId]).toMatchObject({
+    name: "Workshop PC",
+    remotePeerId: "peer-1",
+    childIds: [remoteId],
+  });
+  expect(restored.layout.panelTypes[remoteId]).toBe("remote");
+});

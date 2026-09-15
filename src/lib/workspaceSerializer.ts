@@ -40,6 +40,7 @@ export interface SerializedGroup {
   focusedChildId: string | null;
   activeChildId: string | null;
   stealFraction: StealFraction;
+  remotePeerId?: string;
 }
 
 export interface SavedLayout {
@@ -384,6 +385,7 @@ export function deserializeWorkspace(raw: unknown): void {
       focusedChildId: focused && childIds.includes(focused) ? focused : (childIds[0] ?? null),
       activeChildId: active && childIds.includes(active) ? active : (childIds[0] ?? null),
       stealFraction: normalizeStealFraction(sg.stealFraction),
+      remotePeerId: sg.remotePeerId,
     });
   }
   useGroupStore.getState().restoreGroups(newGroups);

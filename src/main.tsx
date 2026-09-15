@@ -9,6 +9,7 @@ import { initStreamBridge } from './lib/streamBridge';
 import { initPanelBus } from './lib/panelBus';
 import { initLaunchBridge } from './lib/launchBridge';
 import { initThemeManager } from './lib/themeManager';
+import { initLanBridge } from './store/lanStore';
 import './styles/global.css';
 import './styles/themes.css';
 import './styles/terminal.css';
@@ -21,6 +22,7 @@ initPanelBus();
 void initCodexBridge();
 initLaunchBridge();
 initThemeManager();
+void initLanBridge();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

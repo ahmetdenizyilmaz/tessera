@@ -15,6 +15,7 @@ import { LlmPanel } from '../llm/LlmPanel';
 import { WidgetPanel } from '../widget/WidgetPanel';
 import { GroupPreview } from '../groups/GroupPreview';
 import { PluginPanel } from '../plugins/PluginPanel';
+import { RemotePanel } from '../lan/RemotePanel';
 import { SnapZoneOverlay } from './SnapZoneOverlay';
 
 const EMPTY_TAB_ORDER: string[] = [];
@@ -519,6 +520,8 @@ export function MosaicLayout() {
               ? <LlmPanel instanceId={id} />
               : panelType === 'plugin'
               ? <PluginPanel instanceId={id} />
+              : panelType === 'remote'
+              ? <RemotePanel instanceId={id} />
               : <TerminalPanel instanceId={id} />
             }
             </div>

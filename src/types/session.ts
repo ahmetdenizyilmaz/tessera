@@ -112,7 +112,7 @@ export interface AdyFile {
     panelRects: Record<string, PanelRect>;
     stealFraction: number;
     focusedId: string | null;
-    panelTypes?: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin'>;
+    panelTypes?: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin' | 'remote'>;
     widgetKinds?: Record<string, string>;
   };
 }
@@ -146,7 +146,7 @@ export interface SavedWorkspace {
     layoutConfig: LayoutConfig | null;
     panelRects: Record<string, PanelRect>;
     stealFraction: number;
-    panelTypes?: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin'>;
+    panelTypes?: Record<string, 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin' | 'remote'>;
     widgetKinds?: Record<string, string>;
   };
 }

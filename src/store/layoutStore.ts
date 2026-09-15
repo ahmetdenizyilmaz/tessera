@@ -4,7 +4,7 @@ import type { PanelRect, LayoutConfig, SnapZone, StealFraction } from '../types/
 
 // ─── Panel Type ──────────────────────────────────────────────────────────────
 
-export type PanelType = 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin';
+export type PanelType = 'terminal' | 'computer' | 'llm' | 'widget' | 'group' | 'plugin' | 'remote';
 
 // ─── Panel Limit ─────────────────────────────────────────────────────────────
 

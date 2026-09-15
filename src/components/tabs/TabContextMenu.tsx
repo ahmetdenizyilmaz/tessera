@@ -159,6 +159,7 @@ export function TabContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const [showMoveTo, setShowMoveTo] = useState(false);
   const groups = useGroupStore((s) => s.groups);
+  const isRemoteGroup = !!groups.get(tabId)?.remotePeerId;
   // Session actions only make sense on panels that host a Claude session
   const claudePanel = isClaudePanel(tabId);
 
@@ -197,18 +198,18 @@ export function TabContextMenu({
         zIndex: 1000,
       }}
     >
-      <button
+      {!isRemoteGroup && <button
         className="context-menu-item"
         onClick={() => { onRename(); onDismiss(); }}
       >
         Rename
-      </button>
-      <button
+      </button>}
+      {!isRemoteGroup && <button
         className="context-menu-item"
         onClick={() => { onChangeColor(); onDismiss(); }}
       >
         Change Color
-      </button>
+      </button>}
 
       {/* Move to... with submenu */}
       {showMoveToOption && (
@@ -254,13 +255,13 @@ export function TabContextMenu({
         </>
       )}
 
-      <div className="context-menu-separator" />
-      <button
+      {!isRemoteGroup && <div className="context-menu-separator" />}
+      {!isRemoteGroup && <button
         className="context-menu-item context-menu-item-danger"
         onClick={() => { onClose(); onDismiss(); }}
       >
         Close
-      </button>
+      </button>}
     </div>
   );
 }

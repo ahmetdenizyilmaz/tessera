@@ -8,6 +8,7 @@ import { SlashCommandsSettings } from '../settings/SlashCommandsSettings';
 import { ProxySettings } from '../settings/ProxySettings';
 import { StorageSettings } from '../settings/StorageSettings';
 import { LlmProviderSettings } from '../settings/LlmProviderSettings';
+import { NetworkSettings } from '../settings/NetworkSettings';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface SettingsDialogProps {
 }
 
 const TABS = [
+  { id: 'network', label: 'Local Network', icon: '⇄' },
   { id: 'general', label: 'General', icon: '⚙' },
   { id: 'permissions', label: 'Permissions', icon: '🔒' },
   { id: 'environment', label: 'Environment', icon: '📦' },
@@ -35,6 +37,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'network': return <NetworkSettings />;
       case 'general': return <GeneralSettings />;
       case 'permissions': return <PermissionsSettings />;
       case 'environment': return <EnvironmentSettings />;

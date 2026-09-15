@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle, Plus } from 'lucide-react';
+import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle, Plus, Monitor } from 'lucide-react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -13,6 +13,7 @@ import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
+import { remotePanelByCompositeId, useLanStore } from '../../store/lanStore';
 
 const PROVIDER_ICONS: Record<string, string> = {
   claude: claudeIcon,
@@ -49,6 +50,8 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
   const group = useGroupStore((s) => s.groups.get(id));
   const enterGroup = useGroupStore((s) => s.enterGroup);
   const pluginInstance = usePluginStore((s) => s.instances.get(id));
+  useLanStore((s) => s.status);
+  const remote = panelType === 'remote' ? remotePanelByCompositeId(id) : null;
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -60,7 +63,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
     transform,
     transition,
     isDragging,
-  } = useSortable({ id, disabled: isRenaming });
+  } = useSortable({ id, disabled: isRenaming || panelType === 'remote' });
 
   // Group tabs are also droppable targets for cross-group moves
   const isGroup = panelType === 'group';
@@ -78,8 +81,11 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
 
   const isWidget = panelType === 'widget';
   const isPlugin = panelType === 'plugin';
+  const isRemote = panelType === 'remote';
+  const isRemoteGroup = isGroup && !!group?.remotePeerId;
 
-  if (!isWidget && !isGroup && !isPlugin && !instance) return null;
+  if (!isWidget && !isGroup && !isPlugin && !isRemote && !instance) return null;
+  if (isRemote && !remote) return null;
 
   const isActive = activeTabId === id;
 
@@ -94,7 +100,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       return;
     }
     // Widgets have fixed labels; instances and plugins rename inline
-    if (isWidget) return;
+    if (isWidget || isRemote) return;
     setRenameValue(tabName);
     setIsRenaming(true);
   };
@@ -124,6 +130,8 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
     ? (widgetInfo?.label ?? 'Widget')
     : isPlugin
     ? (pluginInstance?.title ?? 'Plugin')
+    : isRemote
+    ? remote!.panel.name
     : instance!.name;
 
   // Visual class for drop-target highlight
@@ -140,7 +148,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      onContextMenu={(e) => onContextMenu(e, id)}
+      onContextMenu={isRemote ? undefined : (e) => onContextMenu(e, id)}
       {...attributes}
       {...listeners}
     >
@@ -164,6 +172,13 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
           color: 'var(--accent)', width: 16, height: 16,
         }}>
           <Puzzle size={13} />
+        </span>
+      ) : isRemote ? (
+        <span className="tab-provider-icon" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: remote!.peer.connected ? '#51cf66' : 'var(--text-muted)', width: 16, height: 16,
+        }} title={remote!.peer.name}>
+          <Monitor size={13} />
         </span>
       ) : (
         <img
@@ -211,13 +226,13 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
           {pluginInstance.badge > 99 ? '99+' : pluginInstance.badge}
         </span>
       )}
-      <button
+      {!isRemote && !isRemoteGroup && <button
         className="tab-close-btn"
         onClick={handleClose}
         title="Close"
       >
         {'\u00D7'}
-      </button>
+      </button>}
     </div>
   );
 }
