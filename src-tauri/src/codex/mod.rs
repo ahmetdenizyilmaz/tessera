@@ -1,6 +1,7 @@
 pub mod executable;
 pub mod rpc;
 mod panel_delivery;
+mod terminal_runtime;
 
 use rpc::Client;
 use serde::{Deserialize, Serialize};
@@ -642,8 +643,16 @@ pub async fn codex_terminal_spawn(
     if !readable {
         return Err("Send the first message before attaching the Codex terminal.".into());
     }
-    let mut cmd = portable_pty::CommandBuilder::new(&c.executable.program);
-    cmd.args(&c.executable.args);
+    let executable = if config.executable_path.trim().is_empty() {
+        match app.path().resource_dir() {
+            Ok(dir) => terminal_runtime::renderer(&c.executable, dir).await,
+            Err(_) => c.executable.clone(),
+        }
+    } else {
+        c.executable.clone()
+    };
+    let mut cmd = portable_pty::CommandBuilder::new(&executable.program);
+    cmd.args(&executable.args);
     cmd.args([
         "resume",
         "--remote",

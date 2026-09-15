@@ -46,6 +46,8 @@ Get-ChildItem -Path $srcDir -Filter '*.dll' | ForEach-Object {
     Copy-Item $_.FullName -Destination $dest -Force
     Write-Host ("  + " + $_.Name)
 }
+. (Join-Path $PSScriptRoot 'copy-codex-terminal.ps1')
+Copy-CodexTerminalRuntime $srcDir $dest
 
 # Install the CLI launchers into ~/.local/bin (already on PATH, where
 # `claude` lives) so they work from any directory:

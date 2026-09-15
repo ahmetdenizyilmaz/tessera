@@ -2,6 +2,9 @@
 node_modules/
 dist/
 src-tauri/target/
+src-tauri/resources/codex-terminal/*.exe
+src-tauri/resources/codex-terminal/*.dll
+src-tauri/resources/codex-terminal/manifest.json
 
 # Logs
 *.log

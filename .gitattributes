@@ -1,0 +1,2 @@
+# Unified patches contain context-marker spaces and must retain LF line endings.
+patches/codex-terminal/*.patch text eol=lf -whitespace

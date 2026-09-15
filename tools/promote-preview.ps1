@@ -16,6 +16,8 @@ Copy-Item -LiteralPath $source -Destination $target -Force
 Get-ChildItem -LiteralPath (Split-Path -Parent $source) -Filter '*.dll' | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
 }
+. (Join-Path $PSScriptRoot 'copy-codex-terminal.ps1')
+Copy-CodexTerminalRuntime (Split-Path -Parent $source) $dest
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut((Join-Path $desktop 'Tessera Preview.lnk'))

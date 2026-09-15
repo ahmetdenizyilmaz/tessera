@@ -1,0 +1,155 @@
+diff --git a/codex-rs/tui/src/insert_history.rs b/codex-rs/tui/src/insert_history.rs
+index 165bc56..f708b8a 100644
+--- a/codex-rs/tui/src/insert_history.rs
++++ b/codex-rs/tui/src/insert_history.rs
+@@ -5,6 +5,7 @@
+ 
+ use std::fmt;
+ use std::io;
++use std::io::BufWriter;
+ use std::io::Write;
+ 
+ use crate::render::line_utils::line_to_static;
+@@ -136,7 +137,9 @@ where
+             // The existing viewport is immediately replaced in the same draw pass. Clear it
+             // before terminal scrolling can move composer contents into scrollback.
+             terminal.clear_after_position(area.as_position())?;
+-            let writer = terminal.backend_mut();
++            // Stdout is line-buffered: each newline and each following style command can
++            // otherwise become a separate Windows console call during a long replay.
++            let writer = &mut BufWriter::with_capacity(64 * 1024, terminal.backend_mut());
+             queue!(writer, MoveTo(/*x*/ 0, area.top()))?;
+             for (index, line) in wrapped.iter().enumerate() {
+                 if index > 0 {
+@@ -152,6 +155,7 @@ where
+                 queue!(writer, Print("\r\n"), Clear(ClearType::UntilNewLine))?;
+             }
+             queue!(writer, MoveTo(last_cursor_pos.x, last_cursor_pos.y))?;
++            writer.flush()?;
+ 
+             let viewport_top = area
+                 .top()
+@@ -163,7 +167,7 @@ where
+             }
+         }
+         InsertHistoryMode::Standard => {
+-            let writer = terminal.backend_mut();
++            let writer = &mut BufWriter::with_capacity(64 * 1024, terminal.backend_mut());
+             let cursor_top = if area.bottom() < screen_size.height {
+                 // If the viewport is not at the bottom of the screen, scroll it down to make room.
+                 // Don't scroll it past the bottom of the screen.
+@@ -214,6 +218,7 @@ where
+ 
+             queue!(writer, ResetScrollRegion)?;
+             queue!(writer, MoveTo(last_cursor_pos.x, last_cursor_pos.y))?;
++            writer.flush()?;
+         }
+     }
+ 
+@@ -490,6 +495,10 @@ where
+     )
+ }
+ 
++#[cfg(test)]
++#[path = "insert_history_buffered_tests.rs"]
++mod buffered_tests;
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/codex-rs/tui/src/insert_history_buffered_tests.rs b/codex-rs/tui/src/insert_history_buffered_tests.rs
+new file mode 100644
+index 0000000..8b44c3d
+--- /dev/null
++++ b/codex-rs/tui/src/insert_history_buffered_tests.rs
+@@ -0,0 +1,90 @@
++use super::*;
++use crate::custom_terminal::Terminal;
++use pretty_assertions::assert_eq;
++use ratatui::backend::CrosstermBackend;
++use ratatui::layout::Position;
++use ratatui::layout::Rect;
++
++#[derive(Default)]
++struct Output {
++    bytes: Vec<u8>,
++    calls: usize,
++    fail: bool,
++}
++
++impl Write for Output {
++    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
++        self.calls += 1;
++        if self.fail {
++            return Err(io::Error::from(io::ErrorKind::BrokenPipe));
++        }
++        self.bytes.extend_from_slice(bytes);
++        Ok(bytes.len())
++    }
++
++    fn flush(&mut self) -> io::Result<()> {
++        Ok(())
++    }
++}
++
++#[test]
++fn long_history_preserves_every_row_with_bounded_console_writes() {
++    for mode in [InsertHistoryMode::Standard, InsertHistoryMode::FullScreen] {
++        let size = Size::new(/*width*/ 80, /*height*/ 24);
++        let mut terminal = Terminal::with_screen_size_and_cursor_position_for_test(
++            CrosstermBackend::new(Output::default()),
++            size,
++            Position::new(/*x*/ 0, /*y*/ 23),
++        );
++        terminal.set_viewport_area(Rect::new(
++            /*x*/ 0, /*y*/ 23, /*width*/ 80, /*height*/ 1,
++        ));
++        let lines = (0..2500)
++            .map(|i| HyperlinkLine::new(Line::from(format!("history row {i:04}"))))
++            .collect::<Vec<_>>();
++        insert_history_hyperlink_lines_with_mode_and_wrap_policy(
++            &mut terminal,
++            &lines,
++            mode,
++            HistoryLineWrapPolicy::PreWrap,
++            size,
++        )
++        .expect("insert complete history");
++        let output = terminal.backend().writer();
++        let bytes = String::from_utf8(output.bytes.clone()).expect("UTF-8 output");
++        let mut remaining = bytes.as_str();
++        for i in 0..2500 {
++            let marker = format!("history row {i:04}");
++            let (_, tail) = remaining.split_once(&marker).expect("all rows in order");
++            remaining = tail;
++        }
++        assert!(
++            output.calls < 20,
++            "unexpected per-line writes: {}",
++            output.calls
++        );
++        assert!(
++            bytes.ends_with("\x1b[24;1H"),
++            "cursor must be restored before returning"
++        );
++    }
++}
++
++#[test]
++fn buffered_history_reports_write_failures() {
++    let size = Size::new(/*width*/ 80, /*height*/ 24);
++    let mut terminal = Terminal::with_screen_size_and_cursor_position_for_test(
++        CrosstermBackend::new(Output {
++            fail: true,
++            ..Output::default()
++        }),
++        size,
++        Position::new(/*x*/ 0, /*y*/ 23),
++    );
++    terminal.set_viewport_area(Rect::new(
++        /*x*/ 0, /*y*/ 23, /*width*/ 80, /*height*/ 1,
++    ));
++    let error = insert_history_lines(&mut terminal, vec![Line::from("history")])
++        .expect_err("buffered writes must not fail silently on drop");
++    assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
++}
