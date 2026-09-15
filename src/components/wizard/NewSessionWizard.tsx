@@ -2,7 +2,7 @@ import { CodexSetup } from '../codex/CodexSetup';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp } from 'lucide-react';
+import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp, Monitor } from 'lucide-react';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -322,6 +322,21 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               </span>
             </button>
           ))}
+          <button
+            type="button"
+            className="panel-view-option panel-view-option--remote"
+            onClick={() => {
+              close();
+              window.dispatchEvent(new CustomEvent('tessera:open-network-settings'));
+            }}
+            title="Connect to another Tessera computer on your local network"
+          >
+            <span className="panel-view-option__art" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Monitor size={30} strokeWidth={1.5} />
+            </span>
+            <span className="panel-view-option__label">Local PC</span>
+            <span className="panel-view-option__hint">Connect another Tessera computer</span>
+          </button>
         </div>
       </div>
 

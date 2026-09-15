@@ -110,6 +110,14 @@ export default function App() {
     usePluginStore.getState().scanPlugins();
   }, []);
 
+  // The new-session wizard can offer Local PC beside Chat and Terminal without
+  // coupling that embedded widget to the application-level settings dialog.
+  useEffect(() => {
+    const openNetworkSettings = () => setShowSettings(true);
+    window.addEventListener('tessera:open-network-settings', openNetworkSettings);
+    return () => window.removeEventListener('tessera:open-network-settings', openNetworkSettings);
+  }, []);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const anyDialogOpen =
