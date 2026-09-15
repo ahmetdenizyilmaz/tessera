@@ -15,7 +15,6 @@ import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/
 import { terminalPlatform } from '../../lib/terminalPlatform';
 import { createTerminalResize } from '../../lib/terminalResize';
 import { activateTerminalLink } from '../../lib/terminalLinks';
-import { installTerminalFrameGuard } from '../../lib/terminalFrame';
 import { listen } from '@tauri-apps/api/event';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -228,8 +227,6 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       const session = state.sessions[instanceId], old = previous.sessions[instanceId];
       if (session?.busy !== old?.busy || session?.requests.length !== old?.requests.length) cursorGuard.update?.();
     });
-    const frameGuard = useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'codex'
-      ? installTerminalFrameGuard(terminal) : undefined;
     termRef.current = terminal;
     const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize, () => activeRef.current);
     resizeCoordinatorRef.current = resizeCoordinator;
@@ -498,7 +495,6 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       dataDisposable.dispose();
       unsubscribeCursor();
       cursorGuard.dispose();
-      frameGuard?.dispose();
       scrollGuard.dispose();
       if (unlisten) unlisten();
       terminal.dispose();

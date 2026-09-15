@@ -394,19 +394,6 @@ body,
 .xterm:not(.focus) .terminal-input-caret { background: transparent; outline: 1px solid #4a9eff; outline-offset: -1px; }
 .terminal-input-caret[hidden] { display: none; }
 
-.terminal-frame-status {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  z-index: 6;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  font: 12px sans-serif;
-  pointer-events: none;
-}
-
 /* Status never half-clips into "STA…" — inline it either fits or the whole
    toolbar is in compact (☰) mode */
 .status-badge {
