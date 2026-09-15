@@ -1,31 +1,33 @@
+pub mod agents;
+pub mod analytics;
 pub mod app_paths;
-pub mod codex;
 pub mod auth;
+pub mod checkpoints;
+pub mod codex;
 pub mod computer;
+pub mod db;
+pub mod lan;
+pub mod launch;
+pub mod llm;
+pub mod mcp;
+pub mod panelbus;
 pub mod pty;
 pub mod relay;
 pub mod sessions;
+pub mod stream;
 pub mod system;
 pub mod util;
 pub mod ws;
-pub mod db;
-pub mod stream;
-pub mod agents;
-pub mod checkpoints;
-pub mod mcp;
-pub mod analytics;
-pub mod llm;
-pub mod panelbus;
-pub mod launch;
 
+use analytics::posthog::PostHogTracker;
 use db::Database;
 use pty::manager::PtyManager;
 use relay::client::RelayClient;
 use stream::manager::StreamJsonManager;
-use analytics::posthog::PostHogTracker;
 
 pub fn run() {
     let database = Database::new().expect("Failed to initialize database");
+    let lan_manager = lan::LanManager::new().expect("Failed to initialize LAN identity");
 
     tauri::Builder::default()
         // Single instance MUST be the first plugin. A second `cgui` launch
@@ -34,6 +36,7 @@ pub fn run() {
             launch::on_second_instance(app, argv);
         }))
         .manage(launch::LaunchQueue::default())
+        .manage(lan_manager)
         .setup(|app| {
             // First launch: `cgui <dir>` passes the directory in our own argv.
             if let Some(dir) = launch::dir_from_argv(&std::env::args().collect::<Vec<_>>()) {
@@ -56,7 +59,8 @@ pub fn run() {
             // before the first `stream_configure`, and setup() runs before any
             // command can execute. Never rebind — sessions already spawned
             // hold the old port in their MCP config file.
-            let token = format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4()).replace('-', "");
+            let token =
+                format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4()).replace('-', "");
             let bound = tauri::async_runtime::block_on(async {
                 tokio::net::TcpListener::bind(("127.0.0.1", 0)).await
             });
@@ -80,7 +84,10 @@ pub fn run() {
                 Err(e) => {
                     // Degrade, never panic: panel messaging goes dark, the app
                     // still starts.
-                    eprintln!("[panelbus] could not bind loopback port: {} — panel messaging disabled", e);
+                    eprintln!(
+                        "[panelbus] could not bind loopback port: {} — panel messaging disabled",
+                        e
+                    );
                     None
                 }
             };
@@ -90,6 +97,9 @@ pub fn run() {
             if panelbus::plugin::ensure_installed().is_none() {
                 eprintln!("[panelbus] plugin not installed — sessions will spawn without it");
             }
+
+            app.state::<lan::LanManager>()
+                .initialize(app.handle().clone());
 
             Ok(())
         })
@@ -158,6 +168,17 @@ pub fn run() {
             relay::client::relay_status,
             relay::client::relay_send_instances,
             relay::client::relay_get_instance_count,
+            // Direct encrypted local-network peers
+            lan::lan_status,
+            lan::lan_set_sharing,
+            lan::lan_set_name,
+            lan::lan_generate_pairing_code,
+            lan::lan_pair,
+            lan::lan_connect,
+            lan::lan_disconnect,
+            lan::lan_forget,
+            lan::lan_send_panel,
+            lan::lan_read_panel,
             // Computer commands
             computer::computer_screenshot,
             computer::computer_mouse_move,
@@ -240,7 +261,10 @@ pub fn run() {
         .run(|app, event| {
             // Kill every spawned claude process when the app exits — otherwise
             // ConPTY/stream children are orphaned and survive until reboot.
-            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
                 use tauri::Manager;
                 app.state::<PtyManager>().kill_all();
                 app.state::<StreamJsonManager>().kill_all();

@@ -24,6 +24,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
+use tauri::Manager;
 
 use registry::{PanelInfo, PanelRegistry};
 
@@ -37,7 +38,7 @@ When the user asks to send, tell, ask, message, or forward something to another 
 (for example 'send the other session this message', 'ask the backend subwindow', or 'tell the other one'), \
 use list_panels to find it, then send_to_panel with its returned panel name or id. \
 Use read_panel to check another session's recent conversation. \
-These tools work across Claude and Codex, including sessions inside groups. \
+These tools work across Claude and Codex, including sessions inside groups and on paired LAN computers. \
 The roster describes open Tessera sessions, not closed CLI history or unrelated OS windows. \
 Exclude is_self when choosing the other session. If exactly one other reachable session matches, use it; \
 if several match and the intended recipient is unclear, ask which one instead of guessing. \
@@ -95,7 +96,36 @@ impl PanelBus {
 
     pub fn replace_panels(&self, panels: Vec<PanelInfo>) {
         let mut guard = self.registry.lock().unwrap_or_else(|e| e.into_inner());
-        guard.replace_all(panels);
+        guard.replace_local(panels);
+    }
+
+    pub fn local_panels(&self) -> Vec<PanelInfo> {
+        self.with_registry(|r| {
+            r.all()
+                .into_iter()
+                .filter(|p| p.remote_device_id.is_none())
+                .collect()
+        })
+    }
+
+    pub fn set_remote_peer(
+        &self,
+        device_id: &str,
+        device_name: &str,
+        panels: &[crate::lan::protocol::RemotePanelInfo],
+        connected: bool,
+    ) {
+        self.registry
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_remote_peer(device_id, device_name, panels, connected);
+    }
+
+    pub fn remove_remote_peer(&self, device_id: &str) {
+        self.registry
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove_remote_peer(device_id);
     }
 
     /// The hop a message *from* `sender` should carry. If the sender received a
@@ -136,25 +166,41 @@ impl PanelBus {
     /// Drop all per-panel state when a panel closes, so the maps don't grow
     /// for the life of the app.
     pub fn forget_panel(&self, panel_id: &str) {
-        self.tokens.lock().unwrap_or_else(|e| e.into_inner()).remove(panel_id);
-        self.inbound_hop.lock().unwrap_or_else(|e| e.into_inner()).remove(panel_id);
-        self.waits.lock().unwrap_or_else(|e| e.into_inner()).retain(|sender, target| sender != panel_id && target != panel_id);
+        self.tokens
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(panel_id);
+        self.inbound_hop
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(panel_id);
+        self.waits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|sender, target| sender != panel_id && target != panel_id);
     }
 
     pub fn begin_wait(&self, sender: &str, target: &str) -> Option<WaitGuard<'_>> {
         let mut waits = self.waits.lock().unwrap_or_else(|e| e.into_inner());
-        if waits.contains_key(sender) { return None; }
+        if waits.contains_key(sender) {
+            return None;
+        }
         let mut visited = HashSet::new();
         let mut next = target;
         loop {
-            if next == sender || !visited.insert(next.to_string()) { return None; }
+            if next == sender || !visited.insert(next.to_string()) {
+                return None;
+            }
             match waits.get(next) {
                 Some(target) => next = target,
                 None => break,
             }
         }
         waits.insert(sender.into(), target.into());
-        Some(WaitGuard { bus: self, sender: sender.into() })
+        Some(WaitGuard {
+            bus: self,
+            sender: sender.into(),
+        })
     }
 }
 
@@ -164,7 +210,11 @@ pub struct WaitGuard<'a> {
 }
 impl Drop for WaitGuard<'_> {
     fn drop(&mut self) {
-        self.bus.waits.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.sender);
+        self.bus
+            .waits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.sender);
     }
 }
 
@@ -204,9 +254,28 @@ mod conversation_tests {
 #[tauri::command]
 pub async fn panel_registry_sync(
     panels: Vec<PanelInfo>,
+    app: tauri::AppHandle,
     state: tauri::State<'_, PanelBus>,
 ) -> Result<(), String> {
     state.replace_panels(panels);
+    let snapshot = state
+        .local_panels()
+        .into_iter()
+        .map(|p| crate::lan::protocol::RemotePanelInfo {
+            reachable: p.reachable(),
+            id: p.id,
+            name: p.name,
+            cwd: p.cwd,
+            kind: p.kind,
+            provider: p.provider.unwrap_or_else(|| "claude".into()),
+            status: p.status,
+            busy: p.busy,
+            awaiting_user: p.awaiting_user,
+            model: p.model,
+        })
+        .collect();
+    app.state::<crate::lan::LanManager>()
+        .broadcast_registry(snapshot);
     Ok(())
 }
 
@@ -227,9 +296,7 @@ pub struct PanelBusStatus {
 }
 
 #[tauri::command]
-pub async fn panel_bus_status(
-    state: tauri::State<'_, PanelBus>,
-) -> Result<PanelBusStatus, String> {
+pub async fn panel_bus_status(state: tauri::State<'_, PanelBus>) -> Result<PanelBusStatus, String> {
     Ok(PanelBusStatus {
         port: state.port,
         enabled: state.is_enabled(),

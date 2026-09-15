@@ -34,6 +34,19 @@ pub struct PanelInfo {
     /// the stream manager holds the authoritative value.
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Present only for a panel mirrored from a paired LAN computer.
+    #[serde(default)]
+    pub remote_device_id: Option<String>,
+    #[serde(default)]
+    pub remote_panel_id: Option<String>,
+    #[serde(default)]
+    pub device_name: Option<String>,
+    #[serde(default = "default_connected")]
+    pub connected: bool,
+}
+
+fn default_connected() -> bool {
+    true
 }
 
 impl PanelInfo {
@@ -41,7 +54,34 @@ impl PanelInfo {
     /// a provider API, not a Claude Code process, so there is nothing to write
     /// a user turn into.
     pub fn reachable(&self) -> bool {
-        self.kind == "chat" || self.kind == "terminal"
+        self.connected && (self.kind == "chat" || self.kind == "terminal")
+    }
+
+    pub fn qualified_name(&self) -> String {
+        self.device_name
+            .as_ref()
+            .map(|d| format!("{d} / {}", self.name))
+            .unwrap_or_else(|| self.name.clone())
+    }
+
+    pub fn ui_sender() -> Self {
+        Self {
+            id: "tessera-ui".into(),
+            name: "Tessera user".into(),
+            cwd: String::new(),
+            kind: "chat".into(),
+            provider: None,
+            codex_config: None,
+            status: "running".into(),
+            busy: false,
+            awaiting_user: false,
+            model: None,
+            session_id: None,
+            remote_device_id: None,
+            remote_panel_id: None,
+            device_name: None,
+            connected: true,
+        }
     }
 }
 
@@ -51,8 +91,65 @@ pub struct PanelRegistry {
 }
 
 impl PanelRegistry {
-    pub fn replace_all(&mut self, panels: Vec<PanelInfo>) {
-        self.panels = panels.into_iter().map(|p| (p.id.clone(), p)).collect();
+    pub fn replace_local(&mut self, panels: Vec<PanelInfo>) {
+        self.panels
+            .retain(|_, panel| panel.remote_device_id.is_some());
+        self.panels
+            .extend(panels.into_iter().map(|p| (p.id.clone(), p)));
+    }
+
+    pub fn set_remote_peer(
+        &mut self,
+        device_id: &str,
+        device_name: &str,
+        panels: &[crate::lan::protocol::RemotePanelInfo],
+        connected: bool,
+    ) {
+        if panels.is_empty() && !connected {
+            for panel in self
+                .panels
+                .values_mut()
+                .filter(|p| p.remote_device_id.as_deref() == Some(device_id))
+            {
+                panel.connected = false;
+                panel.status = "offline".into();
+            }
+            return;
+        }
+        self.panels
+            .retain(|_, panel| panel.remote_device_id.as_deref() != Some(device_id));
+        for panel in panels {
+            let id = format!("lan:{device_id}:{}", panel.id);
+            self.panels.insert(
+                id.clone(),
+                PanelInfo {
+                    id,
+                    name: panel.name.clone(),
+                    cwd: panel.cwd.clone(),
+                    kind: panel.kind.clone(),
+                    provider: Some(panel.provider.clone()),
+                    codex_config: None,
+                    status: if connected {
+                        panel.status.clone()
+                    } else {
+                        "offline".into()
+                    },
+                    busy: panel.busy,
+                    awaiting_user: panel.awaiting_user,
+                    model: panel.model.clone(),
+                    session_id: None,
+                    remote_device_id: Some(device_id.into()),
+                    remote_panel_id: Some(panel.id.clone()),
+                    device_name: Some(device_name.into()),
+                    connected,
+                },
+            );
+        }
+    }
+
+    pub fn remove_remote_peer(&mut self, device_id: &str) {
+        self.panels
+            .retain(|_, panel| panel.remote_device_id.as_deref() != Some(device_id));
     }
 
     pub fn get(&self, id: &str) -> Option<&PanelInfo> {
@@ -75,25 +172,84 @@ impl PanelRegistry {
             return Resolution::NotFound;
         }
         if let Some(p) = self.panels.get(needle) {
-            return Resolution::One(p.clone());
+            return Resolution::One(Box::new(p.clone()));
         }
         let lower = needle.to_lowercase();
         let matches: Vec<PanelInfo> = self
             .panels
             .values()
-            .filter(|p| p.name.trim().to_lowercase() == lower)
+            .filter(|p| {
+                p.name.trim().to_lowercase() == lower || p.qualified_name().to_lowercase() == lower
+            })
             .cloned()
             .collect();
         match matches.len() {
             0 => Resolution::NotFound,
-            1 => Resolution::One(matches.into_iter().next().unwrap()),
+            1 => Resolution::One(Box::new(matches.into_iter().next().unwrap())),
             _ => Resolution::Ambiguous(matches),
         }
     }
 }
 
 pub enum Resolution {
-    One(PanelInfo),
+    One(Box<PanelInfo>),
     Ambiguous(Vec<PanelInfo>),
     NotFound,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn remote_panel(id: &str, name: &str) -> crate::lan::protocol::RemotePanelInfo {
+        crate::lan::protocol::RemotePanelInfo {
+            id: id.into(),
+            name: name.into(),
+            cwd: "C:/work".into(),
+            kind: "chat".into(),
+            provider: "claude".into(),
+            status: "running".into(),
+            busy: false,
+            awaiting_user: false,
+            model: None,
+            reachable: true,
+        }
+    }
+
+    #[test]
+    fn remote_panels_are_device_qualified_and_stay_visible_offline() {
+        let mut registry = PanelRegistry::default();
+        registry.set_remote_peer(
+            "peer-a",
+            "Workshop",
+            &[remote_panel("panel-1", "Backend")],
+            true,
+        );
+        let panel = registry.get("lan:peer-a:panel-1").unwrap();
+        assert_eq!(panel.qualified_name(), "Workshop / Backend");
+        assert!(panel.reachable());
+        registry.set_remote_peer("peer-a", "Workshop", &[], false);
+        let panel = registry.get("lan:peer-a:panel-1").unwrap();
+        assert_eq!(panel.status, "offline");
+        assert!(!panel.reachable());
+        assert!(matches!(
+            registry.resolve("Workshop / Backend"),
+            Resolution::One(_)
+        ));
+    }
+
+    #[test]
+    fn replacing_local_panels_does_not_delete_remote_roster() {
+        let mut registry = PanelRegistry::default();
+        registry.set_remote_peer(
+            "peer-a",
+            "Workshop",
+            &[remote_panel("panel-1", "Backend")],
+            true,
+        );
+        registry.replace_local(Vec::new());
+        assert!(registry.get("lan:peer-a:panel-1").is_some());
+        registry.remove_remote_peer("peer-a");
+        assert!(registry.all().is_empty());
+    }
 }

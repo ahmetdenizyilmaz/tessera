@@ -47,6 +47,11 @@ ignore = "0.4"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "server"] }
 http-body-util = "0.1"
+# Direct LAN peer transport. Noise provides authenticated encryption for both
+# the one-time pairing handshake and every subsequent device-key connection.
+snow = "0.9"
+sha2 = "0.10"
+if-addrs = "0.13"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -21,27 +21,27 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": "list_panels",
             "description": "Find the Claude and Codex sessions open in this Tessera window, including \
-panels inside groups. Panel, session, subwindow, sub-window, pane, tab, chat, conversation, and \
-other agent refer to these same destinations. Call this when the user says 'the other session', \
-'another subwindow', or 'the other one', before sending a message or reading its context. \
-Returns names, ids, providers, working directories, busy/reachable state and is_self. \
-Choose the matching non-self recipient; ask which one if several match. Does not list closed history.",
+        panels inside groups. Panel, session, subwindow, sub-window, pane, tab, chat, conversation, and \
+        other agent refer to these same destinations. Call this when the user says 'the other session', \
+        'another subwindow', or 'the other one', before sending a message or reading its context. \
+        Returns names, qualified names, computer names, ids, providers, working directories, busy/reachable state and is_self. \
+        Choose the matching non-self recipient; ask which one if several match. Does not list closed history.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         }),
         json!({
             "name": "send_to_panel",
             "description": "Send, tell, ask, message, or forward text to another open Claude or Codex \
-session in Tessera. Use for requests such as 'send the other session this message', 'tell the \
-backend subwindow', 'ask the other tab', or 'message the other agent'. Panel, session, subwindow, \
-sub-window, pane, tab, chat and conversation mean the same destination here. Call list_panels \
-to identify the recipient, then pass its returned name or id in panel. If several recipients \
-match, clarify; do not guess or broadcast. The message arrives as a visible user turn in that \
-session and is submitted automatically. Reply to a panel-message with this tool, not only in \
-your own conversation. Continue the authorized discussion without asking the user to relay replies. \
-Use wait_for_reply=false for back-and-forth exchanges. Busy Codex recipients queue messages for \
-automatic delivery; a queued response means accepted, so do not resend. Stop when the task is \
-resolved, avoiding acknowledgement loops. Set wait_for_reply for an isolated request needing its answer. \
-Sending a message does not approve permissions or bypass a pending prompt.",
+        session in Tessera. Use for requests such as 'send the other session this message', 'tell the \
+        backend subwindow', 'ask the other tab', or 'message the other agent'. Panel, session, subwindow, \
+        sub-window, pane, tab, chat and conversation mean the same destination here. Call list_panels \
+        to identify the recipient, then pass its returned name or id in panel. If several recipients \
+        match, clarify; do not guess or broadcast. The message arrives as a visible user turn in that \
+        session and is submitted automatically. Reply to a panel-message with this tool, not only in \
+        your own conversation. Continue the authorized discussion without asking the user to relay replies. \
+        Use wait_for_reply=false for back-and-forth exchanges. Busy Codex recipients queue messages for \
+        automatic delivery; a queued response means accepted, so do not resend. Stop when the task is \
+        resolved, avoiding acknowledgement loops. Set wait_for_reply for an isolated request needing its answer. \
+        Sending a message does not approve permissions or bypass a pending prompt.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -57,8 +57,8 @@ Sending a message does not approve permissions or bypass a pending prompt.",
         json!({
             "name": "read_panel",
             "description": "Read the recent conversation from another open Claude or Codex session \
-(also called a panel, subwindow, sub-window, pane, tab, chat, or other agent) without interrupting it. \
-Use when asked what the other session said or decided. Call list_panels to identify it first.",
+        (also called a panel, subwindow, sub-window, pane, tab, chat, or other agent) without interrupting it. \
+        Use when asked what the other session said or decided. Call list_panels to identify it first.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -72,7 +72,12 @@ Use when asked what the other session said or decided. Call list_panels to ident
     ]
 }
 
-pub async fn call(app: &AppHandle, caller_id: &str, name: &str, args: Value) -> Result<Value, String> {
+pub async fn call(
+    app: &AppHandle,
+    caller_id: &str,
+    name: &str,
+    args: Value,
+) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
     if !bus.is_enabled() {
         return Err("panel messaging is switched off in this app's settings".into());
@@ -111,6 +116,8 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
                 json!({
                     "id": p.id,
                     "name": p.name,
+                    "qualified_name": p.qualified_name(),
+                    "computer": p.device_name,
                     "kind": p.kind,
                     "provider": p.provider.as_deref().unwrap_or("claude"),
                     "cwd": p.cwd,
@@ -118,7 +125,7 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
                     "status": p.status,
                     "busy": p.busy,
                     "awaiting_user_input": p.awaiting_user,
-                    "queued_messages": if p.provider.as_deref() == Some("codex") {
+                    "queued_messages": if p.remote_device_id.is_none() && p.provider.as_deref() == Some("codex") {
                         crate::codex::pending_panel_messages(app, &p.id)
                     } else { 0 },
                     "reachable": p.reachable(),
@@ -127,7 +134,10 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
             })
             .collect()
     });
-    let others = panels.iter().filter(|p| p["is_self"] != json!(true)).count();
+    let others = panels
+        .iter()
+        .filter(|p| p["is_self"] != json!(true))
+        .count();
     Ok(json!({ "panels": panels, "other_panel_count": others }))
 }
 
@@ -148,7 +158,7 @@ fn resolve_target(
     }
 
     let target = bus.with_registry(|r| match r.resolve(&reference) {
-        Resolution::One(p) => Ok(p),
+        Resolution::One(p) => Ok(*p),
         Resolution::Ambiguous(candidates) => {
             let list = candidates
                 .iter()
@@ -211,6 +221,27 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
     let sender_name = bus
         .with_registry(|r| r.get(caller_id).map(|p| p.name.clone()))
         .unwrap_or_else(|| "another panel".to_string());
+
+    if let (Some(device_id), Some(remote_panel_id)) =
+        (&target.remote_device_id, &target.remote_panel_id)
+    {
+        let sender = bus
+            .with_registry(|r| r.get(caller_id).cloned())
+            .ok_or("Sending panel is no longer open")?;
+        let result = app
+            .state::<crate::lan::LanManager>()
+            .send_remote(device_id, remote_panel_id, &sender, &message, hop)
+            .await?;
+        bus.record_inbound_hop(&target.id, hop);
+        return Ok(json!({
+            "delivered": true,
+            "panel": target.name,
+            "computer": target.device_name,
+            "remote_result": result,
+            "note": "Delivered over the encrypted local-network connection. Remote sends are nonblocking; use read_panel for the reply."
+        }));
+    }
+
     let wrapped = format!(
         "[panel-message from \"{}\" · hop {}]\n{}",
         sender_name, hop, message
@@ -220,13 +251,25 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
         .get("wait_for_reply")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let wait_guard = if wait { bus.begin_wait(caller_id, &target.id) } else { None };
+    let wait_guard = if wait {
+        bus.begin_wait(caller_id, &target.id)
+    } else {
+        None
+    };
     let wait = wait_guard.is_some();
 
     if target.provider.as_deref() == Some("codex") {
         bus.record_inbound_hop(&target.id, hop);
-        return crate::codex::deliver(app, &target.id, &wrapped, wait,
-            args.get("timeout_seconds").and_then(Value::as_u64).unwrap_or(DEFAULT_WAIT_SECS)).await;
+        return crate::codex::deliver(
+            app,
+            &target.id,
+            &wrapped,
+            wait,
+            args.get("timeout_seconds")
+                .and_then(Value::as_u64)
+                .unwrap_or(DEFAULT_WAIT_SECS),
+        )
+        .await;
     }
 
     if target.kind == "terminal" {
@@ -247,7 +290,10 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
 
     // Register the watcher BEFORE writing, or a fast turn can complete first.
     let watcher = if wait {
-        Some(crate::stream::manager::watch_turn(&stream_state, &target.id)?)
+        Some(crate::stream::manager::watch_turn(
+            &stream_state,
+            &target.id,
+        )?)
     } else {
         None
     };
@@ -274,7 +320,11 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
         .clamp(5, MAX_WAIT_SECS);
 
     match tokio::time::timeout(std::time::Duration::from_secs(secs), watcher).await {
-        Ok(Ok(TurnOutcome::Done { is_error, subtype, text })) => Ok(json!({
+        Ok(Ok(TurnOutcome::Done {
+            is_error,
+            subtype,
+            text,
+        })) => Ok(json!({
             "delivered": true,
             "panel": target.name,
             "reply": text,
@@ -287,7 +337,7 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
             "panel": target.name,
             "status": "awaiting_user_input",
             "note": "That panel is waiting for the person to answer a permission prompt or question, \
-so it cannot reply yet. The message was delivered.",
+        so it cannot reply yet. The message was delivered.",
         })),
         Ok(Ok(TurnOutcome::ProcessDied)) => Ok(json!({
             "delivered": true,
@@ -307,7 +357,7 @@ so it cannot reply yet. The message was delivered.",
             "status": "timed_out",
             "waited_seconds": secs,
             "note": "The message was delivered but that panel had not finished within the timeout. \
-Use read_panel later to see what it said.",
+        Use read_panel later to see what it said.",
         })),
     }
 }
@@ -329,7 +379,7 @@ async fn deliver_to_terminal(
         "delivery": "best_effort",
         "note": if wait {
             "Pasted the message and sent Enter. Terminal panels give no completion signal, \
-so wait_for_reply was ignored — use read_panel or ask the person."
+    so wait_for_reply was ignored — use read_panel or ask the person."
         } else {
             "Pasted the message and sent Enter. Terminal panels give no completion signal."
         },
@@ -344,6 +394,65 @@ async fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Val
         .and_then(|v| v.as_u64())
         .unwrap_or(20)
         .clamp(1, 100) as usize;
+
+    if let (Some(device_id), Some(remote_panel_id)) =
+        (&target.remote_device_id, &target.remote_panel_id)
+    {
+        return app
+            .state::<crate::lan::LanManager>()
+            .read_remote(device_id, remote_panel_id, limit)
+            .await;
+    }
+
+    read_local(app, &target.id, limit).await
+}
+
+/// Deliver a request received over an authenticated LAN connection into a
+/// local panel. It deliberately cannot target another remote panel, so peers
+/// cannot turn Tessera into a transitive relay.
+pub async fn deliver_inbound(
+    app: &AppHandle,
+    target_id: &str,
+    wrapped: &str,
+) -> Result<Value, String> {
+    let bus = app.state::<PanelBus>();
+    let target = bus
+        .with_registry(|r| r.get(target_id).cloned())
+        .ok_or("Target panel is no longer open")?;
+    if target.remote_device_id.is_some() {
+        return Err("Transitive LAN panel routing is not allowed".into());
+    }
+    if !target.reachable() {
+        return Err(format!("panel \"{}\" cannot receive messages", target.name));
+    }
+    if target.provider.as_deref() == Some("codex") {
+        return crate::codex::deliver(app, &target.id, wrapped, false, DEFAULT_WAIT_SECS).await;
+    }
+    if target.kind == "terminal" {
+        return deliver_to_terminal(app, &target, wrapped, false).await;
+    }
+    let stream_state = app.state::<StreamJsonManager>();
+    crate::stream::manager::ensure_configured(
+        &stream_state,
+        &target.id,
+        &target.cwd,
+        target.model.clone(),
+    )?;
+    crate::stream::manager::send_user_turn(&target.id, wrapped, None, app, &stream_state)?;
+    echo_into_transcript(app, &target.id, wrapped);
+    Ok(json!({"delivered":true,"panel":target.name}))
+}
+
+/// Read only a local panel. Used by both the MCP tool and the LAN request
+/// handler, with the same transcript implementation and limits.
+pub async fn read_local(app: &AppHandle, target_id: &str, limit: usize) -> Result<Value, String> {
+    let bus = app.state::<PanelBus>();
+    let target = bus
+        .with_registry(|r| r.get(target_id).cloned())
+        .ok_or("Target panel is no longer open")?;
+    if target.remote_device_id.is_some() {
+        return Err("Transitive LAN panel reads are not allowed".into());
+    }
 
     if target.provider.as_deref() == Some("codex") {
         let messages = crate::codex::read_recent(app, &target.id, limit).await?;
