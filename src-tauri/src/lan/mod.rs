@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use keyring::Entry;
@@ -22,11 +22,13 @@ use protocol::{
     NodeInfo, RemotePanelInfo, WireMessage, DEFAULT_PORT, MAX_MESSAGE_BYTES, PROTOCOL_VERSION,
 };
 
-const MAGIC: &[u8; 8] = b"TESSLAN1";
-const MODE_PAIR: u8 = 1;
+const MAGIC: &[u8; 8] = b"TESSLAN2";
+/// First contact: the receiving computer's user must approve the request.
+const MODE_INTRODUCE: u8 = 1;
+/// Later contact between computers that already pinned each other's key.
 const MODE_RECONNECT: u8 = 2;
-const PAIR_LIFETIME: Duration = Duration::from_secs(300);
-const MAX_PAIR_FAILURES: u8 = 5;
+/// How long the receiving computer keeps an unanswered request open.
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,7 +58,9 @@ struct PersistedConfig {
 impl Default for PersistedConfig {
     fn default() -> Self {
         Self {
-            sharing: false,
+            // Listening is what lets another computer send a connection
+            // request; the request itself still needs a click on this side.
+            sharing: true,
             name: whoami::devicename(),
             port: DEFAULT_PORT,
             peers: Vec::new(),
@@ -64,11 +68,20 @@ impl Default for PersistedConfig {
     }
 }
 
-struct PairingWindow {
-    psk: [u8; 32],
-    expires: Instant,
-    failures: u8,
+/// A connection request from a computer this one has not paired with yet,
+/// waiting for the user to approve or decline it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairRequestInfo {
+    pub request_id: String,
+    pub device_id: String,
+    pub name: String,
+    pub address: String,
+    pub fingerprint: String,
+    pub received_at: u64,
 }
+
+type PendingApprovals = HashMap<String, (PairRequestInfo, oneshot::Sender<bool>)>;
 
 #[derive(Clone)]
 struct Connection {
@@ -103,9 +116,11 @@ pub struct LanStatus {
     pub sharing: bool,
     pub device_id: String,
     pub name: String,
+    pub fingerprint: String,
     pub port: u16,
     pub addresses: Vec<String>,
     pub peers: Vec<LanPeerState>,
+    pub pending_requests: Vec<PairRequestInfo>,
 }
 
 pub struct LanManager {
@@ -113,7 +128,7 @@ pub struct LanManager {
     public_key: Vec<u8>,
     device_id: String,
     config: Arc<Mutex<PersistedConfig>>,
-    pairing: Arc<Mutex<Option<PairingWindow>>>,
+    approvals: Arc<Mutex<PendingApprovals>>,
     connections: Arc<Mutex<HashMap<String, Connection>>>,
     remote_panels: Arc<Mutex<HashMap<String, Vec<RemotePanelInfo>>>>,
     pending: Arc<Mutex<PendingRequests>>,
@@ -132,7 +147,7 @@ impl LanManager {
             public_key,
             device_id,
             config: Arc::new(Mutex::new(load_config())),
-            pairing: Arc::new(Mutex::new(None)),
+            approvals: Arc::new(Mutex::new(HashMap::new())),
             connections: Arc::new(Mutex::new(HashMap::new())),
             remote_panels: Arc::new(Mutex::new(HashMap::new())),
             pending: Arc::new(Mutex::new(HashMap::new())),
@@ -175,16 +190,26 @@ impl LanManager {
             })
             .collect::<Vec<_>>();
         peers.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        let mut pending_requests = self
+            .approvals
+            .lock()
+            .unwrap()
+            .values()
+            .map(|(info, _)| info.clone())
+            .collect::<Vec<_>>();
+        pending_requests.sort_by_key(|r| r.received_at);
         LanStatus {
             sharing: cfg.sharing,
             device_id: self.device_id.clone(),
             name: cfg.name,
+            fingerprint: fingerprint(&self.public_key),
             port: cfg.port,
             addresses: private_interfaces()
                 .into_iter()
                 .map(|(ip, _)| format!("{ip}:{}", cfg.port))
                 .collect(),
             peers,
+            pending_requests,
         }
     }
 
@@ -242,6 +267,9 @@ impl LanManager {
             let _ = stop.send(());
         }
         self.listener_running.store(false, Ordering::SeqCst);
+        for (_, (_, decision)) in self.approvals.lock().unwrap().drain() {
+            let _ = decision.send(false);
+        }
         let mut connections = self.connections.lock().unwrap();
         for connection in connections.values() {
             let _ = connection.cancel.send(true);
@@ -320,19 +348,7 @@ impl LanManager {
             .await
             .map_err(|e| format!("LAN mode: {e}"))?;
         let state = match mode {
-            MODE_PAIR => {
-                let psk = {
-                    let mut pairing = self.pairing.lock().unwrap();
-                    let window = pairing.as_mut().ok_or("No pairing code is active")?;
-                    if window.expires <= Instant::now() || window.failures >= MAX_PAIR_FAILURES {
-                        *pairing = None;
-                        return Err("Pairing code expired".into());
-                    }
-                    window.failures += 1;
-                    window.psk
-                };
-                transport::pairing_state(false, &self.private_key, &psk)?
-            }
+            MODE_INTRODUCE => transport::introduce_state(false, &self.private_key)?,
             MODE_RECONNECT => transport::reconnect_state(false, &self.private_key, None)?,
             _ => return Err("Unsupported LAN connection mode".into()),
         };
@@ -348,7 +364,7 @@ impl LanManager {
             noise,
             ConnectionContext {
                 remote_key,
-                pairing: mode == MODE_PAIR,
+                pairing: mode == MODE_INTRODUCE,
                 address: Some(address),
                 initiator: false,
             },
@@ -396,37 +412,81 @@ impl LanManager {
         .await
     }
 
-    async fn pair_outgoing(
-        &self,
-        address: String,
-        code: String,
-        app: AppHandle,
-    ) -> Result<(), String> {
+    /// Open a first-contact connection to `address` and wait for the person
+    /// on that computer to approve it.
+    async fn request_outgoing(&self, address: String, app: AppHandle) -> Result<(), String> {
         let socket = validate_address(&address)?;
+        let hint = "Is Tessera running there with Share on local network enabled?";
         let mut stream = tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(socket))
             .await
-            .map_err(|_| "Pairing connection timed out".to_string())?
-            .map_err(|e| format!("Connect for pairing: {e}"))?;
+            .map_err(|_| format!("{} did not answer. {hint}", socket.ip()))?
+            .map_err(|e| format!("Could not reach {}: {e}. {hint}", socket.ip()))?;
         stream.write_all(MAGIC).await.map_err(|e| e.to_string())?;
         stream
-            .write_u8(MODE_PAIR)
+            .write_u8(MODE_INTRODUCE)
             .await
             .map_err(|e| e.to_string())?;
-        let psk = pairing_psk(&code)?;
-        let state = transport::pairing_state(true, &self.private_key, &psk)?;
-        let (noise, remote_key) = transport::run_handshake(&mut stream, state, true).await?;
+        let state = transport::introduce_state(true, &self.private_key)?;
+        let (noise, remote_key) = tokio::time::timeout(
+            Duration::from_secs(10),
+            transport::run_handshake(&mut stream, state, true),
+        )
+        .await
+        .map_err(|_| "The other computer did not complete the encrypted handshake".to_string())??;
         self.finish_connection(
             stream,
             noise,
             ConnectionContext {
                 remote_key,
                 pairing: true,
-                address: Some(address),
+                address: Some(socket.to_string()),
                 initiator: true,
             },
             app,
         )
         .await
+    }
+
+    /// Show the request to the user and wait for their answer. Resolves to
+    /// `Ok(false)` on decline; errors when the request times out or the
+    /// requesting computer goes away first.
+    async fn await_approval<R>(
+        &self,
+        info: PairRequestInfo,
+        reader: &mut R,
+        noise: &Arc<tokio::sync::Mutex<snow::TransportState>>,
+        app: &AppHandle,
+    ) -> Result<bool, String>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        let (decide, decision) = oneshot::channel();
+        self.approvals
+            .lock()
+            .unwrap()
+            .insert(info.request_id.clone(), (info.clone(), decide));
+        self.emit_state(app);
+        let _ = app.emit("lan-pair-request", &info);
+        // The prompt is modal; make sure a minimized or backgrounded window
+        // is noticed without stealing focus from whatever the user is doing.
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
+        }
+        let result = tokio::select! {
+            answer = tokio::time::timeout(APPROVAL_TIMEOUT, decision) => match answer {
+                Ok(Ok(accepted)) => Ok(accepted),
+                Ok(Err(_)) => Ok(false),
+                Err(_) => Err(format!("The connection request from {} expired", info.name)),
+            },
+            // The requester sends nothing while it waits, so any read result
+            // here means it hung up or misbehaved.
+            _ = read_wire(reader, noise) => Err(format!("{} cancelled its connection request", info.name)),
+        };
+        self.approvals.lock().unwrap().remove(&info.request_id);
+        self.emit_state(app);
+        result
     }
 
     async fn finish_connection(
@@ -469,15 +529,72 @@ impl LanManager {
                 address.unwrap_or_else(|| format!("127.0.0.1:{}", peer_node.listen_port));
             let ip = peer_addr.split(':').next().unwrap_or("");
             let peer_addr = format!("{ip}:{}", peer_node.listen_port);
+            let encoded_key = BASE64.encode(&remote_key);
+            if initiator {
+                // Give the person on the other computer time to click Approve.
+                let decision = tokio::time::timeout(
+                    APPROVAL_TIMEOUT + Duration::from_secs(10),
+                    read_wire(&mut reader, &noise),
+                )
+                .await
+                .map_err(|_| format!("{} did not answer the connection request", peer_node.name))??;
+                match decision {
+                    WireMessage::PairDecision { accepted: true, .. } => {}
+                    WireMessage::PairDecision { accepted: false, reason } => {
+                        return Err(reason.unwrap_or_else(|| {
+                            format!("{} declined the connection", peer_node.name)
+                        }));
+                    }
+                    _ => return Err("The other computer skipped the approval step".into()),
+                }
+            } else {
+                let already_paired = self.config.lock().unwrap().peers.iter().any(|p| {
+                    p.device_id == derived_id && p.public_key == encoded_key
+                });
+                if !already_paired {
+                    let info = PairRequestInfo {
+                        request_id: uuid::Uuid::new_v4().to_string(),
+                        device_id: derived_id.clone(),
+                        name: peer_node.name.clone(),
+                        address: ip.to_string(),
+                        fingerprint: fingerprint(&remote_key),
+                        received_at: now_secs(),
+                    };
+                    if !self.await_approval(info, &mut reader, &noise, &app).await? {
+                        let reason = format!(
+                            "{} declined the connection",
+                            self.config.lock().unwrap().name
+                        );
+                        let _ = write_wire(
+                            &mut writer,
+                            &noise,
+                            &WireMessage::PairDecision {
+                                accepted: false,
+                                reason: Some(reason),
+                            },
+                        )
+                        .await;
+                        return Ok(());
+                    }
+                }
+                write_wire(
+                    &mut writer,
+                    &noise,
+                    &WireMessage::PairDecision {
+                        accepted: true,
+                        reason: None,
+                    },
+                )
+                .await?;
+            }
             self.upsert_peer(PeerRecord {
                 device_id: derived_id.clone(),
                 name: peer_node.name.clone(),
-                public_key: BASE64.encode(&remote_key),
+                public_key: encoded_key,
                 address: peer_addr,
                 paired_at: now_secs(),
                 auto_connect: true,
             })?;
-            *self.pairing.lock().unwrap() = None;
         } else {
             let known = self.config.lock().unwrap().peers.iter().any(|p| {
                 p.device_id == derived_id
@@ -681,7 +798,7 @@ impl LanManager {
                     self.emit_state(app);
                 }
             }
-            WireMessage::Pong { .. } => {}
+            WireMessage::Pong { .. } | WireMessage::PairDecision { .. } => {}
         }
     }
 
@@ -815,7 +932,7 @@ impl LanManager {
             public_key: self.public_key.clone(),
             device_id: self.device_id.clone(),
             config: self.config.clone(),
-            pairing: self.pairing.clone(),
+            approvals: self.approvals.clone(),
             connections: self.connections.clone(),
             remote_panels: self.remote_panels.clone(),
             pending: self.pending.clone(),
@@ -921,25 +1038,15 @@ fn load_or_create_identity() -> Result<(Vec<u8>, Vec<u8>), String> {
     }
 }
 
-fn pairing_psk(code: &str) -> Result<[u8; 32], String> {
-    let normalized: String = code
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .collect::<String>()
-        .to_ascii_lowercase();
-    if normalized.len() != 32 {
-        return Err("Pairing code must contain 32 hexadecimal characters".into());
-    }
-    Ok(Sha256::digest(normalized.as_bytes()).into())
-}
-
-fn display_pairing_code(raw: &str) -> String {
-    raw.as_bytes()
-        .chunks(4)
-        .map(|c| std::str::from_utf8(c).unwrap_or(""))
+/// Short human-comparable digest of a device's public key, shown in the
+/// approval dialog so the two people can confirm they are talking to each other.
+fn fingerprint(public_key: &[u8]) -> String {
+    let digest = Sha256::digest(public_key);
+    digest[..8]
+        .chunks(2)
+        .map(|pair| format!("{:02X}{:02X}", pair[0], pair[1]))
         .collect::<Vec<_>>()
         .join("-")
-        .to_ascii_uppercase()
 }
 
 fn private_interfaces() -> Vec<(Ipv4Addr, Ipv4Addr)> {
@@ -968,9 +1075,13 @@ fn is_same_private_subnet(peer: IpAddr) -> bool {
 }
 
 fn validate_address(address: &str) -> Result<SocketAddr, String> {
-    let parsed: SocketAddr = address.trim().parse().map_err(|_| {
-        "Enter an IPv4 LAN address including its port, for example 192.168.1.20:43721"
-    })?;
+    let trimmed = address.trim();
+    let parsed: SocketAddr = match trimmed.parse::<Ipv4Addr>() {
+        Ok(ip) => SocketAddr::new(IpAddr::V4(ip), DEFAULT_PORT),
+        Err(_) => trimmed.parse().map_err(|_| {
+            "Enter the other computer's IPv4 LAN address, for example 192.168.1.20"
+        })?,
+    };
     if !is_same_private_subnet(parsed.ip()) {
         return Err(
             "The address is not on this computer's directly connected private subnet".into(),
@@ -1054,44 +1165,67 @@ pub async fn lan_set_name(
     Ok(state.status())
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PairingCode {
-    code: String,
-    expires_in_seconds: u64,
-}
-
+/// Ask the computer at `address` to connect. Resolves once its user approves
+/// (the peer is then paired and online) or fails with the decline reason.
 #[tauri::command]
-pub async fn lan_generate_pairing_code(
-    state: tauri::State<'_, LanManager>,
-) -> Result<PairingCode, String> {
-    if !state.config.lock().unwrap().sharing {
-        return Err("Enable Share on local network first".into());
-    }
-    let raw = uuid::Uuid::new_v4().simple().to_string();
-    let display_code = display_pairing_code(&raw);
-    *state.pairing.lock().unwrap() = Some(PairingWindow {
-        psk: pairing_psk(&raw)?,
-        expires: Instant::now() + PAIR_LIFETIME,
-        failures: 0,
-    });
-    Ok(PairingCode {
-        code: display_code,
-        expires_in_seconds: PAIR_LIFETIME.as_secs(),
-    })
-}
-
-#[tauri::command]
-pub async fn lan_pair(
+pub async fn lan_request_pair(
     address: String,
-    code: String,
     app: AppHandle,
     state: tauri::State<'_, LanManager>,
 ) -> Result<LanStatus, String> {
-    if !state.config.lock().unwrap().sharing {
-        return Err("Enable Share on local network first".into());
+    let socket = validate_address(&address)?;
+    let ip = socket.ip().to_string();
+    let existing = state
+        .config
+        .lock()
+        .unwrap()
+        .peers
+        .iter()
+        .find(|p| p.address.split(':').next() == Some(ip.as_str()))
+        .cloned();
+    if let Some(existing) = existing {
+        // Already paired with that address: a plain reconnect needs no approval.
+        if state.connections.lock().unwrap().contains_key(&existing.device_id) {
+            return Ok(state.status());
+        }
+        if state.connect_known(&existing.device_id, app.clone()).await.is_ok() {
+            state.emit_state(&app);
+            return Ok(state.status());
+        }
     }
-    state.pair_outgoing(address, code, app.clone()).await?;
+    // The other computer will reconnect to us later, so this side must listen too.
+    let was_listening = {
+        let mut cfg = state.config.lock().unwrap();
+        let was = cfg.sharing;
+        cfg.sharing = true;
+        save_config(&cfg)?;
+        was
+    };
+    if !was_listening {
+        state.start_listener(app.clone());
+        state.connect_all(app.clone());
+        state.emit_state(&app);
+    }
+    state.request_outgoing(address, app.clone()).await?;
+    state.emit_state(&app);
+    Ok(state.status())
+}
+
+/// Answer a connection request shown by `lan-pair-request` / `pendingRequests`.
+#[tauri::command]
+pub async fn lan_respond_pair_request(
+    request_id: String,
+    accept: bool,
+    app: AppHandle,
+    state: tauri::State<'_, LanManager>,
+) -> Result<LanStatus, String> {
+    let entry = state.approvals.lock().unwrap().remove(&request_id);
+    match entry {
+        Some((_, decide)) => {
+            let _ = decide.send(accept);
+        }
+        None => return Err("That connection request is no longer waiting".into()),
+    }
     state.emit_state(&app);
     Ok(state.status())
 }
@@ -1192,13 +1326,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pairing_codes_are_normalized_and_high_entropy() {
-        let raw = "00112233445566778899aabbccddeeff";
-        assert_eq!(
-            pairing_psk(raw).unwrap(),
-            pairing_psk("0011-2233-4455-6677-8899-AABB-CCDD-EEFF").unwrap()
-        );
-        assert!(pairing_psk("1234").is_err());
+    fn fingerprints_are_short_stable_and_grouped() {
+        let key = [42u8; 32];
+        let fp = fingerprint(&key);
+        assert_eq!(fp, fingerprint(&key));
+        assert_eq!(fp.len(), 4 * 4 + 3);
+        assert_eq!(fp.split('-').count(), 4);
+        assert_ne!(fp, fingerprint(&[43u8; 32]));
+    }
+
+    #[test]
+    fn bare_addresses_are_parsed_with_the_default_port() {
+        // Subnet membership depends on the machine running the tests, so
+        // only the parse step and the public-address rejection are checked.
+        assert!(validate_address("not an address").is_err());
+        let err = validate_address("8.8.8.8").unwrap_err();
+        assert!(err.contains("private subnet"), "{err}");
+        let err = validate_address("8.8.8.8:43721").unwrap_err();
+        assert!(err.contains("private subnet"), "{err}");
     }
 
     #[test]

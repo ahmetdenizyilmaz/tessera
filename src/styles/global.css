@@ -475,6 +475,15 @@ body,
   line-height: 1.35;
 }
 
+/* Small inline spinner (LAN connect / refresh buttons) */
+.spin {
+  animation: tessera-spin 1s linear infinite;
+}
+
+@keyframes tessera-spin {
+  to { transform: rotate(360deg); }
+}
+
 .form-hint {
   margin-top: 6px;
   font-size: 11px;

@@ -26,20 +26,41 @@ export interface LanPeerState {
   panels: RemotePanelInfo[];
 }
 
+/** A computer that asked to connect and is waiting for Approve / Decline. */
+export interface LanPairRequest {
+  requestId: string;
+  deviceId: string;
+  name: string;
+  address: string;
+  fingerprint: string;
+  receivedAt: number;
+}
+
 export interface LanStatus {
   sharing: boolean;
   deviceId: string;
   name: string;
+  /** Short digest of this computer's key, shown on both sides during a request. */
+  fingerprint: string;
   port: number;
   addresses: string[];
   peers: LanPeerState[];
+  pendingRequests: LanPairRequest[];
 }
 
 interface LanStoreState {
   status: LanStatus | null;
   error: string | null;
+  /** Address of an outgoing connection request still waiting for approval. */
+  outgoing: string | null;
   setStatus: (status: LanStatus) => void;
   setError: (error: string | null) => void;
+  /**
+   * Ask the computer at `address` to connect. Resolves to the paired device
+   * id once its user approves, or null (with `error` set) otherwise.
+   */
+  requestPair: (address: string) => Promise<string | null>;
+  respondPairRequest: (requestId: string, accept: boolean) => Promise<void>;
 }
 
 export const remotePanelId = (deviceId: string, panelId: string) => `lan:${deviceId}:${panelId}`;
@@ -56,6 +77,7 @@ export const useLanStore = create<LanStoreState>()(
     (set, get) => ({
       status: null,
       error: null,
+      outgoing: null,
       setStatus: (incoming) => {
         // The backend deliberately does not persist transcripts or panel
         // rosters. Retain the last public roster in localStorage so an offline
@@ -70,11 +92,45 @@ export const useLanStore = create<LanStoreState>()(
         scheduleWorkspaceSync();
       },
       setError: (error) => set({ error }),
+      requestPair: async (address) => {
+        const trimmed = address.trim();
+        if (!trimmed || get().outgoing) return null;
+        set({ outgoing: trimmed, error: null });
+        try {
+          const status = await invoke<LanStatus>('lan_request_pair', { address: trimmed });
+          get().setStatus(status);
+          // Build the subgroup now so the caller can reveal it immediately.
+          flushWorkspaceSync();
+          const ip = trimmed.split(':')[0];
+          return status.peers.find((p) => p.address.split(':')[0] === ip)?.deviceId ?? null;
+        } catch (err) {
+          set({ error: String(err) });
+          return null;
+        } finally {
+          set({ outgoing: null });
+        }
+      },
+      respondPairRequest: async (requestId, accept) => {
+        try {
+          get().setStatus(await invoke<LanStatus>('lan_respond_pair_request', { requestId, accept }));
+        } catch (err) {
+          set({ error: String(err) });
+        }
+      },
     }),
     {
       name: 'tessera-lan-public-state',
-      partialize: (state) => ({ status: state.status }),
-      merge: (persisted, current) => ({ ...current, ...(persisted as Partial<LanStoreState>), error: null }),
+      // Requests and in-flight state are meaningless after a restart.
+      partialize: (state) => ({ status: state.status ? { ...state.status, pendingRequests: [] } : null }),
+      merge: (persisted, current) => {
+        const saved = (persisted as Partial<LanStoreState> | undefined)?.status ?? null;
+        return {
+          ...current,
+          status: saved ? { ...saved, fingerprint: saved.fingerprint ?? '', pendingRequests: [] } : null,
+          error: null,
+          outgoing: null,
+        };
+      },
     },
   ),
 );
@@ -86,6 +142,20 @@ function scheduleWorkspaceSync(delay = 50) {
     syncTimer = null;
     syncRemoteGroups();
   }, delay);
+}
+
+function flushWorkspaceSync() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = null;
+  syncRemoteGroups();
+}
+
+/** Bring a paired computer's subgroup tab to the front if it is on this level. */
+export function revealRemoteGroup(deviceId: string) {
+  const group = [...useGroupStore.getState().groups.values()].find((g) => g.remotePeerId === deviceId);
+  if (!group) return;
+  const layout = useLayoutStore.getState();
+  if (layout.tabOrder.includes(group.id)) layout.setActiveTab(group.id);
 }
 
 function syncRemoteGroups() {

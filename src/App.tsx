@@ -26,6 +26,7 @@ import { UsageModal } from './components/dialogs/UsageModal';
 import { NewLlmDialog } from './components/dialogs/NewLlmDialog';
 import { SessionHistoryDialog } from './components/dialogs/SessionHistoryDialog';
 import { ClaudeMdDialog } from './components/dialogs/ClaudeMdDialog';
+import { LanPairRequestDialog } from './components/lan/LanPairRequestDialog';
 import { useInstanceStore } from './store/instanceStore';
 import { useLayoutStore, canAddPanel, notifyPanelLimit } from './store/layoutStore';
 import { Toasts } from './lib/toast';
@@ -108,14 +109,6 @@ export default function App() {
   // Scan for external plugins on app init (built-ins registered at module load)
   useEffect(() => {
     usePluginStore.getState().scanPlugins();
-  }, []);
-
-  // The new-session wizard can offer Local PC beside Chat and Terminal without
-  // coupling that embedded widget to the application-level settings dialog.
-  useEffect(() => {
-    const openNetworkSettings = () => setShowSettings(true);
-    window.addEventListener('tessera:open-network-settings', openNetworkSettings);
-    return () => window.removeEventListener('tessera:open-network-settings', openNetworkSettings);
   }, []);
 
   // Global keyboard shortcuts
@@ -319,6 +312,7 @@ export default function App() {
           isOpen={showClaudeMd}
           onClose={() => setShowClaudeMd(false)}
         />
+        <LanPairRequestDialog />
         <Toasts />
       </div>
     </ErrorBoundary>

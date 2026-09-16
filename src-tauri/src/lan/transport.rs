@@ -3,13 +3,15 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use super::protocol::MAX_FRAME_BYTES;
 
-const PAIR_PATTERN: &str = "Noise_XXpsk3_25519_ChaChaPoly_BLAKE2s";
+// First contact: both sides learn each other's static key (XX). The human on
+// the receiving computer approves the request before any panel data flows.
+const INTRODUCE_PATTERN: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2s";
 const RECONNECT_PATTERN: &str = "Noise_IK_25519_ChaChaPoly_BLAKE2s";
 const NOISE_CHUNK: usize = 60_000;
 const TAG_BYTES: usize = 16;
 
 pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>), String> {
-    let params = PAIR_PATTERN
+    let params = INTRODUCE_PATTERN
         .parse()
         .map_err(|e| format!("Noise params: {e}"))?;
     let pair = Builder::new(params)
@@ -18,21 +20,17 @@ pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>), String> {
     Ok((pair.private, pair.public))
 }
 
-pub fn pairing_state(
-    initiator: bool,
-    private: &[u8],
-    psk: &[u8; 32],
-) -> Result<HandshakeState, String> {
-    let params = PAIR_PATTERN
+pub fn introduce_state(initiator: bool, private: &[u8]) -> Result<HandshakeState, String> {
+    let params = INTRODUCE_PATTERN
         .parse()
         .map_err(|e| format!("Noise params: {e}"))?;
-    let builder = Builder::new(params).local_private_key(private).psk(3, psk);
+    let builder = Builder::new(params).local_private_key(private);
     if initiator {
         builder.build_initiator()
     } else {
         builder.build_responder()
     }
-    .map_err(|e| format!("Pairing handshake: {e}"))
+    .map_err(|e| format!("Introduction handshake: {e}"))
 }
 
 pub fn reconnect_state(
@@ -220,22 +218,13 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn pairing_authenticates_static_keys_and_encrypts_large_frames() {
+    async fn introduction_exchanges_static_keys_and_encrypts_large_frames() {
         let (a_private, a_public) = generate_keypair().unwrap();
         let (b_private, b_public) = generate_keypair().unwrap();
-        let psk = [7u8; 32];
         let (mut a_io, mut b_io) = tokio::io::duplex(2 * 1024 * 1024);
         let (a_result, b_result) = tokio::join!(
-            run_handshake(
-                &mut a_io,
-                pairing_state(true, &a_private, &psk).unwrap(),
-                true
-            ),
-            run_handshake(
-                &mut b_io,
-                pairing_state(false, &b_private, &psk).unwrap(),
-                false
-            ),
+            run_handshake(&mut a_io, introduce_state(true, &a_private).unwrap(), true),
+            run_handshake(&mut b_io, introduce_state(false, &b_private).unwrap(), false),
         );
         let (mut a_noise, seen_b) = a_result.unwrap();
         let (mut b_noise, seen_a) = b_result.unwrap();

@@ -12,6 +12,7 @@ import { LLM_PROVIDERS } from '../../types/llmProviders';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
 import { AuthBadgePreview } from '../icons/AuthBadgePreview';
 import { ProviderIcon } from '../icons/ProviderIcons';
+import { LanConnectStep } from '../lan/LanConnectStep';
 import {
   routeMeta, checkKey, saveKey, createFromWizard, replaceWizard,
   createGroupPanel, createPluginPanel,
@@ -180,6 +181,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
   };
 
   const applyPreset = async (preset: LastSessionPreset) => {
+    s.set({ lanMode: false });
     if (preset.kind === 'codex') {
       s.set({ panelView: preset.panelView, route: 'codex', cwd: preset.cwd });
       return;
@@ -313,7 +315,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               key={kind}
               type="button"
               className={`panel-view-option${s.panelView === kind ? ' panel-view-option--active' : ''}`}
-              onClick={() => s.set({ panelView: kind, route: null, routeModel: '', keyEntryFor: null })}
+              onClick={() => s.set({ panelView: kind, lanMode: false, route: null, routeModel: '', keyEntryFor: null })}
             >
               <PanelViewPreview kind={kind} size={52} />
               <span className="panel-view-option__label">{kind === 'chat' ? 'Chat' : 'Terminal'}</span>
@@ -324,21 +326,21 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           ))}
           <button
             type="button"
-            className="panel-view-option panel-view-option--remote"
-            onClick={() => {
-              close();
-              window.dispatchEvent(new CustomEvent('tessera:open-network-settings'));
-            }}
+            className={`panel-view-option${s.lanMode ? ' panel-view-option--active' : ''}`}
+            onClick={() => s.set({ lanMode: true, panelView: null, route: null, routeModel: '', keyEntryFor: null })}
             title="Connect to another Tessera computer on your local network"
           >
-            <span className="panel-view-option__art" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52 }}>
               <Monitor size={30} strokeWidth={1.5} />
             </span>
             <span className="panel-view-option__label">Local PC</span>
-            <span className="panel-view-option__hint">Connect another Tessera computer</span>
+            <span className="panel-view-option__hint">Another Tessera computer's panels as a subgroup</span>
           </button>
         </div>
       </div>
+
+      {/* Local PC: ask for an address, wait for the other side to approve */}
+      {s.lanMode && <LanConnectStep onConnected={close} />}
 
       {/* Step 2: provider / route */}
       {s.panelView && (

@@ -102,10 +102,11 @@ Set up the connections you want to use:
 For API keys and local connection settings, open **Settings → LLM Providers**. Codex's starting
 permission mode is under **Settings → General → Default Codex permissions**.
 
-To connect another Tessera computer, enable **Settings → Local Network → Share on local network**
-on both PCs. Generate a one-time code on one computer, then enter its displayed address and code on
-the other. Windows may ask for firewall access; allow **Private networks** only. Paired devices
-reconnect automatically and remain visible as offline groups when unavailable.
+To connect another Tessera computer, click **+ → Local PC** and enter the other PC's LAN IP address.
+That PC shows a **Connection request** prompt; once approved, its open panels appear as a subgroup.
+Windows may ask for firewall access; allow **Private networks** only. Paired devices reconnect
+automatically and remain visible as offline groups when unavailable. See
+[LAN subgroups](docs/lan-subgroups.md).
 
 ---
 
@@ -189,7 +190,8 @@ tools/                    cgui launcher + release/promote scripts
 - API keys entered in **Settings → LLM Providers** are stored in the OS keychain via the system
   keyring — never in the repo or plaintext config.
 - LAN device identities are stored in the OS keychain. Paired-computer names, addresses, and public
-  keys are stored locally under `~/.tessera/`; one-time pairing codes remain in memory and expire.
+  keys are stored locally under `~/.tessera/`. A new computer is paired only after someone approves
+  its connection request on screen; unanswered requests expire after two minutes.
 - LAN sharing accepts only directly connected private IPv4 subnets. It has no discovery broadcast,
   cloud relay, UPnP, or automatic router configuration. Paired devices can see panel metadata, read
   recent transcripts, and deliver messages, but cannot access files, raw shells, or approval controls.

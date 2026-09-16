@@ -5,17 +5,25 @@ computer appears in the other's workspace as a group containing its currently op
 panels. The agents continue to run on the computer that owns them; only panel metadata, recent
 conversation reads, and message delivery cross the connection.
 
-## Pairing
+## Connecting
 
-1. Open **Settings → Local Network** on both computers and enable **Share on local network**.
-2. On the host, generate a one-time pairing code and copy one of the displayed LAN addresses.
-3. Enter that address and code on the other computer and select **Pair**.
+1. Click **+** and choose **Local PC**, or open **Settings → Local Network**.
+2. Enter the other computer's LAN IP address (shown under **Local Network** on that computer) and
+   select **Send request**.
+3. The other computer shows a **Connection request** prompt with the requester's name, address, and
+   device fingerprint. Selecting **Approve** pairs both computers; **Decline** or two minutes of
+   silence rejects the request.
 4. If Windows Firewall asks, allow Tessera on **Private networks** only.
 
-The code contains 128 random bits, expires after five minutes, and works once. The first connection
-uses a Noise XX handshake authenticated by that code. Tessera then stores its private device identity
-in the operating-system keychain and pins the other computer's public key. Later connections use a
-Noise IK handshake, so a computer with the wrong key cannot impersonate a paired device.
+**Share on local network** is on by default and is what lets a computer receive requests. It is
+turned on automatically on the requesting side too, because the two computers reconnect to each
+other later. Turning it off stops the listener and disconnects paired computers.
+
+The first connection uses a Noise XX handshake, so both computers learn each other's static public
+key before the request is shown. The person approving can compare the fingerprint in the prompt with
+the one displayed on the requesting computer. Tessera then stores its private device identity in the
+operating-system keychain and pins the other computer's public key. Later connections use a Noise IK
+handshake and need no approval, and a computer with the wrong key cannot impersonate a paired device.
 
 ## Network boundary
 
@@ -36,4 +44,5 @@ the same local panel bus used inside one Tessera window, including Codex's autom
 
 Pairing does not expose filesystem APIs, shell commands, raw terminal input, session creation or
 deletion, interrupts, permission answers, API keys, or CLI credentials. Use **Forget** in Local Network
-settings to revoke the pinned device key and remove its subgroup.
+settings to revoke the pinned device key and remove its subgroup; a forgotten computer has to send a
+new request, which is approved again by hand.

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 pub const DEFAULT_PORT: u16 = 43_721;
 pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -35,6 +35,12 @@ pub struct RemotePanelInfo {
 pub enum WireMessage {
     Hello {
         node: NodeInfo,
+    },
+    /// Sent by the receiving computer after its user answers a connection
+    /// request. Only appears on first contact.
+    PairDecision {
+        accepted: bool,
+        reason: Option<String>,
     },
     Registry {
         panels: Vec<RemotePanelInfo>,
