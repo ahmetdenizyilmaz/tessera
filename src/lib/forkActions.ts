@@ -212,11 +212,16 @@ export async function applyForkToInstance(newId: string): Promise<void> {
  * The opening message a forked panel should send once it is ready, cleared on
  * the way out so a remount never sends it twice. Null when there is none.
  */
+const dispatchedOpenings = new Set<string>();
+
 export function takeForkOpeningMessage(instanceId: string): string | null {
+  // Belt and braces: two mounted views of one panel must not both send it.
+  if (dispatchedOpenings.has(instanceId)) return null;
   const store = useInstanceStore.getState();
   const inst = store.instances.get(instanceId);
   const text = inst?.config.fork?.openingMessage?.trim();
   if (!inst?.config.fork || !text) return null;
+  dispatchedOpenings.add(instanceId);
   store.updateInstance(instanceId, { config: { ...inst.config, fork: { ...inst.config.fork, openingMessage: undefined } } });
   return text;
 }

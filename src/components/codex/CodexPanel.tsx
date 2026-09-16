@@ -197,7 +197,9 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
       submitForkOpeningToTerminal(instanceId);
       return;
     }
-    if (isTerminal || !session?.items.length) return;
+    // Chat panels send through the app-server. A terminal panel whose resumed
+    // thread has not materialized yet does the same: that first turn is what
+    // lets the terminal attach, so the opening message doubles as the opener.
     const text = takeForkOpeningMessage(instanceId);
     if (!text) return;
     setPending(true);

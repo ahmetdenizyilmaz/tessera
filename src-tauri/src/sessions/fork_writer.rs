@@ -180,22 +180,67 @@ pub async fn codex_write_fork_thread(
         },
     })
     .to_string()];
-    for (i, m) in messages.iter().enumerate() {
-        let user = m.role == "user";
+    // The app-server rebuilds turns from the task/turn markers around each
+    // exchange, so wrap every user message (and the assistant reply that
+    // follows it) the way the CLI itself records a turn.
+    let mut ordinal = 0usize;
+    let mut push = |when: DateTime<Utc>, kind: &str, payload: serde_json::Value, lines: &mut Vec<String>| {
+        ordinal += 1;
         lines.push(
-            json!({
-                "timestamp": iso(stamp(base, i + 1, &m.timestamp)),
-                "ordinal": i + 1,
-                "type": "response_item",
-                "payload": {
-                    "type": "message",
-                    "id": format!("msg_{}", uuid::Uuid::new_v4()),
-                    "role": if user { "user" } else { "assistant" },
-                    "content": [{ "type": if user { "input_text" } else { "output_text" }, "text": m.content }],
-                },
-            })
-            .to_string(),
+            json!({ "timestamp": iso(when), "ordinal": ordinal, "type": kind, "payload": payload }).to_string(),
         );
+    };
+    let mut i = 0;
+    while i < messages.len() {
+        let m = &messages[i];
+        let when = stamp(base, i + 1, &m.timestamp);
+        let turn_id = uuid::Uuid::new_v4().to_string();
+        push(when, "event_msg", json!({ "type": "task_started", "turn_id": turn_id, "started_at": when.timestamp() }), &mut lines);
+        push(when, "turn_context", json!({ "turn_id": turn_id, "root_turn_id": turn_id, "cwd": cwd, "workspace_roots": [cwd] }), &mut lines);
+        let mut last_agent: Option<String> = None;
+        // A turn is one user message followed by any assistant messages up to the next user message.
+        let mut j = i;
+        loop {
+            let m = &messages[j];
+            let user = m.role == "user";
+            if j > i && user {
+                break;
+            }
+            let when = stamp(base, j + 1, &m.timestamp);
+            let msg_id = format!("msg_{}", uuid::Uuid::new_v4());
+            push(when, "response_item", json!({
+                "type": "message",
+                "id": msg_id,
+                "role": if user { "user" } else { "assistant" },
+                "content": [{ "type": if user { "input_text" } else { "output_text" }, "text": m.content }],
+            }), &mut lines);
+            push(when, "event_msg", json!({
+                "type": "item_completed",
+                "thread_id": thread_id,
+                "turn_id": turn_id,
+                "item": if user {
+                    json!({ "type": "UserMessage", "id": uuid::Uuid::new_v4().to_string(), "content": [{ "type": "text", "text": m.content }] })
+                } else {
+                    json!({ "type": "AgentMessage", "id": msg_id, "content": [{ "type": "Text", "text": m.content }], "phase": "final_answer" })
+                },
+            }), &mut lines);
+            if !user {
+                last_agent = Some(m.content.clone());
+            }
+            j += 1;
+            if j >= messages.len() {
+                break;
+            }
+        }
+        let done = stamp(base, j, &None);
+        push(done, "event_msg", json!({
+            "type": "task_complete",
+            "turn_id": turn_id,
+            "last_agent_message": last_agent,
+            "started_at": when.timestamp(),
+            "completed_at": done.timestamp(),
+        }), &mut lines);
+        i = j;
     }
     let file = dir.join(format!(
         "rollout-{}-{thread_id}.jsonl",
