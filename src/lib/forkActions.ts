@@ -120,24 +120,23 @@ export function applyForkToInstance(newId: string): void {
   if (!inst) return;
   const source = store.instances.get(fork.sourceId);
   const isLlm = !!inst.config.llmConfig;
-  const isTerminal = !isLlm && inst.config.panelView === 'terminal';
+  // A Claude Code terminal is a raw PTY from the start, so the transcript
+  // goes in at spawn time (below). Codex terminals send their first message
+  // through the composer before the terminal attaches, so they can carry the
+  // transcript in that message like chat panels, where it stays visible.
+  const isClaudeTerminal = !isLlm && inst.config.agentProvider !== 'codex' && inst.config.panelView === 'terminal';
   const context: ForkContext = {
     sourceId: fork.sourceId,
     sourceName: fork.sourceName,
     sourceProvider: providerLabel(source),
     transcript,
-    // Terminal targets get the transcript at spawn time (below), LLM chats as
-    // real turns; only chat-view agents wait for the first send.
-    pending: !isLlm && !isTerminal,
+    pending: !isLlm && !isClaudeTerminal,
   };
   let systemPrompt = inst.config.systemPrompt;
-  if (isTerminal) {
-    // A terminal cannot display imported history, so the CLI receives it as
-    // background context instead: Claude Code via --append-system-prompt
-    // (kept short, Windows command lines are capped at 32 KB), Codex via its
-    // developer instructions.
-    const cap = inst.config.agentProvider === 'codex' ? undefined : FORK_TERMINAL_MAX_CHARS;
-    const block = renderForkContext(transcript, fork.sourceName, cap);
+  if (isClaudeTerminal) {
+    // The CLI receives it via --append-system-prompt, kept short because
+    // Windows command lines are capped at 32 KB.
+    const block = renderForkContext(transcript, fork.sourceName, FORK_TERMINAL_MAX_CHARS);
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${block}` : block;
   }
   store.updateInstance(newId, {
