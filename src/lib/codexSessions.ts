@@ -85,7 +85,7 @@ export async function openCodexSession(
     "Codex · " + (config.cwd.split(/[\\/]/).filter(Boolean).pop() ?? "Session"),
   );
   if (threadId) store.updateInstance(id, { codexThreadId: threadId });
-  applyForkToInstance(id);
+  await applyForkToInstance(id);
   try {
     await ensureCodex(id);
     if (wizardId && !useLayoutStore.getState().panelTypes[wizardId]) {

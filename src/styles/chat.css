@@ -3119,3 +3119,16 @@
 .codex-tool.fork-context .msg {
   margin-top: 8px;
 }
+
+.codex-fork-opening {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+}
+
+.codex-fork-opening .codex-empty {
+  margin: 0;
+}

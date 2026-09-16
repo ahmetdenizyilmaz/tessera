@@ -102,12 +102,16 @@ export function cancelFork(): void {
 
 /**
  * Called right after the wizard added instance `newId` and before its panel
- * mounts. Attaches the captured transcript to the new instance and paints it
- * into the panel. LLM chats get the messages as real turns (they resend the
- * whole array), so nothing is pending for them; Claude Code and Codex carry the
- * context on the first send instead.
+ * mounts. Attaches the captured transcript to the new instance and makes it
+ * the panel's real history:
+ *  - Claude Code and Codex get a freshly written session file that the CLI
+ *    resumes natively, so chat and terminal panels alike start with the
+ *    earlier turns visible and in context.
+ *  - LLM chats get the messages as real turns (they resend the whole array).
+ * If writing the session file fails, the panel falls back to attaching the
+ * transcript to its first send.
  */
-export function applyForkToInstance(newId: string): void {
+export async function applyForkToInstance(newId: string): Promise<void> {
   const fork = useWizardStore.getState().fork;
   if (!fork) return;
   const transcript = pendingForks.get(fork.sourceId);
@@ -120,6 +124,36 @@ export function applyForkToInstance(newId: string): void {
   if (!inst) return;
   const source = store.instances.get(fork.sourceId);
   const isLlm = !!inst.config.llmConfig;
+
+  if (!isLlm) {
+    const wire = normalizeAlternation(transcript);
+    try {
+      if (inst.config.agentProvider === 'codex') {
+        const threadId = await invoke<string>('codex_write_fork_thread', { cwd: inst.config.cwd, messages: wire });
+        store.updateInstance(newId, {
+          name: `Fork of ${fork.sourceName}`,
+          codexThreadId: threadId,
+          codexHasTurns: true,
+          config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false } },
+        });
+      } else {
+        const sessionId = await invoke<string>('session_write_fork', {
+          projectPath: inst.config.cwd,
+          messages: wire,
+          model: source?.config.model || null,
+        });
+        store.updateInstance(newId, {
+          name: `Fork of ${fork.sourceName}`,
+          claudeSessionId: sessionId,
+          config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false } },
+        });
+      }
+      return;
+    } catch (err) {
+      console.warn('[fork] could not write a session file, attaching to the first message instead:', err);
+      notify(`Could not create a resumable session (${String(err)}). The history will be attached to your first message instead.`);
+    }
+  }
   // A Claude Code terminal is a raw PTY from the start, so the transcript
   // goes in at spawn time (below). Codex terminals send their first message
   // through the composer before the terminal attaches, so they can carry the

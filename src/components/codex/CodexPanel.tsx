@@ -24,6 +24,7 @@ import type { CodexDiscovery, CodexItem } from "../../types/codex";
 import { markForkConsumed, peekForkContext, startFork } from "../../lib/forkActions";
 import { stripForkPreamble } from "../../lib/forkTranscript";
 import { ForkNotice } from "../chat/ForkNotice";
+import { Loader2 } from "lucide-react";
 
 function ItemView({ item }: { item: CodexItem }) {
   if (item.type === "userMessage")
@@ -165,6 +166,9 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
   // terminal opens right away with the history visible.
   const forkBootstrapped = useRef(false);
   const forkPending = !!instance?.config.fork?.pending;
+  // Between the fork's first turn and the terminal attaching, the panel shows
+  // an "opening" state instead of the chat composer.
+  const openingTerminal = isTerminal && !terminalAttached && !!instance?.config.fork && (forkPending || forkBootstrapped.current);
   useEffect(() => {
     if (!isTerminal || terminalAttached || !ready || !session?.connected || session?.busy || pending) return;
     if (forkBootstrapped.current || !forkPending) return;
@@ -518,6 +522,17 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
           )}
           {requests}
         </div>
+      ) : openingTerminal ? (
+        <div className="codex-transcript codex-fork-opening">
+          <Loader2 size={18} className="spin" />
+          <p className="codex-empty">
+            Opening the Codex terminal with the conversation forked from{" "}
+            {instance.config.fork?.sourceName}…
+          </p>
+          <p className="codex-empty" style={{ fontSize: 11, opacity: 0.7 }}>
+            {session?.error ? session.error : "Codex reads the earlier turns first; the terminal attaches as soon as it answers."}
+          </p>
+        </div>
       ) : (
         <>
           <div
@@ -530,7 +545,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
                   b.scrollHeight - b.scrollTop - b.clientHeight < 100;
             }}
           >
-            {!!instance.config.fork?.transcript.length && (
+            {!!instance.config.fork?.pending && !!instance.config.fork.transcript.length && (
               <details className="codex-tool fork-context" open={!session?.items.length}>
                 <summary>
                   Forked from {instance.config.fork.sourceName} · {instance.config.fork.transcript.length} earlier message
@@ -551,7 +566,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
             {session?.items.map((item) => (
               <ItemView key={item.id} item={item} />
             ))}
-            {!session?.items.length && !instance.config.fork?.transcript.length && (
+            {!session?.items.length && !instance.config.fork?.pending && (
               <p className="codex-empty">
                 {ready
                   ? isTerminal
@@ -565,9 +580,9 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
           </div>
         </>
       )}
-      {!terminalAttached && requests}
-      {!terminalAttached && <ForkNotice instanceId={instanceId} />}
-      {!terminalAttached && (
+      {!terminalAttached && !openingTerminal && requests}
+      {!terminalAttached && !openingTerminal && <ForkNotice instanceId={instanceId} />}
+      {!terminalAttached && !openingTerminal && (
         <footer className="chat-input-area codex-input">
           {!!images.length && (
             <div className="image-chips">

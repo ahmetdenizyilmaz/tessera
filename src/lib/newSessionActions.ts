@@ -143,7 +143,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
           },
     };
     const id = useInstanceStore.getState().addInstance(config);
-    applyForkToInstance(id);
+    await applyForkToInstance(id);
     useLayoutStore.getState().addPanel(id);
     const currentGroupId = useGroupStore.getState().getCurrentGroupId();
     if (currentGroupId) useGroupStore.getState().addToGroup(currentGroupId, id);
@@ -195,7 +195,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
     },
     `${providerMeta.displayName} Chat`,
   );
-  applyForkToInstance(id);
+  await applyForkToInstance(id);
   try {
     await invoke('llm_create_session', {
       id,
