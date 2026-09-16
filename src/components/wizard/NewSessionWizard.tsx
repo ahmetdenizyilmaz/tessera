@@ -281,7 +281,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 12 }}>Fork of {s.fork.sourceName}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {s.fork.messageCount} message{s.fork.messageCount === 1 ? '' : 's'} will be shown in the new panel and attached to your first message.
+              {s.fork.messageCount} message{s.fork.messageCount === 1 ? '' : 's'} carried over. Chat panels show them and attach them to your first message; terminal panels give them to the agent as background context.
             </div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={close}>Cancel</button>
@@ -324,7 +324,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       <div className="nsw-step">
         <div className="nsw-step__label">1 · Session type</div>
         <div className="panel-view-picker">
-          {(['chat', 'terminal'] as const).filter((kind) => !s.fork || kind === 'chat').map((kind) => (
+          {(['chat', 'terminal'] as const).map((kind) => (
             <button
               key={kind}
               type="button"

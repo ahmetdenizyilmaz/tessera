@@ -18,6 +18,9 @@ import {
 import type { CodexThread } from '../types/codex';
 import type { ClaudeInstance, ForkContext, ForkMessage } from '../types/instance';
 
+/** Transcript budget for terminal targets that pass it on the command line. */
+const FORK_TERMINAL_MAX_CHARS = 12_000;
+
 /** Transcripts captured by startFork, waiting for the wizard to create the target panel. */
 const pendingForks = new Map<string, ForkMessage[]>();
 
@@ -117,16 +120,29 @@ export function applyForkToInstance(newId: string): void {
   if (!inst) return;
   const source = store.instances.get(fork.sourceId);
   const isLlm = !!inst.config.llmConfig;
+  const isTerminal = !isLlm && inst.config.panelView === 'terminal';
   const context: ForkContext = {
     sourceId: fork.sourceId,
     sourceName: fork.sourceName,
     sourceProvider: providerLabel(source),
     transcript,
-    pending: !isLlm,
+    // Terminal targets get the transcript at spawn time (below), LLM chats as
+    // real turns; only chat-view agents wait for the first send.
+    pending: !isLlm && !isTerminal,
   };
+  let systemPrompt = inst.config.systemPrompt;
+  if (isTerminal) {
+    // A terminal cannot display imported history, so the CLI receives it as
+    // background context instead: Claude Code via --append-system-prompt
+    // (kept short, Windows command lines are capped at 32 KB), Codex via its
+    // developer instructions.
+    const cap = inst.config.agentProvider === 'codex' ? undefined : FORK_TERMINAL_MAX_CHARS;
+    const block = renderForkContext(transcript, fork.sourceName, cap);
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${block}` : block;
+  }
   store.updateInstance(newId, {
     name: `Fork of ${fork.sourceName}`,
-    config: { ...inst.config, fork: context },
+    config: { ...inst.config, systemPrompt, fork: context },
   });
 
   if (isLlm) {
