@@ -30,6 +30,23 @@ export interface LlmConfig {
   baseUrl?: string;
 }
 
+/** One turn carried over when a panel is forked. */
+export interface ForkMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+}
+
+/** Conversation inherited from another panel via Fork. */
+export interface ForkContext {
+  sourceId: string;
+  sourceName: string;
+  sourceProvider: string;
+  transcript: ForkMessage[];
+  /** True until the first send attaches the transcript to the outgoing message. */
+  pending: boolean;
+}
+
 export interface InstanceConfig {
   agentProvider?: AgentProvider;
   codex?: Partial<Pick<CodexConfig, 'effort' | 'sandbox' | 'approvalPolicy' | 'approvalsReviewer' | 'executablePath'>>;
@@ -47,6 +64,8 @@ export interface InstanceConfig {
   panelView?: 'chat' | 'terminal';
   /** Per-panel Claude Code gateway routing. Absent = normal Anthropic path. */
   routing?: ClaudeRouting;
+  /** Set when this panel was forked from another one. Persists with the workspace. */
+  fork?: ForkContext;
 }
 
 export interface ClaudeInstance {

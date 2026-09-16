@@ -9,6 +9,7 @@ import { useWizardStore, type WizardRoute } from '../store/wizardStore';
 import { LLM_PROVIDERS } from '../types/llmProviders';
 import type { InstanceConfig, LlmConfig, LlmProvider, ClaudeRouting } from '../types/instance';
 import type { LastSessionPreset } from '../types/session';
+import { applyForkToInstance } from './forkActions';
 
 /** THE creation entry point: every +/Ctrl+N/menu trigger funnels here. */
 export function openNewSessionWizard(): void {
@@ -142,6 +143,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
           },
     };
     const id = useInstanceStore.getState().addInstance(config);
+    applyForkToInstance(id);
     useLayoutStore.getState().addPanel(id);
     const currentGroupId = useGroupStore.getState().getCurrentGroupId();
     if (currentGroupId) useGroupStore.getState().addToGroup(currentGroupId, id);
@@ -193,6 +195,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
     },
     `${providerMeta.displayName} Chat`,
   );
+  applyForkToInstance(id);
   try {
     await invoke('llm_create_session', {
       id,

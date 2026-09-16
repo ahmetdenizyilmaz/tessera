@@ -21,6 +21,9 @@ import { AgentPanelHeader } from "../terminal/AgentPanelHeader";
 import { ImageAttachmentButton } from "../chat/ImageAttachmentButton";
 import { ImageChip } from "../chat/ImageChip";
 import type { CodexDiscovery, CodexItem } from "../../types/codex";
+import { markForkConsumed, peekForkContext, startFork } from "../../lib/forkActions";
+import { stripForkPreamble } from "../../lib/forkTranscript";
+import { ForkNotice } from "../chat/ForkNotice";
 
 function ItemView({ item }: { item: CodexItem }) {
   if (item.type === "userMessage")
@@ -33,7 +36,7 @@ function ItemView({ item }: { item: CodexItem }) {
           {item.content?.map((c, i) =>
             c.type === "text" ? (
               <p className="msg-user-text" key={i}>
-                {c.text}
+                {stripForkPreamble(c.text ?? "")}
               </p>
             ) : c.type === "image" && c.url?.startsWith("data:image/") ? (
               <img
@@ -186,14 +189,17 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
     const focusedBeforeSend = document.activeElement;
     setPending(true);
     useCodexStore.getState().setError(instanceId, undefined);
+    // A forked panel attaches the inherited conversation to its first message.
+    const forkContext = text.trim().startsWith("/") ? null : peekForkContext(instanceId);
     try {
       await invoke("codex_send", {
         id: instanceId,
-        text,
+        text: forkContext ? `${forkContext}\n\n${text}` : text,
         images,
         model: instance?.config.model || null,
         effort: instance?.config.codex?.effort || null,
       });
+      if (forkContext) markForkConsumed(instanceId);
       setText("");
       setImages([]);
       if (composer.current) composer.current.style.height = "40px";
@@ -315,6 +321,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
         }
         metadata={`Codex · ${instance.config.model || "default"} · ${instance.config.codex?.effort || "default effort"}`}
         onClose={() => void closePanel(instanceId)}
+        onFork={() => void startFork(instanceId)}
         onRestart={() => void restart()}
         restarting={pending || session?.busy}
         onStop={
@@ -499,10 +506,28 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
                   b.scrollHeight - b.scrollTop - b.clientHeight < 100;
             }}
           >
+            {!!instance.config.fork?.transcript.length && (
+              <details className="codex-tool fork-context" open={!session?.items.length}>
+                <summary>
+                  Forked from {instance.config.fork.sourceName} · {instance.config.fork.transcript.length} earlier message
+                  {instance.config.fork.transcript.length === 1 ? "" : "s"}
+                </summary>
+                {instance.config.fork.transcript.map((m, i) => (
+                  <article key={i} className={m.role === "user" ? "msg msg--user codex-message-user" : "msg msg--assistant codex-message"}>
+                    <div className={m.role === "user" ? "msg-header msg-header--user" : "msg-header"}>
+                      <span className="msg-label">{m.role === "user" ? "You" : instance.config.fork?.sourceProvider ?? "Assistant"}</span>
+                    </div>
+                    <div className={m.role === "user" ? "msg-body msg-body--user" : "msg-body"}>
+                      {m.role === "user" ? <p className="msg-user-text">{m.content}</p> : <MarkdownRenderer content={m.content} />}
+                    </div>
+                  </article>
+                ))}
+              </details>
+            )}
             {session?.items.map((item) => (
               <ItemView key={item.id} item={item} />
             ))}
-            {!session?.items.length && (
+            {!session?.items.length && !instance.config.fork?.transcript.length && (
               <p className="codex-empty">
                 {ready
                   ? isTerminal
@@ -517,6 +542,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
         </>
       )}
       {!terminalAttached && requests}
+      {!terminalAttached && <ForkNotice instanceId={instanceId} />}
       {!terminalAttached && (
         <footer className="chat-input-area codex-input">
           {!!images.length && (

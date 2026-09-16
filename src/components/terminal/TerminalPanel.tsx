@@ -10,6 +10,7 @@ import { XTermView, clearTerminalState } from "./XTermView";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import ChatView from "../chat/ChatView";
 import { History } from "lucide-react";
+import { startFork } from "../../lib/forkActions";
 import CheckpointTimeline from "../checkpoints/CheckpointTimeline";
 import {
   ThinkingModeSelector,
@@ -96,6 +97,7 @@ function ClaudeTerminalPanel({ instanceId }: { instanceId: string }) {
         statusColor={statusColors[instance.status] ?? "#a0a0a0"}
         metadata={`Claude · ${instance.config.model || "default"}${panelView === "chat" ? ` · ${thinkingMode.replaceAll("_", " ")}` : ""}`}
         onClose={() => void handleClose()}
+        onFork={() => void startFork(instanceId)}
         onRestart={
           panelView === "terminal" ? () => void handleRestart() : undefined
         }

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { stripForkPreamble } from '../../lib/forkTranscript';
 import type {
   ChatMessage as ChatMessageType,
   AccumulatedMessage,
@@ -36,7 +37,7 @@ const UserMessage: React.FC<{ message: AccumulatedUserMessage }> = ({ message })
         <span className="msg-time">{time}</span>
       </div>
       <div className="msg-body msg-body--user">
-        <p className="msg-user-text">{message.text}</p>
+        <p className="msg-user-text">{stripForkPreamble(message.text)}</p>
         {message.images && message.images.length > 0 && (
           <div className="msg-user-images">
             {message.images.map((path) => (

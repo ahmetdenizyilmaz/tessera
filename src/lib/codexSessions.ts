@@ -12,6 +12,7 @@ import { ensureCodex } from "./codexBridge";
 import { cleanupPty } from "../hooks/usePty";
 import { clearTerminalState } from "../components/terminal/XTermView";
 import type { CodexConfig } from "../types/codex";
+import { applyForkToInstance } from "./forkActions";
 
 export function findCodexPanel(threadId: string): string | undefined {
   const live = new Set(useLayoutStore.getState().tabOrder);
@@ -84,6 +85,7 @@ export async function openCodexSession(
     "Codex · " + (config.cwd.split(/[\\/]/).filter(Boolean).pop() ?? "Session"),
   );
   if (threadId) store.updateInstance(id, { codexThreadId: threadId });
+  applyForkToInstance(id);
   try {
     await ensureCodex(id);
     if (wizardId && !useLayoutStore.getState().panelTypes[wizardId]) {

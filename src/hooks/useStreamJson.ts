@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { markForkConsumed, peekForkContext } from '../lib/forkActions';
 import { invoke } from '@tauri-apps/api/core';
 import { useChatStore } from '../store/chatStore';
 import type {
@@ -85,12 +86,16 @@ export function useStreamJson(instanceId: string): UseStreamJsonReturn {
     addUserMessage(instanceId, message, images);
     setStreaming(instanceId, true);
     clearError(instanceId);
+    // A forked panel attaches the inherited conversation to its first real
+    // message. The transcript shows only what the user typed.
+    const forkContext = message.startsWith('/') ? null : peekForkContext(instanceId);
     try {
       await invoke('stream_send_message', {
         id: instanceId,
-        message,
+        message: forkContext ? `${forkContext}\n\n${message}` : message,
         images: images && images.length > 0 ? images : null,
       });
+      if (forkContext) markForkConsumed(instanceId);
     } catch (err) {
       console.error(`[useStreamJson:${instanceId}] send failed:`, err);
       useChatStore.setState((state) => {

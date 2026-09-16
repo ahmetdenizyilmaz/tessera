@@ -3,6 +3,7 @@ import { useInstanceStore } from "../../store/instanceStore";
 import { useLayoutStore } from "../../store/layoutStore";
 import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
 import { ProviderIcon } from "../icons/ProviderIcons";
+import { GitFork } from "lucide-react";
 
 /** Shared panel chrome. Provider-specific controls stay inside the same menu. */
 export function AgentPanelHeader({
@@ -12,6 +13,7 @@ export function AgentPanelHeader({
   metadata,
   controls,
   onClose,
+  onFork,
   onRestart,
   restarting,
   onStop,
@@ -22,6 +24,8 @@ export function AgentPanelHeader({
   metadata: string;
   controls?: ReactNode;
   onClose: () => void;
+  /** Continue this conversation in a new panel, possibly with another provider. */
+  onFork?: () => void;
   onRestart?: () => void;
   restarting?: boolean;
   onStop?: () => void;
@@ -229,6 +233,16 @@ export function AgentPanelHeader({
               </svg>
             </button>
           )}
+          {onFork && (
+            <button
+              type="button"
+              className="toolbar-btn"
+              title="Fork conversation into a new panel"
+              onClick={onFork}
+            >
+              <GitFork size={12} />
+            </button>
+          )}
           <button
             type="button"
             className="toolbar-btn"
@@ -289,6 +303,17 @@ export function AgentPanelHeader({
           <button className="context-menu-item" onClick={rename}>
             Rename
           </button>
+          {onFork && (
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                setContext(null);
+                onFork();
+              }}
+            >
+              Fork conversation…
+            </button>
+          )}
           <button
             className="context-menu-item"
             onClick={() => {

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { startFork } from '../../lib/forkActions';
+import { useInstanceStore } from '../../store/instanceStore';
 import { Folder, ChevronRight } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -160,6 +162,7 @@ export function TabContextMenu({
   const [showMoveTo, setShowMoveTo] = useState(false);
   const groups = useGroupStore((s) => s.groups);
   const isRemoteGroup = !!groups.get(tabId)?.remotePeerId;
+  const forkable = useInstanceStore((s) => s.instances.has(tabId));
   // Session actions only make sense on panels that host a Claude session
   const claudePanel = isClaudePanel(tabId);
 
@@ -233,6 +236,19 @@ export function TabContextMenu({
             <MoveToSubmenu tabId={tabId} onDismiss={onDismiss} />
           )}
         </div>
+      )}
+
+      {forkable && (
+        <>
+          <div className="context-menu-separator" />
+          <button
+            className="context-menu-item"
+            title="Continue this conversation in a new panel, with any provider"
+            onClick={() => { void startFork(tabId); onDismiss(); }}
+          >
+            Fork conversation…
+          </button>
+        </>
       )}
 
       {claudePanel && (

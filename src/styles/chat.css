@@ -3078,3 +3078,44 @@
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
+
+/* ── Fork: notice above the composer + wizard banner ── */
+.fork-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(74, 158, 255, 0.08);
+  border-top: 1px solid rgba(74, 158, 255, 0.25);
+}
+
+.fork-notice svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.nsw-fork-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(74, 158, 255, 0.08);
+}
+
+.nsw-fork-banner svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.codex-tool.fork-context > summary {
+  font-weight: 600;
+}
+
+.codex-tool.fork-context .msg {
+  margin-top: 8px;
+}

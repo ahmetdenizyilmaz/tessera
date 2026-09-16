@@ -13,6 +13,7 @@ import { isUserMessage } from '../../types/stream';
 import { buildRoutingEnv } from '../../lib/routingEnv';
 import { ClaudeIcon } from '../icons/ProviderIcons';
 import type { SessionInfo } from '../../types/session';
+import { ForkNotice } from './ForkNotice';
 
 // ---- Constants ----
 
@@ -177,6 +178,16 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
       });
     return () => { mounted = false; };
   }, [instanceId, claudeSessionId, projectDir]);
+
+  // A forked panel that was reloaded before its first send has no session file
+  // yet; repaint the inherited conversation from the instance config.
+  const forkTranscript = instance?.config?.fork?.transcript;
+  useEffect(() => {
+    if (!forkTranscript?.length || claudeSessionId) return;
+    const session = useChatStore.getState().sessions.get(instanceId);
+    if (session && session.messages.length > 0) return;
+    useChatStore.getState().seedHistory(instanceId, forkTranscript);
+  }, [instanceId, forkTranscript, claudeSessionId]);
 
   // A chat panel learns its session id from the CLI's own system/init event,
   // which is authoritative. The scan that used to run here — adopt the newest
@@ -462,6 +473,7 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
         )}
       </div>
 
+      <ForkNotice instanceId={instanceId} />
       {/* Chat input — hidden in unfocused panels */}
       {isFocused && (
         <ChatInput

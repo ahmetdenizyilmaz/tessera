@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { GitFork } from 'lucide-react';
+import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useLlmChatStore } from '../../store/llmChatStore';
@@ -262,6 +264,13 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
         </div>
 
         <div className="toolbar-actions">
+          <button
+            className="toolbar-btn"
+            onClick={(e) => { e.stopPropagation(); void startFork(instanceId); }}
+            title="Fork conversation into a new panel"
+          >
+            <GitFork size={12} />
+          </button>
           <button
             className="toolbar-btn"
             onClick={(e) => { e.stopPropagation(); toggleMaximized(instanceId); }}

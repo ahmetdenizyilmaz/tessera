@@ -2,7 +2,7 @@ import { CodexSetup } from '../codex/CodexSetup';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp, Monitor } from 'lucide-react';
+import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp, Monitor, GitFork } from 'lucide-react';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -13,6 +13,7 @@ import { PanelViewPreview } from '../icons/PanelViewPreview';
 import { AuthBadgePreview } from '../icons/AuthBadgePreview';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import { LanConnectStep } from '../lan/LanConnectStep';
+import { cancelFork } from '../../lib/forkActions';
 import {
   routeMeta, checkKey, saveKey, createFromWizard, replaceWizard,
   createGroupPanel, createPluginPanel,
@@ -110,6 +111,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
   }, [s.route]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = useCallback(() => {
+    cancelFork();
     useLayoutStore.getState().removePanel(instanceId);
   }, [instanceId]);
 
@@ -273,9 +275,21 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   return (
     <div className="nsw" tabIndex={-1} onKeyDown={handleKeyDown}>
+      {s.fork && (
+        <div className="nsw-fork-banner">
+          <GitFork size={14} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 12 }}>Fork of {s.fork.sourceName}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {s.fork.messageCount} message{s.fork.messageCount === 1 ? '' : 's'} will be shown in the new panel and attached to your first message.
+            </div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={close}>Cancel</button>
+        </div>
+      )}
       {/* Quick tile: last used configuration, one click — same visual
           weight and schematic language as the session-type tiles below */}
-      {preset && (() => {
+      {preset && !s.fork && (() => {
         const authVariant =
           (preset.kind === 'codex' || (preset.kind === 'claude' && preset.gateway === 'anthropic')) ? 'subscription' as const
           : ((preset.kind === 'llm' && ['anthropic', 'openai', 'gemini'].includes(preset.llmProvider!)) || preset.gateway === 'openrouter') ? 'apikey' as const
@@ -310,7 +324,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       <div className="nsw-step">
         <div className="nsw-step__label">1 · Session type</div>
         <div className="panel-view-picker">
-          {(['chat', 'terminal'] as const).map((kind) => (
+          {(['chat', 'terminal'] as const).filter((kind) => !s.fork || kind === 'chat').map((kind) => (
             <button
               key={kind}
               type="button"
@@ -324,7 +338,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               </span>
             </button>
           ))}
-          <button
+          {!s.fork && <button
             type="button"
             className={`panel-view-option${s.lanMode ? ' panel-view-option--active' : ''}`}
             onClick={() => s.set({ lanMode: true, panelView: null, route: null, routeModel: '', keyEntryFor: null })}
@@ -335,7 +349,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
             </span>
             <span className="panel-view-option__label">Local PC</span>
             <span className="panel-view-option__hint">Another Tessera computer's panels as a subgroup</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -576,10 +590,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               className="btn btn-primary"
               disabled={!canAdd}
               onClick={() => createFromWizard(instanceId)}
-              title={canAdd ? 'Create the panel' : 'Pick a model first'}
+              title={canAdd ? (s.fork ? 'Create the forked panel' : 'Create the panel') : 'Pick a model first'}
               style={{ width: '100%' }}
             >
-              Add
+              {s.fork ? 'Fork' : 'Add'}
             </button>
           </div>
         </div>

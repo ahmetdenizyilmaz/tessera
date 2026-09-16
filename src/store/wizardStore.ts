@@ -12,6 +12,8 @@ export interface WizardState {
   panelView: 'chat' | 'terminal' | null;
   /** "Local PC" picked in step 1: connect to another Tessera computer instead. */
   lanMode: boolean;
+  /** Fork mode: the created panel inherits this source panel's conversation. */
+  fork: { sourceId: string; sourceName: string; messageCount: number } | null;
   route: WizardRoute | null;
   /** Claude Code model tier (opus/sonnet/fable/haiku). Always has a default. */
   claudeTier: string;
@@ -40,6 +42,7 @@ function seededDefaults() {
   return {
     panelView: null as WizardState['panelView'],
     lanMode: false,
+    fork: null as WizardState['fork'],
     route: null as WizardState['route'],
     claudeTier: s.lastModel || s.defaultModel,
     routeModel: '',
