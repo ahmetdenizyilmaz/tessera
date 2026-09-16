@@ -226,14 +226,18 @@ export function takeForkOpeningMessage(instanceId: string): string | null {
   return text;
 }
 
-/** Terminal panels: paste the opening message once the CLI has had time to start. */
+/**
+ * Terminal panels: paste the opening message once the CLI has had time to
+ * start. Exactly one attempt: the paste helper reports a failure when other
+ * input interleaves before its Enter, but the text is already in the CLI's
+ * input line by then, so resending would submit it twice.
+ */
 export function submitForkOpeningToTerminal(instanceId: string, delayMs = 4000): void {
   const text = takeForkOpeningMessage(instanceId);
   if (!text) return;
   setTimeout(() => {
-    invoke('pty_submit', { id: instanceId, text }).catch(() => {
-      // The CLI may still be starting; one retry is enough for a cold start.
-      setTimeout(() => void invoke('pty_submit', { id: instanceId, text }).catch(() => {}), 3000);
+    invoke('pty_submit', { id: instanceId, text }).catch((err) => {
+      console.warn('[fork] opening message was not submitted:', err);
     });
   }, delayMs);
 }
