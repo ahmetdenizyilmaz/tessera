@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
+import { takeForkOpeningMessage } from '../../lib/forkActions';
 import { useLlmChat } from '../../hooks/useLlmChat';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -13,6 +14,12 @@ interface LlmChatViewProps {
 
 export default function LlmChatView({ instanceId }: LlmChatViewProps) {
   const { messages, isStreaming, error, sendMessage, cancelStream } = useLlmChat(instanceId);
+  const forkOpening = useInstanceStore((st) => st.instances.get(instanceId)?.config.fork?.openingMessage);
+  useEffect(() => {
+    if (!forkOpening || isStreaming) return;
+    const text = takeForkOpeningMessage(instanceId);
+    if (text) sendMessage(text);
+  }, [forkOpening, isStreaming, instanceId, sendMessage]);
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const focusedId = useLayoutStore((s) => s.focusedId);
   const tabOrder = useLayoutStore((s) => s.tabOrder);

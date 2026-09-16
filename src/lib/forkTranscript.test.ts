@@ -92,12 +92,23 @@ describe('renderForkContext', () => {
     expect(renderForkContext([{ role: 'user', content: 'y'.repeat(50) }], 'src', 10)).toContain('y'.repeat(50));
   });
 
-  it('round-trips through stripForkPreamble so a fork of a fork does not nest', () => {
-    const preamble = renderForkContext([{ role: 'user', content: 'old' }], 'src');
+  it('unpacks an older preamble back into turns so a fork of a fork keeps its history', () => {
+    const preamble = renderForkContext([
+      { role: 'user', content: 'old question\nwith two lines' },
+      { role: 'assistant', content: 'old answer' },
+    ], 'src');
     const wire = `${preamble}\n\nnew question`;
     expect(stripForkPreamble(wire)).toBe('new question');
     expect(stripForkPreamble('plain text')).toBe('plain text');
-    expect(codexItemsToMessages([{ id: '1', type: 'userMessage', content: [{ type: 'text', text: wire }] }]))
-      .toEqual([{ role: 'user', content: 'new question' }]);
+    expect(codexItemsToMessages([{ id: '1', type: 'userMessage', content: [{ type: 'text', text: wire }] }])).toEqual([
+      { role: 'user', content: 'old question\nwith two lines' },
+      { role: 'assistant', content: 'old answer' },
+      { role: 'user', content: 'new question' },
+    ]);
+    // The boilerplate an earlier build appended after the preamble is dropped.
+    const bootstrap = `${preamble}\n\nThe conversation above was forked from another panel. Reply with one short line.`;
+    expect(plainToMessages([{ role: 'user', content: bootstrap }]).map((m) => m.content)).toEqual([
+      'old question\nwith two lines', 'old answer',
+    ]);
   });
 });

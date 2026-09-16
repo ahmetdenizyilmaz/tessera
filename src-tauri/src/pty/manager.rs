@@ -498,6 +498,17 @@ pub async fn submit_to_instance(state: &PtyManager, id: &str, text: &str) -> Res
     input_for_instance(state, id)?.submit(text).await
 }
 
+/// Paste `text` into a running terminal panel and press Enter, the same way
+/// panel-to-panel messages are delivered. Used for a fork's opening message.
+#[tauri::command]
+pub async fn pty_submit(
+    id: String,
+    text: String,
+    state: tauri::State<'_, PtyManager>,
+) -> Result<(), String> {
+    submit_to_instance(&state, &id, &text).await
+}
+
 #[tauri::command]
 pub async fn pty_resize(
     id: String,

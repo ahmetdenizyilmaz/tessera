@@ -10,7 +10,7 @@ import { XTermView, clearTerminalState } from "./XTermView";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import ChatView from "../chat/ChatView";
 import { History } from "lucide-react";
-import { startFork } from "../../lib/forkActions";
+import { startFork, submitForkOpeningToTerminal } from "../../lib/forkActions";
 import CheckpointTimeline from "../checkpoints/CheckpointTimeline";
 import {
   ThinkingModeSelector,
@@ -58,6 +58,12 @@ function ClaudeTerminalPanel({ instanceId }: { instanceId: string }) {
           setRestartKey((k) => k + 1);
       });
   }, [instanceId, panelView]);
+  // Fork opening message: paste it once the resumed CLI has started.
+  const forkOpening = instance?.config.fork?.openingMessage;
+  useEffect(() => {
+    if (panelView !== "terminal" || !forkOpening || instance?.status !== "running") return;
+    submitForkOpeningToTerminal(instanceId);
+  }, [panelView, forkOpening, instance?.status, instanceId]);
   const handleRestart = useCallback(async () => {
     if (restarting) return;
     setRestarting(true);

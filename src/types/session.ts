@@ -73,6 +73,8 @@ export interface AppSettings {
    *  session lands, and panels defaulting there kept adopting foreign
    *  conversations. */
   lastCwd: string;
+  /** Sent automatically when a forked panel opens. Empty disables it. */
+  forkOpeningMessage: string;
   fontSize: number;
   fontFamily: string;
   autoSave: boolean;

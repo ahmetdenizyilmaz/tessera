@@ -5,6 +5,7 @@ import { useChatStore } from '../store/chatStore';
 import { useCodexStore } from '../store/codexStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { canAddPanel, notifyPanelLimit } from '../store/layoutStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { notify } from './toast';
 import { openNewSessionWizard } from './newSessionActions';
 import { historyItems } from './codexReducer';
@@ -82,7 +83,12 @@ export async function startFork(sourceId: string): Promise<void> {
   pendingForks.set(sourceId, transcript);
   openNewSessionWizard();
   useWizardStore.getState().set({
-    fork: { sourceId, sourceName: inst.name, messageCount: transcript.length },
+    fork: {
+      sourceId,
+      sourceName: inst.name,
+      messageCount: transcript.length,
+      openingMessage: useSettingsStore.getState().settings.forkOpeningMessage ?? '',
+    },
     cwd: inst.config.cwd && inst.config.cwd !== '.' ? inst.config.cwd : useWizardStore.getState().cwd,
     panelView: 'chat',
     lanMode: false,
@@ -124,6 +130,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
   if (!inst) return;
   const source = store.instances.get(fork.sourceId);
   const isLlm = !!inst.config.llmConfig;
+  const openingMessage = fork.openingMessage.trim() || undefined;
 
   if (!isLlm) {
     const wire = normalizeAlternation(transcript);
@@ -134,7 +141,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
           name: `Fork of ${fork.sourceName}`,
           codexThreadId: threadId,
           codexHasTurns: true,
-          config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false } },
+          config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false, openingMessage } },
         });
       } else {
         const sessionId = await invoke<string>('session_write_fork', {
@@ -145,7 +152,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
         store.updateInstance(newId, {
           name: `Fork of ${fork.sourceName}`,
           claudeSessionId: sessionId,
-          config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false } },
+          config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false, openingMessage } },
         });
       }
       return;
@@ -165,6 +172,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
     sourceProvider: providerLabel(source),
     transcript,
     pending: !isLlm && !isClaudeTerminal,
+    openingMessage,
   };
   let systemPrompt = inst.config.systemPrompt;
   if (isClaudeTerminal) {
@@ -198,6 +206,31 @@ export async function applyForkToInstance(newId: string): Promise<void> {
     useChatStore.getState().seedHistory(newId, transcript);
   }
   // Codex panels render config.fork.transcript themselves (CodexPanel).
+}
+
+/**
+ * The opening message a forked panel should send once it is ready, cleared on
+ * the way out so a remount never sends it twice. Null when there is none.
+ */
+export function takeForkOpeningMessage(instanceId: string): string | null {
+  const store = useInstanceStore.getState();
+  const inst = store.instances.get(instanceId);
+  const text = inst?.config.fork?.openingMessage?.trim();
+  if (!inst?.config.fork || !text) return null;
+  store.updateInstance(instanceId, { config: { ...inst.config, fork: { ...inst.config.fork, openingMessage: undefined } } });
+  return text;
+}
+
+/** Terminal panels: paste the opening message once the CLI has had time to start. */
+export function submitForkOpeningToTerminal(instanceId: string, delayMs = 4000): void {
+  const text = takeForkOpeningMessage(instanceId);
+  if (!text) return;
+  setTimeout(() => {
+    invoke('pty_submit', { id: instanceId, text }).catch(() => {
+      // The CLI may still be starting; one retry is enough for a cold start.
+      setTimeout(() => void invoke('pty_submit', { id: instanceId, text }).catch(() => {}), 3000);
+    });
+  }, delayMs);
 }
 
 /** The text to prepend to the first send of a forked panel, or null when nothing is pending. */

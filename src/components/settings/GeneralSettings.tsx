@@ -68,6 +68,18 @@ export function GeneralSettings() {
       </div>
 
       <div className="form-group">
+        <label className="form-label">Fork opening message</label>
+        <textarea
+          className="form-textarea"
+          rows={2}
+          value={settings.forkOpeningMessage}
+          onChange={(e) => updateSettings({ forkOpeningMessage: e.target.value })}
+          placeholder="Leave empty to send nothing"
+        />
+        <span className="form-hint">Sent automatically when a forked panel opens, so the new agent picks up the conversation right away. You can edit it per fork.</span>
+      </div>
+
+      <div className="form-group">
         <label className="form-label">Default Claude Permission Mode</label>
         <select
           className="form-select"

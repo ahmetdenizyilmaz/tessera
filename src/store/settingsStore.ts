@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lastModel: '',
   lastPanelView: 'chat',
   lastCwd: '',
+  forkOpeningMessage: 'Summarize the current situation in short, then wait for my next instruction.',
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
   autoSave: true,

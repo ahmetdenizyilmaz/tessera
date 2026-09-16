@@ -14,6 +14,7 @@ import { buildRoutingEnv } from '../../lib/routingEnv';
 import { ClaudeIcon } from '../icons/ProviderIcons';
 import type { SessionInfo } from '../../types/session';
 import { ForkNotice } from './ForkNotice';
+import { takeForkOpeningMessage } from '../../lib/forkActions';
 
 // ---- Constants ----
 
@@ -188,6 +189,17 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     if (session && session.messages.length > 0) return;
     useChatStore.getState().seedHistory(instanceId, forkTranscript);
   }, [instanceId, forkTranscript, claudeSessionId]);
+
+  // A forked panel's opening message goes out once the panel is ready and its
+  // inherited history is on screen, so the reply lands under the old turns.
+  const forkOpening = instance?.config?.fork?.openingMessage;
+  useEffect(() => {
+    if (!forkOpening || !isReady || isStreaming) return;
+    const seeded = useChatStore.getState().sessions.get(instanceId)?.messages.length ?? 0;
+    if (seeded === 0 && claudeSessionId) return; // history still loading from disk
+    const text = takeForkOpeningMessage(instanceId);
+    if (text) send(text);
+  }, [forkOpening, isReady, isStreaming, messages.length, claudeSessionId, instanceId, send]);
 
   // A chat panel learns its session id from the CLI's own system/init event,
   // which is authoritative. The scan that used to run here — adopt the newest

@@ -45,6 +45,8 @@ export interface ForkContext {
   transcript: ForkMessage[];
   /** True until the first send attaches the transcript to the outgoing message. */
   pending: boolean;
+  /** Sent automatically once the panel is ready, then cleared. */
+  openingMessage?: string;
 }
 
 export interface InstanceConfig {

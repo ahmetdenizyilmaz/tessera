@@ -132,6 +132,7 @@ pub fn run() {
             pty::manager::pty_capabilities,
             pty::manager::pty_spawn,
             pty::manager::pty_write,
+            pty::manager::pty_submit,
             pty::manager::pty_resize,
             pty::manager::pty_kill,
             pty::manager::pty_get_buffer,

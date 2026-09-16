@@ -13,7 +13,7 @@ export interface WizardState {
   /** "Local PC" picked in step 1: connect to another Tessera computer instead. */
   lanMode: boolean;
   /** Fork mode: the created panel inherits this source panel's conversation. */
-  fork: { sourceId: string; sourceName: string; messageCount: number } | null;
+  fork: { sourceId: string; sourceName: string; messageCount: number; openingMessage: string } | null;
   route: WizardRoute | null;
   /** Claude Code model tier (opus/sonnet/fable/haiku). Always has a default. */
   claudeTier: string;

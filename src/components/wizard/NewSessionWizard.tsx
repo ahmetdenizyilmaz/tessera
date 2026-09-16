@@ -281,8 +281,16 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 12 }}>Fork of {s.fork.sourceName}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {s.fork.messageCount} message{s.fork.messageCount === 1 ? '' : 's'} carried over. Chat panels show them and attach them to your first message; terminal panels give them to the agent as background context.
+              {s.fork.messageCount} message{s.fork.messageCount === 1 ? '' : 's'} carried over as the new panel's own history.
             </div>
+            <input
+              className="form-input"
+              style={{ marginTop: 6, width: '100%' }}
+              value={s.fork.openingMessage}
+              placeholder="Opening message (leave empty to send nothing)"
+              title="Sent automatically when the forked panel opens"
+              onChange={(e) => s.set({ fork: { ...s.fork!, openingMessage: e.target.value } })}
+            />
           </div>
           <button className="btn btn-secondary btn-sm" onClick={close}>Cancel</button>
         </div>

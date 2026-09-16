@@ -21,7 +21,7 @@ import { AgentPanelHeader } from "../terminal/AgentPanelHeader";
 import { ImageAttachmentButton } from "../chat/ImageAttachmentButton";
 import { ImageChip } from "../chat/ImageChip";
 import type { CodexDiscovery, CodexItem } from "../../types/codex";
-import { markForkConsumed, peekForkContext, startFork } from "../../lib/forkActions";
+import { markForkConsumed, peekForkContext, startFork, submitForkOpeningToTerminal, takeForkOpeningMessage } from "../../lib/forkActions";
 import { stripForkPreamble } from "../../lib/forkTranscript";
 import { ForkNotice } from "../chat/ForkNotice";
 import { Loader2 } from "lucide-react";
@@ -187,6 +187,30 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
       .catch(error)
       .finally(() => setPending(false));
   }, [isTerminal, terminalAttached, ready, session?.connected, session?.busy, pending, forkPending, instanceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Opening message of a fork: chat panels send it through the app-server once
+  // the resumed thread is on screen; terminal panels paste it into the TUI.
+  const forkOpening = instance?.config.fork?.openingMessage;
+  useEffect(() => {
+    if (!forkOpening || !ready || !session?.connected || session?.busy || pending) return;
+    if (terminalAttached) {
+      submitForkOpeningToTerminal(instanceId);
+      return;
+    }
+    if (isTerminal || !session?.items.length) return;
+    const text = takeForkOpeningMessage(instanceId);
+    if (!text) return;
+    setPending(true);
+    invoke("codex_send", {
+      id: instanceId,
+      text,
+      images: [],
+      model: instance?.config.model || null,
+      effort: instance?.config.codex?.effort || null,
+    })
+      .catch(error)
+      .finally(() => setPending(false));
+  }, [forkOpening, ready, session?.connected, session?.busy, session?.items.length, pending, terminalAttached, isTerminal, instanceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const restart = async (fresh = false, threadId?: string, cwd?: string) => {
     if (pending || session?.busy) return;

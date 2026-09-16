@@ -20,17 +20,63 @@ export function stripForkPreamble(text: string): string {
   return end < 0 ? text : text.slice(end + FORK_PREAMBLE_END.length).trim();
 }
 
+/** Boilerplate an earlier build appended after the preamble; carries no content. */
+const BOOTSTRAP_NOTE = 'The conversation above was forked from another panel.';
+
+/**
+ * Forks made by earlier builds carried the history only as a text preamble in
+ * their first message. When such a panel is forked again, unpack that preamble
+ * into the turns it describes so the history survives instead of being dropped.
+ * Returns null when `text` is an ordinary message.
+ */
+export function expandForkPreamble(text: string): ForkMessage[] | null {
+  if (!text.startsWith(FORK_PREAMBLE_START)) return null;
+  const end = text.indexOf(FORK_PREAMBLE_END);
+  if (end < 0) return null;
+  const headerEnd = text.indexOf(']');
+  const body = text.slice(headerEnd + 1, end);
+  const out: ForkMessage[] = [];
+  let role: ForkMessage['role'] | null = null;
+  let buffer: string[] = [];
+  const flush = () => {
+    const content = buffer.join('\n').trim();
+    if (role && content) out.push({ role, content });
+    buffer = [];
+  };
+  for (const line of body.split('\n')) {
+    if (line === 'User:' || line === 'Assistant:') {
+      flush();
+      role = line === 'User:' ? 'user' : 'assistant';
+    } else {
+      buffer.push(line);
+    }
+  }
+  flush();
+  const tail = text.slice(end + FORK_PREAMBLE_END.length).trim();
+  if (tail && !tail.startsWith(BOOTSTRAP_NOTE)) out.push({ role: 'user', content: tail });
+  return out;
+}
+
+function pushUser(out: ForkMessage[], text: string, timestamp?: string): void {
+  const expanded = expandForkPreamble(text);
+  if (expanded) {
+    out.push(...expanded);
+    return;
+  }
+  const content = text.trim();
+  if (content) out.push({ role: 'user', content, timestamp });
+}
+
 /** Codex transcript items → role/content pairs. Tool output and reasoning are dropped. */
 export function codexItemsToMessages(items: CodexItem[]): ForkMessage[] {
   const out: ForkMessage[] = [];
   for (const item of items) {
     if (item.type === 'userMessage') {
-      const text = stripForkPreamble((item.content ?? [])
+      pushUser(out, (item.content ?? [])
         .filter((c) => c.type === 'text' && c.text)
         .map((c) => c.text as string)
         .join('\n')
         .trim());
-      if (text) out.push({ role: 'user', content: text });
     } else if (item.type === 'agentMessage') {
       const text = (item.text ?? '').trim();
       if (text) out.push({ role: 'assistant', content: text });
@@ -45,8 +91,7 @@ export function claudeMessagesToMessages(messages: ChatMessage[]): ForkMessage[]
   for (const message of messages) {
     if (isSystemNote(message)) continue;
     if (isUserMessage(message)) {
-      const text = stripForkPreamble(message.text.trim());
-      if (text) out.push({ role: 'user', content: text, timestamp: new Date(message.timestamp).toISOString() });
+      pushUser(out, message.text.trim(), new Date(message.timestamp).toISOString());
       continue;
     }
     if (isAssistantMessage(message)) {
@@ -56,7 +101,7 @@ export function claudeMessagesToMessages(messages: ChatMessage[]): ForkMessage[]
         .join('\n')
         .trim();
       if (!text) continue;
-      if (message.role === 'user') out.push({ role: 'user', content: stripForkPreamble(text) });
+      if (message.role === 'user') pushUser(out, text);
       else out.push({ role: 'assistant', content: text });
     }
   }
@@ -68,10 +113,13 @@ export function plainToMessages(rows: Array<{ role: string; content: string; tim
   const out: ForkMessage[] = [];
   for (const row of rows) {
     if (row.role !== 'user' && row.role !== 'assistant') continue;
-    const text = row.role === 'user' ? stripForkPreamble(row.content.trim()) : row.content.trim();
-    if (!text) continue;
     const timestamp = typeof row.timestamp === 'number' ? new Date(row.timestamp).toISOString() : row.timestamp ?? undefined;
-    out.push({ role: row.role, content: text, timestamp });
+    if (row.role === 'user') {
+      pushUser(out, row.content.trim(), timestamp);
+      continue;
+    }
+    const text = row.content.trim();
+    if (text) out.push({ role: 'assistant', content: text, timestamp });
   }
   return out;
 }
