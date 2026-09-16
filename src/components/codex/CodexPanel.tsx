@@ -160,6 +160,30 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
   useEffect(() => {
     if (!session?.requests.length) setRequestsExpanded(false);
   }, [session?.requests.length]);
+  // A forked Codex terminal has no first turn yet, and the TUI can only attach
+  // once one exists. Send the inherited conversation as that first turn so the
+  // terminal opens right away with the history visible.
+  const forkBootstrapped = useRef(false);
+  const forkPending = !!instance?.config.fork?.pending;
+  useEffect(() => {
+    if (!isTerminal || terminalAttached || !ready || !session?.connected || session?.busy || pending) return;
+    if (forkBootstrapped.current || !forkPending) return;
+    const context = peekForkContext(instanceId);
+    if (!context) return;
+    forkBootstrapped.current = true;
+    setPending(true);
+    invoke("codex_send", {
+      id: instanceId,
+      text: `${context}\n\nThe conversation above was forked from another panel. Reply with one short line confirming you have this context, then wait for the next instruction.`,
+      images: [],
+      model: instance?.config.model || null,
+      effort: instance?.config.codex?.effort || null,
+    })
+      .then(() => markForkConsumed(instanceId))
+      .catch(error)
+      .finally(() => setPending(false));
+  }, [isTerminal, terminalAttached, ready, session?.connected, session?.busy, pending, forkPending, instanceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const restart = async (fresh = false, threadId?: string, cwd?: string) => {
     if (pending || session?.busy) return;
     setPending(true);
