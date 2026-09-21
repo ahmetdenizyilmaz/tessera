@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Link2Off, Loader2, Monitor, RefreshCw, Send, ShieldCheck, Trash2 } from 'lucide-react';
-import { type LanStatus, useLanStore } from '../../store/lanStore';
+import { type LanStatus, remotePanelId, restoreRemotePanels, useLanStore } from '../../store/lanStore';
 
 export function NetworkSettings() {
   const status = useLanStore((s) => s.status);
+  const hiddenPanelIds = useLanStore((s) => s.hiddenPanelIds);
   const globalError = useLanStore((s) => s.error);
   const outgoing = useLanStore((s) => s.outgoing);
   const requestPair = useLanStore((s) => s.requestPair);
@@ -124,6 +125,13 @@ export function NetworkSettings() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{peer.name}</div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{peer.address} · {peer.connected ? `connected · ${peer.panels.length} panels` : 'offline'}</div>
+              {peer.panels.some(panel => hiddenPanelIds.includes(remotePanelId(peer.deviceId, panel.id))) && (
+                <button className="btn btn-secondary" style={{ marginTop: 6, fontSize: 11 }}
+                  title="Show this computer's locally closed panels again"
+                  onClick={() => restoreRemotePanels(peer.deviceId)}>
+                  Restore closed panels ({peer.panels.filter(panel => hiddenPanelIds.includes(remotePanelId(peer.deviceId, panel.id))).length})
+                </button>
+              )}
             </div>
             {peer.connected ? (
               <button className="btn btn-secondary" title="Disconnect" disabled={busy} onClick={() => void run(async () => apply(await invoke<LanStatus>('lan_disconnect', { deviceId: peer.deviceId })))}><Link2Off size={13} /></button>
@@ -137,7 +145,8 @@ export function NetworkSettings() {
 
       {(error || globalError) && <div style={{ color: '#ff6b6b', fontSize: 11 }}>{error || globalError}</div>}
       <p className="form-hint">
-        Windows may ask once for firewall access. Allow Tessera on Private networks only. A paired computer sees panel names, status, and recent transcripts and can send messages; it cannot access files, shell commands, or approval controls.
+        Closing a remote panel hides it only on this computer; the host keeps running. Use Restore closed panels above to show it again.
+        Windows may ask once for firewall access. Allow Tessera on Private networks only. A paired computer sees panel names, status, recent transcripts and terminal screens and can send messages; it cannot access files, shell commands, or approval controls.
       </p>
     </div>
   );

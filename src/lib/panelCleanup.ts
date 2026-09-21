@@ -10,12 +10,19 @@ import { cleanupPty } from '../hooks/usePty';
 import { destroyTerminal } from '../hooks/useTerminal';
 import { clearTerminalState } from '../components/terminal/XTermView';
 import { invoke } from '@tauri-apps/api/core';
+import { closeRemotePanel, splitRemotePanelId } from '../store/lanStore';
 
 /**
  * Shared panel close/cleanup logic used by TabBar and TabItem.
  * Handles resource teardown based on panel type, then removes the panel.
  */
 export async function closePanel(id: string): Promise<void> {
+  // Remote tiles belong only to this viewer; never run local or remote teardown.
+  // Check the qualified ID too, in case restore has not populated panelTypes yet.
+  if (splitRemotePanelId(id)) {
+    closeRemotePanel(id);
+    return;
+  }
   if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'codex') {
     await invoke('codex_close', { id }).catch(() => {});
     useCodexStore.getState().remove(id);

@@ -150,6 +150,8 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       onDoubleClick={handleDoubleClick}
       onContextMenu={isRemote ? undefined : (e) => onContextMenu(e, id)}
       {...attributes}
+      // Disabling drag must not disable the tab's focus/close controls.
+      aria-disabled={undefined}
       {...listeners}
     >
       {isGroup ? (
@@ -226,10 +228,12 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
           {pluginInstance.badge > 99 ? '99+' : pluginInstance.badge}
         </span>
       )}
-      {!isRemote && !isRemoteGroup && <button
+      {!isRemoteGroup && <button
         className="tab-close-btn"
         onClick={handleClose}
-        title="Close"
+        onPointerDown={(e) => e.stopPropagation()}
+        aria-label={isRemote ? 'Close remote panel locally' : 'Close'}
+        title={isRemote ? 'Close locally (keeps running on host)' : 'Close'}
       >
         {'\u00D7'}
       </button>}

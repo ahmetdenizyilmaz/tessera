@@ -37,6 +37,7 @@ pub fn run() {
         }))
         .manage(launch::LaunchQueue::default())
         .manage(lan_manager)
+        .manage(lan::terminal::TerminalRequests::default())
         .setup(|app| {
             // First launch: `cgui <dir>` passes the directory in our own argv.
             if let Some(dir) = launch::dir_from_argv(&std::env::args().collect::<Vec<_>>()) {
@@ -182,6 +183,8 @@ pub fn run() {
             lan::lan_forget,
             lan::lan_send_panel,
             lan::lan_read_panel,
+            lan::lan_read_terminal,
+            lan::terminal::lan_terminal_snapshot_result,
             // Computer commands
             computer::computer_screenshot,
             computer::computer_mouse_move,

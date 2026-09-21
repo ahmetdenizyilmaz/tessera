@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod terminal;
 mod transport;
 
 use std::collections::HashMap;
@@ -108,6 +109,7 @@ pub struct LanPeerState {
     pub address: String,
     pub connected: bool,
     pub panels: Vec<RemotePanelInfo>,
+    pub registry_ready: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -187,6 +189,7 @@ impl LanManager {
                 address: p.address.clone(),
                 connected: connections.contains_key(&p.device_id),
                 panels: remote.get(&p.device_id).cloned().unwrap_or_default(),
+                registry_ready: remote.contains_key(&p.device_id),
             })
             .collect::<Vec<_>>();
         peers.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -537,10 +540,15 @@ impl LanManager {
                     read_wire(&mut reader, &noise),
                 )
                 .await
-                .map_err(|_| format!("{} did not answer the connection request", peer_node.name))??;
+                .map_err(|_| {
+                    format!("{} did not answer the connection request", peer_node.name)
+                })??;
                 match decision {
                     WireMessage::PairDecision { accepted: true, .. } => {}
-                    WireMessage::PairDecision { accepted: false, reason } => {
+                    WireMessage::PairDecision {
+                        accepted: false,
+                        reason,
+                    } => {
                         return Err(reason.unwrap_or_else(|| {
                             format!("{} declined the connection", peer_node.name)
                         }));
@@ -548,9 +556,13 @@ impl LanManager {
                     _ => return Err("The other computer skipped the approval step".into()),
                 }
             } else {
-                let already_paired = self.config.lock().unwrap().peers.iter().any(|p| {
-                    p.device_id == derived_id && p.public_key == encoded_key
-                });
+                let already_paired = self
+                    .config
+                    .lock()
+                    .unwrap()
+                    .peers
+                    .iter()
+                    .any(|p| p.device_id == derived_id && p.public_key == encoded_key);
                 if !already_paired {
                     let info = PairRequestInfo {
                         request_id: uuid::Uuid::new_v4().to_string(),
@@ -741,23 +753,34 @@ impl LanManager {
                 request_id,
                 target_panel_id,
                 limit,
+                terminal,
             } => {
-                let result = crate::panelbus::tools::read_local(app, &target_panel_id, limit)
-                    .await
-                    .and_then(bound_transcript);
-                let reply = match result {
-                    Ok(v) => WireMessage::ReadResult {
-                        request_id,
-                        result: Some(v),
-                        error: None,
-                    },
-                    Err(e) => WireMessage::ReadResult {
-                        request_id,
-                        result: None,
-                        error: Some(e),
-                    },
-                };
-                let _ = tx.send(reply);
+                // Do not block this connection's reader while the host UI is
+                // producing a snapshot; both PCs may be viewing each other.
+                let app = app.clone();
+                let tx = tx.clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = if terminal {
+                        terminal::read_local(&app, &target_panel_id).await
+                    } else {
+                        crate::panelbus::tools::read_local(&app, &target_panel_id, limit)
+                            .await
+                            .and_then(bound_transcript)
+                    };
+                    let reply = match result {
+                        Ok(v) => WireMessage::ReadResult {
+                            request_id,
+                            result: Some(v),
+                            error: None,
+                        },
+                        Err(e) => WireMessage::ReadResult {
+                            request_id,
+                            result: None,
+                            error: Some(e),
+                        },
+                    };
+                    let _ = tx.send(reply);
+                });
             }
             WireMessage::SendResult {
                 request_id,
@@ -892,6 +915,17 @@ impl LanManager {
         target_panel_id: &str,
         limit: usize,
     ) -> Result<Value, String> {
+        self.read_remote_view(device_id, target_panel_id, limit, false)
+            .await
+    }
+
+    async fn read_remote_view(
+        &self,
+        device_id: &str,
+        target_panel_id: &str,
+        limit: usize,
+        terminal: bool,
+    ) -> Result<Value, String> {
         let request_id = uuid::Uuid::new_v4().to_string();
         let tx = self
             .connections
@@ -910,6 +944,7 @@ impl LanManager {
                 request_id: request_id.clone(),
                 target_panel_id: target_panel_id.into(),
                 limit: limit.clamp(1, 100),
+                terminal,
             })
             .is_err()
         {
@@ -1078,9 +1113,9 @@ fn validate_address(address: &str) -> Result<SocketAddr, String> {
     let trimmed = address.trim();
     let parsed: SocketAddr = match trimmed.parse::<Ipv4Addr>() {
         Ok(ip) => SocketAddr::new(IpAddr::V4(ip), DEFAULT_PORT),
-        Err(_) => trimmed.parse().map_err(|_| {
-            "Enter the other computer's IPv4 LAN address, for example 192.168.1.20"
-        })?,
+        Err(_) => trimmed
+            .parse()
+            .map_err(|_| "Enter the other computer's IPv4 LAN address, for example 192.168.1.20")?,
     };
     if !is_same_private_subnet(parsed.ip()) {
         return Err(
@@ -1185,10 +1220,19 @@ pub async fn lan_request_pair(
         .cloned();
     if let Some(existing) = existing {
         // Already paired with that address: a plain reconnect needs no approval.
-        if state.connections.lock().unwrap().contains_key(&existing.device_id) {
+        if state
+            .connections
+            .lock()
+            .unwrap()
+            .contains_key(&existing.device_id)
+        {
             return Ok(state.status());
         }
-        if state.connect_known(&existing.device_id, app.clone()).await.is_ok() {
+        if state
+            .connect_known(&existing.device_id, app.clone())
+            .await
+            .is_ok()
+        {
             state.emit_state(&app);
             return Ok(state.status());
         }
@@ -1321,9 +1365,106 @@ pub async fn lan_read_panel(
     state.read_remote(&device_id, &panel_id, limit).await
 }
 
+#[tauri::command]
+pub async fn lan_read_terminal(
+    device_id: String,
+    panel_id: String,
+    state: tauri::State<'_, LanManager>,
+) -> Result<Value, String> {
+    state.read_remote_view(&device_id, &panel_id, 1, true).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn encrypted_peers_exchange_panel_kinds_and_complete_terminal_frames_both_ways() {
+        let (a_key, _) = transport::generate_keypair().unwrap();
+        let (b_key, _) = transport::generate_keypair().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let (a, b) = tokio::join!(
+            TcpStream::connect(listener.local_addr().unwrap()),
+            listener.accept()
+        );
+        let mut a = a.unwrap();
+        let mut b = b.unwrap().0;
+        let (a_noise, b_noise) = tokio::join!(
+            transport::run_handshake(
+                &mut a,
+                transport::introduce_state(true, &a_key).unwrap(),
+                true
+            ),
+            transport::run_handshake(
+                &mut b,
+                transport::introduce_state(false, &b_key).unwrap(),
+                false
+            ),
+        );
+        let a_noise = Arc::new(tokio::sync::Mutex::new(a_noise.unwrap().0));
+        let b_noise = Arc::new(tokio::sync::Mutex::new(b_noise.unwrap().0));
+        let panels = vec![RemotePanelInfo {
+            id: "same-panel-id".into(),
+            name: "Claude terminal".into(),
+            cwd: "C:/test".into(),
+            kind: "terminal".into(),
+            provider: "claude".into(),
+            status: "running".into(),
+            busy: false,
+            awaiting_user: false,
+            model: None,
+            reachable: true,
+        }];
+        let registry = WireMessage::Registry { panels };
+        write_wire(&mut a, &a_noise, &registry).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(read_wire(&mut b, &b_noise).await.unwrap()).unwrap(),
+            serde_json::to_value(&registry).unwrap()
+        );
+        let request = WireMessage::ReadRequest {
+            request_id: "b-to-a".into(),
+            target_panel_id: "same-panel-id".into(),
+            limit: 1,
+            terminal: true,
+        };
+        write_wire(&mut b, &b_noise, &request).await.unwrap();
+        assert!(matches!(
+            read_wire(&mut a, &a_noise).await.unwrap(),
+            WireMessage::ReadRequest { terminal: true, .. }
+        ));
+        let frame = serde_json::json!({"kind":"terminal", "cols":120, "rows":40,
+            "data": "\u{1b}[31mwide 漢字\u{1b}[0m\r\n".repeat(8000)});
+        let reply = WireMessage::ReadResult {
+            request_id: "b-to-a".into(),
+            result: Some(frame.clone()),
+            error: None,
+        };
+        // A realistic screen spans multiple encrypted packets; use concurrent
+        // read/write so socket buffer capacity cannot mask framing failures.
+        let (sent, received) = tokio::join!(
+            write_wire(&mut a, &a_noise, &reply),
+            read_wire(&mut b, &b_noise)
+        );
+        sent.unwrap();
+        assert!(
+            matches!(received.unwrap(), WireMessage::ReadResult { request_id, result: Some(value), error: None }
+            if request_id == "b-to-a" && value == frame)
+        );
+        let reverse = WireMessage::ReadResult {
+            request_id: "a-to-b".into(),
+            result: Some(frame.clone()),
+            error: None,
+        };
+        let (sent, received) = tokio::join!(
+            write_wire(&mut b, &b_noise, &reverse),
+            read_wire(&mut a, &a_noise)
+        );
+        sent.unwrap();
+        assert!(
+            matches!(received.unwrap(), WireMessage::ReadResult { request_id, result: Some(value), error: None }
+            if request_id == "a-to-b" && value == frame)
+        );
+    }
 
     #[test]
     fn fingerprints_are_short_stable_and_grouped() {

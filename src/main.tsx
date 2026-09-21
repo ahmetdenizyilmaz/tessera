@@ -10,6 +10,7 @@ import { initPanelBus } from './lib/panelBus';
 import { initLaunchBridge } from './lib/launchBridge';
 import { initThemeManager } from './lib/themeManager';
 import { initLanBridge } from './store/lanStore';
+import { initTerminalSharing } from './lib/terminalSharing';
 import './styles/global.css';
 import './styles/themes.css';
 import './styles/terminal.css';
@@ -23,6 +24,7 @@ void initCodexBridge();
 initLaunchBridge();
 initThemeManager();
 void initLanBridge();
+void initTerminalSharing();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

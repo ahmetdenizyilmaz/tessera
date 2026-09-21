@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Monitor, RefreshCw, Send, WifiOff } from 'lucide-react';
+import { Monitor, RefreshCw, Send, WifiOff, X } from 'lucide-react';
 import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { ProviderIcon } from '../icons/ProviderIcons';
-import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
+import { closeRemotePanel, splitRemotePanelId, useLanStore } from '../../store/lanStore';
+import { RemoteTerminalView } from './RemoteTerminalView';
 
 interface TranscriptMessage {
   role?: string;
@@ -27,6 +28,8 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
   const parsed = useMemo(() => splitRemotePanelId(instanceId), [instanceId]);
   const peer = useLanStore((s) => s.status?.peers.find((p) => p.deviceId === parsed?.deviceId));
   const panel = peer?.panels.find((p) => p.id === parsed?.panelId);
+  const isTerminal = panel?.kind === 'terminal';
+  const [refreshKey, setRefreshKey] = useState(0);
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,6 +38,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
 
   const refresh = useCallback(async () => {
     if (!parsed || !peer?.connected) return;
+    if (isTerminal) { setRefreshKey(key => key + 1); return; }
     setLoading(true);
     try {
       const result = await invoke<{ messages?: TranscriptMessage[] }>('lan_read_panel', {
@@ -49,14 +53,15 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [parsed, peer?.connected]);
+  }, [parsed, peer?.connected, isTerminal]);
 
   useEffect(() => {
+    if (isTerminal) return;
     void refresh();
     if (!peer?.connected) return;
     const timer = setInterval(() => void refresh(), panel?.busy ? 2000 : 5000);
     return () => clearInterval(timer);
-  }, [refresh, peer?.connected, panel?.busy]);
+  }, [refresh, peer?.connected, panel?.busy, isTerminal]);
 
   const send = async () => {
     const text = draft.trim();
@@ -93,17 +98,25 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
         <span title={peer.connected ? 'Encrypted LAN connection active' : 'Remote computer offline'} style={{ color: peer.connected ? '#51cf66' : 'var(--text-muted)', display: 'flex' }}>
           {peer.connected ? <Monitor size={14} /> : <WifiOff size={14} />}
         </span>
-        <button className="btn btn-secondary" onClick={() => void refresh()} disabled={!peer.connected || loading} style={{ padding: 4 }} title="Refresh transcript">
+        <button className="btn btn-secondary" onClick={() => void refresh()} disabled={!peer.connected || loading} style={{ padding: 4 }} title={isTerminal ? 'Refresh terminal screen' : 'Refresh transcript'}>
           <RefreshCw size={13} className={loading ? 'spin' : ''} />
+        </button>
+        <button className="btn btn-secondary" onClick={(event) => { event.stopPropagation(); closeRemotePanel(instanceId); }}
+          onPointerDown={(event) => event.stopPropagation()} style={{ padding: 4 }}
+          aria-label="Close remote panel locally" title="Close locally (keeps running on host)">
+          <X size={13} />
         </button>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!peer.connected && (
           <div style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)' }}>
             {peer.name} is offline. Tessera will reconnect automatically when both computers are available.
           </div>
         )}
+      {isTerminal ? (
+        <RemoteTerminalView deviceId={parsed.deviceId} panelId={parsed.panelId} connected={peer.connected} refreshKey={refreshKey} />
+      ) : (
+      <div style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {messages.map((message, index) => {
           const role = message.role ?? 'assistant';
           return (
@@ -121,6 +134,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
         })}
         {peer.connected && !loading && messages.length === 0 && <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 24 }}>No conversation yet.</div>}
       </div>
+      )}
 
       {error && <div style={{ color: '#ff6b6b', fontSize: 11, padding: '4px 10px' }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
@@ -141,4 +155,3 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
     </div>
   );
 }
-

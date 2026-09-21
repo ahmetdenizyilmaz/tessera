@@ -63,6 +63,10 @@ pub enum WireMessage {
         request_id: String,
         target_panel_id: String,
         limit: usize,
+        /// Optional extension: older peers return a transcript, which the
+        /// viewer detects and reports as requiring a host update.
+        #[serde(default)]
+        terminal: bool,
     },
     ReadResult {
         request_id: String,
@@ -75,4 +79,27 @@ pub enum WireMessage {
     Pong {
         nonce: u64,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_reads_remain_transcripts_and_terminal_reads_are_explicit() {
+        let old = serde_json::json!({"type":"readRequest", "request_id":"r", "target_panel_id":"p", "limit":100});
+        assert!(matches!(
+            serde_json::from_value::<WireMessage>(old.clone()).unwrap(),
+            WireMessage::ReadRequest {
+                terminal: false,
+                ..
+            }
+        ));
+        let mut new = old;
+        new["terminal"] = Value::Bool(true);
+        assert!(matches!(
+            serde_json::from_value::<WireMessage>(new).unwrap(),
+            WireMessage::ReadRequest { terminal: true, .. }
+        ));
+    }
 }

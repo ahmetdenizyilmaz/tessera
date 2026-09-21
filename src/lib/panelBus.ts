@@ -20,7 +20,7 @@ import type { CodexConfig } from '../types/codex';
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore } from '../store/layoutStore';
-import { useGroupStore } from '../store/groupStore';
+import { captureGroupSnapshot, useGroupStore } from '../store/groupStore';
 import { useChatStore } from '../store/chatStore';
 
 declare global {
@@ -46,12 +46,13 @@ interface PanelInfoPayload {
 const SYNC_DEBOUNCE_MS = 250;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSerialized = '';
+let syncing = false;
 
-function snapshot(): PanelInfoPayload[] {
+export function snapshot(): PanelInfoPayload[] {
   const chat = useChatStore.getState().sessions;
   const instances = useInstanceStore.getState().instances;
   const ls = useLayoutStore.getState();
-  const groups = useGroupStore.getState().groups;
+  const { groups, rootLayout } = captureGroupSnapshot();
 
   // Every real panel, not just the current nav level. tabOrder holds only the
   // level being viewed (inside a group it's that group's children; at root the
@@ -59,7 +60,7 @@ function snapshot(): PanelInfoPayload[] {
   // Filtering to this set also drops the orphan instances that accumulate in
   // instanceStore. Non-Claude panel types (computer/plugin/widget/group) are
   // excluded — they have no messageable session.
-  const realIds = new Set<string>(ls.tabOrder);
+  const realIds = new Set<string>([...ls.tabOrder, ...(rootLayout?.tabOrder ?? [])]);
   for (const g of groups.values()) for (const c of g.childIds) realIds.add(c);
 
   const out: PanelInfoPayload[] = [];
@@ -90,19 +91,29 @@ function snapshot(): PanelInfoPayload[] {
   return out;
 }
 
-function scheduleSync() {
-  if (syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
+function scheduleSync(delay = SYNC_DEBOUNCE_MS) {
+  // A trailing debounce can starve forever while any panel is streaming.
+  if (syncTimer || syncing) return;
+  syncTimer = setTimeout(async () => {
     syncTimer = null;
     const panels = snapshot();
     // Skip no-op pushes: chatStore fires on every streamed token.
     const serialized = JSON.stringify(panels);
     if (serialized === lastSerialized) return;
-    lastSerialized = serialized;
-    invoke('panel_registry_sync', { panels }).catch((err) => {
+    syncing = true;
+    let retryDelay = SYNC_DEBOUNCE_MS;
+    try {
+      await invoke('panel_registry_sync', { panels });
+      lastSerialized = serialized;
+    } catch (err) {
       console.error('[panelBus] registry sync failed:', err);
-    });
-  }, SYNC_DEBOUNCE_MS);
+      retryDelay = 1000;
+    } finally {
+      syncing = false;
+      // Re-sample after acknowledgement: changes during IPC must not be lost.
+      scheduleSync(retryDelay);
+    }
+  }, delay);
 }
 
 export function initPanelBus() {
@@ -143,9 +154,18 @@ export function initPanelBus() {
     }
   };
 
-  useInstanceStore.subscribe(scheduleSync);
-  useLayoutStore.subscribe(scheduleSync);
-  useChatStore.subscribe(scheduleSync);
-  useCodexStore.subscribe(scheduleSync);
+  const unsubscribers = [
+    useInstanceStore.subscribe(() => scheduleSync()),
+    useLayoutStore.subscribe(() => scheduleSync()),
+    useGroupStore.subscribe(() => scheduleSync()),
+    useChatStore.subscribe(() => scheduleSync()),
+    useCodexStore.subscribe(() => scheduleSync()),
+  ];
   scheduleSync();
+  return () => {
+    unsubscribers.forEach(unsubscribe => unsubscribe());
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = null;
+    lastSerialized = '';
+  };
 }

@@ -16,6 +16,8 @@ import { terminalPlatform } from '../../lib/terminalPlatform';
 import { createTerminalResize } from '../../lib/terminalResize';
 import { activateTerminalLink } from '../../lib/terminalLinks';
 import { listen } from '@tauri-apps/api/event';
+import { registerSharedTerminal } from '../../lib/terminalSharing';
+import { terminalTheme } from '../../lib/terminalTheme';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
 
@@ -38,8 +40,8 @@ const bgPtyBuffers: Map<string, { chunks: string[]; cancel: () => void }> =
 const BG_BUFFER_MAX_BYTES = 1024 * 1024;
 const BG_TRIM_MARKER = '\r\n\x1b[2m[… output trimmed while panel was hidden …]\x1b[0m\r\n';
 
-function startBackgroundBuffering(instanceId: string) {
-  if (bgPtyBuffers.has(instanceId)) return;
+function startBackgroundBuffering(instanceId: string, release: () => void) {
+  if (bgPtyBuffers.has(instanceId)) { release(); return; }
 
   const chunks: string[] = [];
   let totalBytes = 0;
@@ -70,6 +72,7 @@ function startBackgroundBuffering(instanceId: string) {
     cancel: () => {
       cancelled = true;
       unlistenFn?.();
+      release();
     },
   });
 }
@@ -145,6 +148,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
   useEffect(() => {
     let mounted = true;
+    let disposed = false;
     const container = containerRef.current;
     if (!container || !platform) return;
 
@@ -159,31 +163,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const terminal = new Terminal({
       ...platform,
       ...terminalSizes.get(instanceId),
-      theme: {
-        background: '#1a1a2e',
-        foreground: '#e0e0e0',
-        cursor: '#4a9eff',
-        selectionBackground: 'rgba(74, 158, 255, 0.3)',
-        scrollbarSliderBackground: 'rgba(255, 255, 255, 0.15)',
-        scrollbarSliderHoverBackground: 'rgba(255, 255, 255, 0.25)',
-        scrollbarSliderActiveBackground: 'rgba(255, 255, 255, 0.30)',
-        black: '#2d2d2d',
-        brightBlack: '#555555',
-        red: '#ff6b6b',
-        brightRed: '#ff8787',
-        green: '#51cf66',
-        brightGreen: '#69db7c',
-        yellow: '#ffd43b',
-        brightYellow: '#ffe066',
-        blue: '#4a9eff',
-        brightBlue: '#74b9ff',
-        magenta: '#cc5de8',
-        brightMagenta: '#da77f2',
-        cyan: '#20c997',
-        brightCyan: '#38d9a9',
-        white: '#e0e0e0',
-        brightWhite: '#ffffff',
-      },
+      theme: terminalTheme,
       fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       cursorBlink: true,
@@ -204,6 +184,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    const unshare = registerSharedTerminal(instanceId, terminal, serializeAddon);
     const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
     const cursorGuard = installTerminalCursorGuard(terminal, () => {
       if (useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'codex') {
@@ -346,10 +327,12 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     let unlisten: (() => void) | null = null;
     const listening = (async () => {
       const fn = await onData((data) => {
-        if (!mounted) return;
+        // Keep the actual parser alive while hidden: serializing in the
+        // middle of a split escape sequence loses parser state.
+        if (disposed) return;
         terminal.write(data);
       });
-      if (!mounted) {
+      if (disposed) {
         fn();
         return;
       }
@@ -487,17 +470,25 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         // Serialization is best-effort — worse case the remount starts blank
       }
 
-      // Start background PTY buffering if PTY is still alive
-      if (isPtySpawned(instanceId)) {
-        startBackgroundBuffering(instanceId);
-      }
+      // Retain the parser for hidden/stopped panels, but release closed ones.
+      terminal.options.cursorBlink = false;
+      const release = () => {
+        disposed = true;
+        if (unlisten) unlisten();
+        unshare();
+        terminal.dispose();
+      };
 
       dataDisposable.dispose();
       unsubscribeCursor();
       cursorGuard.dispose();
       scrollGuard.dispose();
-      if (unlisten) unlisten();
-      terminal.dispose();
+      if (useInstanceStore.getState().instances.has(instanceId)) {
+        startBackgroundBuffering(instanceId, release);
+      } else {
+        release();
+        clearTerminalState(instanceId);
+      }
       termRef.current = null;
       resizeCoordinatorRef.current = null;
 

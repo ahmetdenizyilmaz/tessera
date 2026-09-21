@@ -1,4 +1,4 @@
-import { Folder, Monitor, LayoutGrid, Puzzle, LogIn, MessageSquare, Brain, X, WifiOff } from 'lucide-react';
+import { Folder, Monitor, LayoutGrid, Puzzle, LogIn, MessageSquare, Brain, X, WifiOff, Terminal } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore, type PanelType } from '../../store/layoutStore';
 import { useInstanceStore } from '../../store/instanceStore';
@@ -42,7 +42,8 @@ function ChildTile({ childId }: { childId: string }) {
   if (panelType === 'remote' && remote) {
     color = remote.peer.connected ? '#51cf66' : '#868e96';
     icon = <ProviderIcon provider={remote.panel.provider} size={ICON_SIZE} />;
-    badge = remote.peer.connected ? <Monitor size={BADGE_SIZE} /> : <WifiOff size={BADGE_SIZE} />;
+    badge = !remote.peer.connected ? <WifiOff size={BADGE_SIZE} />
+      : remote.panel.kind === 'terminal' ? <Terminal size={BADGE_SIZE} /> : <MessageSquare size={BADGE_SIZE} />;
     name = remote.panel.name;
   } else if (isGroup && group) {
     color = group.color ?? '#4a9eff';
@@ -212,7 +213,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
             </span>
           )}
         </span>
-        {!group?.remotePeerId && <button
+        <button
           onClick={(e) => { e.stopPropagation(); handleEnter(); }}
           style={{
             display: 'flex',
@@ -231,8 +232,8 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
         >
           <LogIn size={12} />
           Enter
-        </button>}
-        <button
+        </button>
+        {!group?.remotePeerId && <button
           onClick={(e) => { e.stopPropagation(); closePanel(groupId); }}
           style={{
             display: 'flex',
@@ -251,7 +252,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
           title="Close group"
         >
           <X size={14} />
-        </button>
+        </button>}
       </div>
 
       {/* Preview content */}
@@ -277,10 +278,15 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
               textAlign: 'center',
             }}
           >
-            Empty group
+            {group?.remotePeerId
+              ? !remotePeer?.connected ? 'Remote computer is offline'
+                : remotePeer.registryReady === false ? 'Waiting for shared panels…'
+                : remotePeer.panels.length > 0 ? 'All remote panels are closed locally' : 'No open panels on this computer'
+              : 'Empty group'}
             <br />
             <span style={{ fontSize: 11, opacity: 0.7 }}>
-              Click to enter
+              {group?.remotePeerId && remotePeer?.panels.length
+                ? 'Restore panels in Settings → Local Network' : 'Click to enter'}
             </span>
           </div>
         ) : (

@@ -168,8 +168,34 @@ export function captureGroupSnapshot(): {
   }
   const currentGroupId = state.groupStack[state.groupStack.length - 1];
   const groups = syncLayoutToGroup(state.groups, currentGroupId);
+  // Ancestors can also have unsaved live layouts while navigating deeper.
+  state.groupStack.slice(0, -1).forEach((id, index) => {
+    const saved = savedLayoutStack[index + 1];
+    const group = groups.get(id);
+    if (saved && group) groups.set(id, { ...group, childIds: saved.tabOrder });
+  });
   const rootLayout = savedLayoutStack.length > 0 ? savedLayoutStack[0] : null;
   return { groups, rootLayout };
+}
+
+/** Attach a discovered panel without changing the user's navigation level. */
+export function ensurePanelAtLevel(panelId: string, parentId: string | null, type: PanelType) {
+  const store = useGroupStore.getState();
+  const layout = useLayoutStore.getState();
+  if (layout.panelTypes[panelId] !== type) {
+    useLayoutStore.setState({ panelTypes: { ...layout.panelTypes, [panelId]: type } });
+  }
+  if (parentId !== null) store.addToGroup(parentId, panelId);
+  if (store.getCurrentGroupId() === parentId) {
+    if (!layout.tabOrder.includes(panelId)) useLayoutStore.getState().addPanel(panelId, type, true);
+    return;
+  }
+  const index = parentId === null ? 0 : store.groupStack.indexOf(parentId) + 1;
+  if (parentId !== null && index === 0) return;
+  const saved = savedLayoutStack[index];
+  if (saved && !saved.tabOrder.includes(panelId)) {
+    savedLayoutStack[index] = { ...saved, tabOrder: [...saved.tabOrder, panelId] };
+  }
 }
 
 // ─── Group Counter (anchored to globalThis for HMR survival)
