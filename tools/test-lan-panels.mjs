@@ -102,4 +102,42 @@ try {
   }
   expect(errors).toEqual([]);
   console.log('PASS tile/tab close stays local across offline, reconnect and reload; restore returns live screens without host teardown');
+
+  await viewer.evaluate(() => window.showGroups());
+  await viewer.locator('[data-fixture-group]').getByRole('button', { name: 'Close remote group locally', exact: true }).click();
+  await expect(viewer.locator('[data-fixture-group]')).toHaveCount(0);
+  await viewer.evaluate(() => { window.setConnected(false); window.setConnected(true); });
+  expect(await viewer.evaluate(() => window.calls.filter(c => /kill|close|destroy|lan_disconnect|lan_forget|lan_send_panel/.test(c.command)))).toEqual([]);
+  await viewer.reload();
+  await viewer.waitForFunction(() => !!window.showGroups);
+  await viewer.evaluate(() => window.showGroups());
+  await expect(viewer.locator('[data-fixture-group]')).toHaveCount(0);
+  await viewer.getByRole('button', { name: 'Restore closed group', exact: true }).click();
+  await expect(viewer.locator('[data-fixture-group]')).toHaveCount(1);
+  await viewer.locator('[data-fixture-tab]').getByRole('button', { name: 'Close remote group locally', exact: true }).click();
+  await expect(viewer.locator('[data-fixture-group]')).toHaveCount(0);
+  await viewer.getByRole('button', { name: 'Restore closed group', exact: true }).click();
+  await viewer.evaluate(() => window.addLocalGroup());
+  await expect(viewer.locator('[data-fixture-group]')).toHaveCount(2);
+  await viewer.locator('[data-fixture-group]').first().scrollIntoViewIfNeeded();
+  await viewer.screenshot({ path: '.tmp/lan-group-close-20260921.png', fullPage: true });
+  await viewer.locator('[data-fixture-group]').getByRole('button', { name: 'Close group and all panels', exact: true }).click();
+  const afterClose = await viewer.evaluate(() => window.workspaceState());
+  expect(afterClose.groups).toHaveLength(1);
+  expect(afterClose.order).toEqual(afterClose.groups);
+  expect(afterClose.types['fixture-widget']).toBeUndefined();
+  await viewer.locator('[data-fixture-group]').getByTitle('Enter group', { exact: true }).click();
+  // Production MosaicLayout completes this navigation after its animation.
+  await viewer.evaluate(async () => {
+    const { useGroupStore } = await import('/src/store/groupStore.ts');
+    useGroupStore.getState().commitEnterGroup();
+  });
+  await expect(viewer.locator('[data-fixture-id="host-claude"] .xterm')).toBeVisible();
+  await expect(viewer.getByText('Actual chat transcript')).toBeVisible();
+  await expect.poll(async () => terminalState(viewer, 'host-claude')).toEqual(await terminalState(owner, 'host-claude'));
+  for (const page of [owner, viewer]) {
+    expect(await page.evaluate(() => window.calls.filter(c => /kill|close|destroy|lan_disconnect|lan_forget|lan_send_panel/.test(c.command)))).toEqual([]);
+  }
+  expect(errors).toEqual([]);
+  console.log('PASS group card/tab close hides the whole peer locally; restored groups retain live host panels, and local groups close nested children');
 } finally { await browser.close(); }

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ensurePanelAtLevel, useGroupStore } from './groupStore';
+import { ensurePanelAtLevel, removePanelsFromWorkspace, useGroupStore } from './groupStore';
 import { computeRects, getDefaultConfig, useLayoutStore } from './layoutStore';
 
 export interface RemotePanelInfo {
@@ -57,6 +57,7 @@ interface LanStoreState {
   outgoing: string | null;
   /** Viewer-only preferences. Never sent to the owning computer. */
   hiddenPanelIds: string[];
+  hiddenPeerIds: string[];
   setStatus: (status: LanStatus) => void;
   setError: (error: string | null) => void;
   /**
@@ -83,6 +84,7 @@ export const useLanStore = create<LanStoreState>()(
       error: null,
       outgoing: null,
       hiddenPanelIds: [],
+      hiddenPeerIds: [],
       setStatus: (incoming) => {
         // The backend deliberately does not persist transcripts or panel
         // rosters. Retain the last public roster in localStorage so an offline
@@ -131,6 +133,7 @@ export const useLanStore = create<LanStoreState>()(
       partialize: (state) => ({
         status: state.status ? { ...state.status, pendingRequests: [] } : null,
         hiddenPanelIds: state.hiddenPanelIds,
+        hiddenPeerIds: state.hiddenPeerIds,
       }),
       merge: (persisted, current) => {
         const stored = persisted as Partial<LanStoreState> | undefined;
@@ -139,6 +142,8 @@ export const useLanStore = create<LanStoreState>()(
           ...current,
           hiddenPanelIds: Array.isArray(stored?.hiddenPanelIds)
             ? stored.hiddenPanelIds.filter((id): id is string => typeof id === 'string' && !!splitRemotePanelId(id)) : [],
+          hiddenPeerIds: Array.isArray(stored?.hiddenPeerIds)
+            ? stored.hiddenPeerIds.filter((id): id is string => typeof id === 'string' && !!id) : [],
           status: saved ? { ...saved, fingerprint: saved.fingerprint ?? '', pendingRequests: [],
             peers: saved.peers.map(peer => ({ ...peer, connected: false, registryReady: false })),
           } : null,
@@ -170,16 +175,35 @@ export function closeRemotePanel(id: string) {
   if (!splitRemotePanelId(id)) return;
   useLanStore.setState((state) => state.hiddenPanelIds.includes(id) ? state
     : { hiddenPanelIds: [...state.hiddenPanelIds, id] });
-  const layout = useLayoutStore.getState();
-  if (layout.tabOrder.includes(id)) layout.removePanel(id);
+  removePanelsFromWorkspace([id]);
   flushWorkspaceSync();
 }
 
 export function restoreRemotePanels(deviceId: string) {
   useLanStore.setState((state) => ({
     hiddenPanelIds: state.hiddenPanelIds.filter(id => splitRemotePanelId(id)?.deviceId !== deviceId),
+    hiddenPeerIds: state.hiddenPeerIds.filter(id => id !== deviceId),
   }));
   flushWorkspaceSync();
+}
+
+/** Hide an entire computer locally, while keeping its pairing and agents alive. */
+export function closeRemoteGroup(deviceId: string) {
+  useLanStore.setState(state => state.hiddenPeerIds.includes(deviceId) ? state
+    : { hiddenPeerIds: [...state.hiddenPeerIds, deviceId] });
+  removeRemoteGroup(deviceId);
+}
+
+function removeRemoteGroup(deviceId: string) {
+  const store = useGroupStore.getState();
+  const groups = [...store.groups.values()].filter(group => group.remotePeerId === deviceId);
+  const open = groups.find(group => store.groupStack.includes(group.id));
+  if (open) store.jumpToLevel(open.parentId);
+  const ids = new Set(groups.flatMap(group => [group.id, ...group.childIds]));
+  for (const id of Object.keys(useLayoutStore.getState().panelTypes)) {
+    if (splitRemotePanelId(id)?.deviceId === deviceId) ids.add(id);
+  }
+  if (ids.size) removePanelsFromWorkspace(ids);
 }
 
 /** Bring a paired computer's subgroup tab to the front if it is on this level. */
@@ -191,11 +215,15 @@ export function revealRemoteGroup(deviceId: string) {
 }
 
 export function syncRemoteGroups() {
-  const { status, hiddenPanelIds } = useLanStore.getState();
+  const { status, hiddenPanelIds, hiddenPeerIds } = useLanStore.getState();
   if (!status) return;
   const groupStore = useGroupStore.getState();
 
   for (const peer of status.peers) {
+    if (hiddenPeerIds.includes(peer.deviceId)) {
+      removeRemoteGroup(peer.deviceId);
+      continue;
+    }
     let group = [...groupStore.groups.values()].find((g) => g.remotePeerId === peer.deviceId);
     if (!group) {
       const groupId = groupStore.createGroup(null, peer.name);
@@ -267,28 +295,9 @@ export function syncRemoteGroups() {
 export function forgetRemoteGroup(deviceId: string) {
   useLanStore.setState((state) => ({
     hiddenPanelIds: state.hiddenPanelIds.filter(id => splitRemotePanelId(id)?.deviceId !== deviceId),
+    hiddenPeerIds: state.hiddenPeerIds.filter(id => id !== deviceId),
   }));
-  const store = useGroupStore.getState();
-  const group = [...store.groups.values()].find((g) => g.remotePeerId === deviceId);
-  if (!group) return;
-  if (store.getCurrentGroupId() === group.id) store.jumpToLevel(group.parentId);
-  const children = new Set(group.childIds);
-  useGroupStore.setState((state) => {
-    const groups = new Map(state.groups);
-    groups.delete(group.id);
-    for (const [id, candidate] of groups) {
-      if (candidate.childIds.includes(group.id)) groups.set(id, { ...candidate, childIds: candidate.childIds.filter((v) => v !== group.id) });
-    }
-    return { groups };
-  });
-  const ls = useLayoutStore.getState();
-  if (ls.tabOrder.includes(group.id)) ls.removePanel(group.id);
-  useLayoutStore.setState((state) => {
-    const panelTypes = { ...state.panelTypes };
-    delete panelTypes[group.id];
-    for (const id of children) delete panelTypes[id];
-    return { panelTypes };
-  });
+  removeRemoteGroup(deviceId);
 }
 
 export async function initLanBridge() {

@@ -30,6 +30,12 @@ Locally closed panels stay hidden across roster refreshes, reconnects and Tesser
 Use **Settings → Local Network → Restore closed panels** under the paired computer to show them
 again. New host panels still appear automatically.
 
+In 0.3.9, group cards, tabs and context menus also offer **Close group**. Closing a remote group
+hides the entire computer and all its panels locally, including newly announced panels, until you
+select **Restore closed group** in Local Network settings. Pairing and the host's sessions are
+untouched. Closing a regular local group now closes its panels and nested groups rather than
+ungrouping them; any remote groups inside it are only hidden locally.
+
 ## Connecting
 
 1. Click **+** and choose **Local PC**, or open **Settings → Local Network**.

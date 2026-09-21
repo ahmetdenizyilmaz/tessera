@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { closeRemotePanel, restoreRemotePanels, syncRemoteGroups, useLanStore, type LanStatus, type RemotePanelInfo } from './lanStore';
+import { closeRemoteGroup, closeRemotePanel, restoreRemotePanels, syncRemoteGroups, useLanStore, type LanStatus, type RemotePanelInfo } from './lanStore';
 import { useGroupStore } from './groupStore';
 import { useLayoutStore } from './layoutStore';
 
@@ -26,7 +26,7 @@ beforeEach(() => {
   useLayoutStore.setState({ tabOrder: [], panelTypes: {}, panelRects: new Map(), layoutConfig: null, focusedId: null, activeTabId: null, maximizedId: null });
   useGroupStore.getState().restoreGroups(new Map());
   useGroupStore.setState({ groups: new Map() });
-  useLanStore.setState({ status: null, hiddenPanelIds: [] });
+  useLanStore.setState({ status: null, hiddenPanelIds: [], hiddenPeerIds: [] });
 });
 afterEach(async () => { await vi.runOnlyPendingTimersAsync(); vi.useRealTimers(); });
 const remoteGroup = () => [...useGroupStore.getState().groups.values()].find(g => g.remotePeerId === 'peer')!;
@@ -160,5 +160,63 @@ it('can close the last visible panel and restore the empty open group', () => {
   restoreRemotePanels('peer');
   expect(useLayoutStore.getState().tabOrder).toEqual(['lan:peer:terminal-1']);
   expect(useLayoutStore.getState().activeTabId).toBe('lan:peer:terminal-1');
+  expect(invoke).not.toHaveBeenCalled();
+});
+
+it('closes an open remote group locally and keeps it hidden through reconnects and new host panels', () => {
+  useLanStore.getState().setStatus(status([panel]));
+  syncRemoteGroups();
+  const groupId = remoteGroup().id;
+  useGroupStore.getState().enterGroup(groupId);
+  useGroupStore.getState().commitEnterGroup();
+  closeRemoteGroup('peer');
+  expect(useGroupStore.getState().getCurrentGroupId()).toBeNull();
+  expect(useGroupStore.getState().groups.has(groupId)).toBe(false);
+  expect(useLayoutStore.getState().tabOrder).toEqual([]);
+  expect(useLayoutStore.getState().panelTypes).toEqual({});
+  useLanStore.getState().setStatus(status([], false));
+  syncRemoteGroups();
+  useLanStore.getState().setStatus(status([panel, { ...panel, id: 'new' }]));
+  syncRemoteGroups();
+  expect(remoteGroup()).toBeUndefined();
+  expect(useLanStore.getState().status?.peers[0].panels).toHaveLength(2);
+  restoreRemotePanels('peer');
+  expect(remoteGroup().childIds).toEqual(['lan:peer:terminal-1', 'lan:peer:new']);
+  expect(useLayoutStore.getState().tabOrder).toEqual([remoteGroup().id]);
+  expect(invoke).not.toHaveBeenCalled();
+});
+
+it('removes a closed remote group from saved ancestor layouts without moving the current view', () => {
+  useLanStore.getState().setStatus(status([panel]));
+  syncRemoteGroups();
+  const groupId = remoteGroup().id;
+  const local = useGroupStore.getState().createGroup(null, 'Local');
+  useLayoutStore.getState().addPanel(local, 'group');
+  useGroupStore.getState().enterGroup(local);
+  useGroupStore.getState().commitEnterGroup();
+  closeRemoteGroup('peer');
+  expect(useGroupStore.getState().getCurrentGroupId()).toBe(local);
+  useGroupStore.getState().exitGroup();
+  expect(useLayoutStore.getState().tabOrder).toEqual([local]);
+  expect(useLayoutStore.getState().panelTypes[groupId]).toBeUndefined();
+  expect(useLayoutStore.getState().panelTypes['lan:peer:terminal-1']).toBeUndefined();
+});
+
+it('persists group-level closes and removes a stale group restored by the workspace', async () => {
+  useLanStore.getState().setStatus(status([panel]));
+  syncRemoteGroups();
+  const staleGroups = new Map(useGroupStore.getState().groups);
+  closeRemoteGroup('peer');
+  const saved = storage.getItem('tessera-lan-public-state')!;
+  expect(JSON.parse(saved).state.hiddenPeerIds).toEqual(['peer']);
+  useLanStore.setState({ hiddenPeerIds: [] });
+  storage.setItem('tessera-lan-public-state', saved);
+  await useLanStore.persist.rehydrate();
+  useGroupStore.getState().restoreGroups(staleGroups);
+  useLayoutStore.setState({ tabOrder: [...staleGroups.keys()] });
+  syncRemoteGroups();
+  expect(remoteGroup()).toBeUndefined();
+  expect(useLayoutStore.getState().tabOrder).toEqual([]);
+  expect(useLanStore.getState().hiddenPeerIds).toEqual(['peer']);
   expect(invoke).not.toHaveBeenCalled();
 });

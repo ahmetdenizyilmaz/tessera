@@ -198,6 +198,48 @@ export function ensurePanelAtLevel(panelId: string, parentId: string | null, typ
   }
 }
 
+/** Remove closed views from every navigation level, including saved ancestors. */
+export function removePanelsFromWorkspace(panelIds: Iterable<string>) {
+  const ids = new Set(panelIds);
+  const withoutTypes = <T,>(values: Record<string, T>) => Object.fromEntries(
+    Object.entries(values).filter(([id]) => !ids.has(id)),
+  );
+  for (const id of useLayoutStore.getState().tabOrder) {
+    if (ids.has(id)) useLayoutStore.getState().removePanel(id);
+  }
+  const layout = useLayoutStore.getState();
+  if (Object.keys(layout.panelTypes).some(id => ids.has(id)) || Object.keys(layout.widgetKinds).some(id => ids.has(id))) {
+    useLayoutStore.setState({ panelTypes: withoutTypes(layout.panelTypes), widgetKinds: withoutTypes(layout.widgetKinds) });
+  }
+  savedLayoutStack.forEach((saved, index) => {
+    const tabOrder = saved.tabOrder.filter(id => !ids.has(id));
+    const changed = tabOrder.length !== saved.tabOrder.length;
+    savedLayoutStack[index] = {
+      ...saved, tabOrder,
+      activeTabId: ids.has(saved.activeTabId ?? '') ? (tabOrder[0] ?? null) : saved.activeTabId,
+      focusedId: ids.has(saved.focusedId ?? '') ? (tabOrder[0] ?? null) : saved.focusedId,
+      layoutConfig: changed ? null : saved.layoutConfig,
+      panelRects: changed ? new Map() : saved.panelRects,
+      panelTypes: withoutTypes(saved.panelTypes), widgetKinds: withoutTypes(saved.widgetKinds),
+    };
+  });
+  useGroupStore.setState(state => {
+    const groups = new Map(state.groups);
+    let changed = false;
+    for (const [id, group] of groups) {
+      if (ids.has(id)) { groups.delete(id); changed = true; continue; }
+      const childIds = group.childIds.filter(child => !ids.has(child));
+      if (childIds.length === group.childIds.length) continue;
+      changed = true;
+      groups.set(id, { ...group, childIds, layoutConfig: null, panelRects: new Map(),
+        focusedChildId: ids.has(group.focusedChildId ?? '') ? (childIds[0] ?? null) : group.focusedChildId,
+        activeChildId: ids.has(group.activeChildId ?? '') ? (childIds[0] ?? null) : group.activeChildId,
+      });
+    }
+    return changed ? { groups } : state;
+  });
+}
+
 // ─── Group Counter (anchored to globalThis for HMR survival)
 
 const groupCounter: { value: number } = (globalThis as any).__groupCounter ??= { value: 0 };

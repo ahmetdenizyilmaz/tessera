@@ -271,13 +271,13 @@ export function TabContextMenu({
         </>
       )}
 
-      {!isRemoteGroup && <div className="context-menu-separator" />}
-      {!isRemoteGroup && <button
+      <div className="context-menu-separator" />
+      <button
         className="context-menu-item context-menu-item-danger"
         onClick={() => { onClose(); onDismiss(); }}
       >
-        Close
-      </button>}
+        {isRemoteGroup ? 'Close group locally' : groups.has(tabId) ? 'Close group and all panels' : 'Close'}
+      </button>
     </div>
   );
 }

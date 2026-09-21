@@ -233,8 +233,9 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
           <LogIn size={12} />
           Enter
         </button>
-        {!group?.remotePeerId && <button
-          onClick={(e) => { e.stopPropagation(); closePanel(groupId); }}
+        <button
+          onClick={(e) => { e.stopPropagation(); void closePanel(groupId); }}
+          onPointerDown={(e) => e.stopPropagation()}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -249,10 +250,11 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
             cursor: 'pointer',
             flexShrink: 0,
           }}
-          title="Close group"
+          aria-label={group?.remotePeerId ? 'Close remote group locally' : 'Close group and all panels'}
+          title={group?.remotePeerId ? 'Close group locally (all host panels keep running)' : 'Close group and all panels inside'}
         >
           <X size={14} />
-        </button>}
+        </button>
       </div>
 
       {/* Preview content */}

@@ -6,6 +6,7 @@ import { type LanStatus, remotePanelId, restoreRemotePanels, useLanStore } from 
 export function NetworkSettings() {
   const status = useLanStore((s) => s.status);
   const hiddenPanelIds = useLanStore((s) => s.hiddenPanelIds);
+  const hiddenPeerIds = useLanStore((s) => s.hiddenPeerIds);
   const globalError = useLanStore((s) => s.error);
   const outgoing = useLanStore((s) => s.outgoing);
   const requestPair = useLanStore((s) => s.requestPair);
@@ -125,11 +126,12 @@ export function NetworkSettings() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{peer.name}</div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{peer.address} · {peer.connected ? `connected · ${peer.panels.length} panels` : 'offline'}</div>
-              {peer.panels.some(panel => hiddenPanelIds.includes(remotePanelId(peer.deviceId, panel.id))) && (
+              {(hiddenPeerIds.includes(peer.deviceId) || peer.panels.some(panel => hiddenPanelIds.includes(remotePanelId(peer.deviceId, panel.id)))) && (
                 <button className="btn btn-secondary" style={{ marginTop: 6, fontSize: 11 }}
-                  title="Show this computer's locally closed panels again"
+                  title="Show this computer's locally closed group and panels again"
                   onClick={() => restoreRemotePanels(peer.deviceId)}>
-                  Restore closed panels ({peer.panels.filter(panel => hiddenPanelIds.includes(remotePanelId(peer.deviceId, panel.id))).length})
+                  {hiddenPeerIds.includes(peer.deviceId) ? 'Restore closed group'
+                    : `Restore closed panels (${peer.panels.filter(panel => hiddenPanelIds.includes(remotePanelId(peer.deviceId, panel.id))).length})`}
                 </button>
               )}
             </div>
@@ -145,7 +147,7 @@ export function NetworkSettings() {
 
       {(error || globalError) && <div style={{ color: '#ff6b6b', fontSize: 11 }}>{error || globalError}</div>}
       <p className="form-hint">
-        Closing a remote panel hides it only on this computer; the host keeps running. Use Restore closed panels above to show it again.
+        Closing a remote panel or group hides it only on this computer; the host keeps running. Restore closed groups and panels above to show them again.
         Windows may ask once for firewall access. Allow Tessera on Private networks only. A paired computer sees panel names, status, recent transcripts and terminal screens and can send messages; it cannot access files, shell commands, or approval controls.
       </p>
     </div>
