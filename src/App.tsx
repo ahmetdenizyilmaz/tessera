@@ -35,6 +35,7 @@ import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
 import { registerBuiltins } from './lib/builtinPlugins';
 import { openNewSessionWizard, createPluginPanel } from './lib/newSessionActions';
+import { installPanelShortcuts } from './lib/panelShortcuts';
 import type { LlmProvider } from './types/instance';
 
 // Register built-in plugins at module load (before any render)
@@ -112,6 +113,13 @@ export default function App() {
   }, []);
 
   // Global keyboard shortcuts
+  useEffect(() => installPanelShortcuts({
+    isBlocked: () => showSplash || showNewInstance || showSettings || !!showSaveLoad || showClaudeMd ||
+      showAbout || showResumeSession || showSessionHistory || !!showNewLlm || attachSession.open || showUsage,
+    onFocus: () => setViewMode('panels'),
+  }), [showSplash, showNewInstance, showSettings, showSaveLoad, showClaudeMd, showAbout,
+    showResumeSession, showSessionHistory, showNewLlm, attachSession.open, showUsage]);
+
   useEffect(() => {
     const anyDialogOpen =
       showNewInstance || showSettings || !!showSaveLoad || showClaudeMd ||

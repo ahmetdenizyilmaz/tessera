@@ -7,6 +7,8 @@ import { lazy, Suspense } from 'react';
 const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import NewSessionWizard from '../wizard/NewSessionWizard';
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
   projects: { icon: <FolderOpen size={14} />, label: 'Projects' },
@@ -95,10 +97,12 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
           whiteSpace: 'nowrap',
         }}>
           {info.label}
+          <PanelShortcutBadge panelId={instanceId} />
         </span>
         <button
           onClick={(e) => {
             e.stopPropagation();
+            usePanelShortcutStore.getState().removePanels([instanceId]);
             removePanel(instanceId);
           }}
           style={{

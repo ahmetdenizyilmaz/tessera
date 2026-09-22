@@ -6,6 +6,7 @@ import { useGroupStore } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSessionStore } from '../store/sessionStore';
+import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import { restoreOnce, saveNow, scheduleSave } from '../lib/workspaceSerializer';
 
 const AUTOSAVE_INTERVAL = 30000; // 30 seconds
@@ -96,6 +97,9 @@ export function useAutoSave() {
       useLayoutStore.subscribe(scheduleSave),
       useGroupStore.subscribe(scheduleSave),
       usePluginStore.subscribe(scheduleSave),
+      usePanelShortcutStore.subscribe((state, previous) => {
+        if (state.bindings !== previous.bindings) scheduleSave();
+      }),
     ];
 
     return () => {

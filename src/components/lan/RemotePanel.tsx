@@ -5,6 +5,7 @@ import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import { closeRemotePanel, splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { RemoteTerminalView } from './RemoteTerminalView';
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
 interface TranscriptMessage {
   role?: string;
@@ -88,7 +89,10 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
       <div className="terminal-toolbar" style={{ minHeight: 36, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <ProviderIcon provider={panel.provider} size={16} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{panel.name}</div>
+          <div className="panel-title-with-shortcut" style={{ fontSize: 12, fontWeight: 600 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{panel.name}</span>
+            <PanelShortcutBadge panelId={instanceId} />
+          </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', gap: 6 }}>
             <span>{peer.name}</span>
             {panel.model && <span>· {panel.model}</span>}

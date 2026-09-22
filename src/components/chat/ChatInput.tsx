@@ -52,6 +52,12 @@ export function clearInstanceDraft(instanceId: string): void {
 // Mounted inputs register here so external sources (file drops) can append
 // text to the right panel's composer.
 const draftListeners = new Map<string, (value: string) => void>();
+useInstanceStore.subscribe((state, previous) => {
+  if (state.instances === previous.instances) return;
+  for (const id of draftStore.keys()) {
+    if (!state.instances.has(id)) clearInstanceDraft(id);
+  }
+});
 
 /** Append text to a panel's composer, adding a separating space if needed. */
 export function insertIntoDraft(instanceId: string, text: string): void {
@@ -434,12 +440,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
     };
   }, [instanceId]);
 
-  // Cleanup draft on unmount (instance closed)
-  useEffect(() => {
-    return () => {
-      draftStore.delete(instanceId);
-    };
-  }, [instanceId]);
+  // A group switch also unmounts this input. Only permanent instance removal
+  // (handled above) should discard its text draft.
 
   // Focus textarea when ready
   useEffect(() => {

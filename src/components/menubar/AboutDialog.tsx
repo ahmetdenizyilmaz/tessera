@@ -7,6 +7,10 @@ interface AboutDialogProps {
 }
 
 const SHORTCUTS: { key: string; label: string }[] = [
+  { key: 'Alt+0–9', label: 'Assign Number to Focused Panel' },
+  { key: 'Ctrl+0–9', label: 'Focus Assigned Panel' },
+  { key: 'Hold Ctrl', label: 'Show Panel Shortcut Numbers' },
+  { key: 'Hold Alt', label: 'Show Red Shortcut Assignment Labels' },
   { key: 'Ctrl+Tab', label: 'Next Panel' },
   { key: 'Ctrl+Shift+Tab', label: 'Previous Panel' },
   { key: 'Ctrl+N', label: 'New Instance (dialog)' },

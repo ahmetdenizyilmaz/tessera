@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { X, Puzzle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { usePluginStore } from '../../store/pluginStore';
 import { useLayoutStore } from '../../store/layoutStore';
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
 
@@ -58,6 +60,7 @@ export function PluginPanel({ instanceId }: PluginPanelProps) {
       });
     }
     destroyInstance(instanceId);
+    usePanelShortcutStore.getState().removePanels([instanceId]);
     removePanel(instanceId);
   }, [instanceId, removePanel, destroyInstance]);
 
@@ -167,6 +170,7 @@ export function PluginPanel({ instanceId }: PluginPanelProps) {
             color: 'var(--text-primary)',
           }}>
             Plugin Not Found
+            <PanelShortcutBadge panelId={instanceId} />
           </span>
           <button
             onClick={handleClose}
@@ -256,6 +260,7 @@ export function PluginPanel({ instanceId }: PluginPanelProps) {
           whiteSpace: 'nowrap',
         }}>
           {title}
+          <PanelShortcutBadge panelId={instanceId} />
         </span>
 
         {/* Badge */}

@@ -76,7 +76,12 @@ export function GeneralSettings() {
           onChange={(e) => updateSettings({ forkOpeningMessage: e.target.value })}
           placeholder="Leave empty to send nothing"
         />
-        <span className="form-hint">Sent automatically when a forked panel opens, so the new agent picks up the conversation right away. You can edit it per fork.</span>
+        <span className="form-hint">Optional. Leave empty to carry over the conversation and wait for your next message. If provided, it is sent automatically when the fork opens. You can edit it per fork.</span>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Panel shortcuts</label>
+        <span className="form-hint">Focus a panel and press Alt+0–9 to assign a number. Ctrl+that number focuses it, including inside groups. Hold Ctrl to see blue Ctrl + number labels. Hold Alt to see red assignment labels; Ctrl + ? appears only on the focused panel if it has no shortcut. Unfocused, unassigned panels show no label. Release the keys to hide them. Assigning an occupied number moves it to the selected panel. Shortcuts are included in workspace files and restored on restart when Auto-save workspace is enabled.</span>
       </div>
 
       <div className="form-group">

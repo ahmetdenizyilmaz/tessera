@@ -14,6 +14,7 @@ import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
 import lmstudioIcon from '../../assets/lmstudio-icon.png';
 import { remotePanelByCompositeId, useLanStore } from '../../store/lanStore';
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
 const PROVIDER_ICONS: Record<string, string> = {
   claude: claudeIcon,
@@ -209,6 +210,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       ) : (
         <span className="tab-name">{tabName}</span>
       )}
+      <PanelShortcutBadge panelId={id} />
       {isPlugin && pluginInstance?.badge != null && pluginInstance.badge > 0 && (
         <span style={{
           background: 'var(--accent)',

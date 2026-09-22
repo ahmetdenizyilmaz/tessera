@@ -3,6 +3,7 @@ import { GitFork } from 'lucide-react';
 import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { useLlmChatStore } from '../../store/llmChatStore';
 import { invoke } from '@tauri-apps/api/core';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
@@ -220,6 +221,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
             </span>
           )}
 
+          <PanelShortcutBadge panelId={instanceId} />
           <span
             className="status-badge"
             style={{ color: statusColors[instance.status] ?? '#a0a0a0' }}

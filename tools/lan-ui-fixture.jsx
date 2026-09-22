@@ -67,6 +67,7 @@ function Viewer() {
     </div></SortableContext></DndContext>
     <div style={{ display: 'flex', height: 600 }}>
       {order.map(id => <div key={id} data-fixture-id={id.slice('lan:owner:'.length)}
+        data-panel-id={id} tabIndex={-1}
         data-fixture-group={types[id] === 'group' ? id : undefined} style={{ width: 380, height: 580 }}>
         {types[id] === 'group' ? <GroupPreview groupId={id} /> : <RemotePanel instanceId={id} />}
       </div>)}

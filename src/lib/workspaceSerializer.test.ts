@@ -7,6 +7,7 @@ import {
 import { useInstanceStore } from "../store/instanceStore";
 import { useLayoutStore } from "../store/layoutStore";
 import { useGroupStore } from "../store/groupStore";
+import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import type { InstanceConfig } from "../types/instance";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => true) }));
@@ -41,6 +42,7 @@ beforeEach(() => {
     focusedId: null,
   });
   useGroupStore.setState({ groups: new Map(), groupStack: [] });
+  usePanelShortcutStore.getState().restore({});
 });
 it("restores an unsent Codex panel without an unresumable thread ID", () => {
   const id = useInstanceStore
@@ -161,4 +163,31 @@ it("round-trips a LAN subgroup without creating local agent instances", () => {
     childIds: [remoteId],
   });
   expect(restored.layout.panelTypes[remoteId]).toBe("remote");
+});
+
+it('round-trips shortcut assignments using restored panel IDs, not old instance IDs', () => {
+  const first = useInstanceStore.getState().addInstance(config, 'Assigned root');
+  useLayoutStore.getState().addPanel(first);
+  const group = useGroupStore.getState().createGroup(null, 'Assigned group');
+  useLayoutStore.getState().addPanel(group, 'group');
+  const child = useInstanceStore.getState().addInstance(config, 'Assigned child');
+  useGroupStore.getState().addToGroup(group, child);
+  useLayoutStore.setState(state => ({ panelTypes: { ...state.panelTypes, [child]: 'terminal' } }));
+  usePanelShortcutStore.getState().restore({ 0: first, 1: child, 2: group, 3: 'closed' });
+  const saved = serializeWorkspace();
+  expect(saved.panelShortcuts).toEqual({ 0: first, 1: child, 2: group });
+  deserializeWorkspace(saved);
+  const restored = [...useInstanceStore.getState().instances.values()];
+  expect(usePanelShortcutStore.getState().bindings).toEqual({
+    0: restored.find(instance => instance.name === 'Assigned root')!.id,
+    1: restored.find(instance => instance.name === 'Assigned child')!.id,
+    2: group,
+  });
+  expect(usePanelShortcutStore.getState().bindings['0']).not.toBe(first);
+});
+
+it('loading an older workspace clears shortcuts from the previous workspace', () => {
+  usePanelShortcutStore.getState().assign('1', 'old-panel');
+  deserializeWorkspace({ version: 3, instances: [], groups: {}, plugins: [] });
+  expect(usePanelShortcutStore.getState().bindings).toEqual({});
 });

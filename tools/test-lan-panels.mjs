@@ -48,6 +48,29 @@ try {
   console.log('PASS both providers retain terminal geometry, Unicode, ANSI colors, cursor and alternate screen; chat stays chat');
   await viewer.screenshot({ path: '.tmp/lan-panel-fix-20260921.png', fullPage: true });
 
+  await viewer.evaluate(async () => {
+    const { installPanelShortcuts } = await import('/src/lib/panelShortcuts.ts');
+    const { useLayoutStore } = await import('/src/store/layoutStore.ts');
+    const { usePanelShortcutStore } = await import('/src/store/panelShortcutStore.ts');
+    installPanelShortcuts();
+    window.shortcutState = () => ({ focused: useLayoutStore.getState().focusedId, bindings: usePanelShortcutStore.getState().bindings });
+  });
+  await viewer.locator('[data-fixture-tab="lan:owner:host-claude"] .tab-name').click();
+  await viewer.keyboard.press('Alt+5');
+  await viewer.locator('[data-fixture-tab="lan:owner:host-codex"] .tab-name').click();
+  await viewer.keyboard.press('Alt+6');
+  await viewer.evaluate(() => window.showGroups());
+  await viewer.keyboard.press('Control+5');
+  await expect.poll(() => viewer.evaluate(() => window.shortcutState().focused)).toBe('lan:owner:host-claude');
+  await expect(viewer.locator('[data-fixture-id="host-claude"] .xterm-helper-textarea')).toBeFocused();
+  await viewer.keyboard.down('Control');
+  await expect(viewer.locator('[data-fixture-id="host-claude"] .panel-shortcut-badge')).toHaveText('Ctrl + 5');
+  await viewer.keyboard.up('Control');
+  await expect(viewer.locator('.panel-shortcut-badge')).toHaveCount(0);
+  await viewer.keyboard.type('not sent to host');
+  expect(await viewer.evaluate(() => window.calls.filter(c => ['pty_write', 'lan_send_panel'].includes(c.command)))).toEqual([]);
+  console.log('PASS remote panel shortcuts navigate into the peer group, show Ctrl-only badges and never type into the host');
+
   await owner.evaluate(() => window.showOwner(true));
   await owner.locator('[data-fixture-id="host-claude"]').waitFor({ state: 'detached' });
   await owner.evaluate(() => window.output('host-claude', '\r\nHidden host output'));
@@ -80,6 +103,7 @@ try {
 
   await viewer.locator('[data-fixture-id="host-claude"]').getByRole('button', { name: 'Close remote panel locally' }).click();
   await expect(viewer.locator('[data-fixture-id="host-claude"]')).toHaveCount(0);
+  expect(await viewer.evaluate(() => window.shortcutState().bindings['5'])).toBeUndefined();
   await expect(viewer.locator('[data-fixture-id="host-codex"] .xterm')).toBeVisible();
   await viewer.evaluate(() => window.setConnected(false));
   await viewer.locator('[data-fixture-tab="lan:owner:host-chat"]').getByRole('button', { name: 'Close remote panel locally', exact: true }).click();

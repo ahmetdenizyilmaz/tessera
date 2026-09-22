@@ -5,6 +5,7 @@ import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/g
 import { usePluginStore } from '../store/pluginStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useCodexStore } from '../store/codexStore';
+import { normalizePanelShortcuts, usePanelShortcutStore, type PanelShortcutBindings } from '../store/panelShortcutStore';
 import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
 
@@ -70,6 +71,7 @@ export interface WorkspaceSnapshotV3 {
   layout: SavedLayout;
   groups: Record<string, SerializedGroup>;
   plugins: SavedPlugin[];
+  panelShortcuts?: PanelShortcutBindings;
 }
 
 /** Internal: legacy v2 snapshots may lack a layout section entirely */
@@ -78,6 +80,7 @@ interface NormalizedSnapshot {
   layout: SavedLayout | null;
   groups: Record<string, SerializedGroup>;
   plugins: SavedPlugin[];
+  panelShortcuts?: PanelShortcutBindings;
 }
 
 // ─── Serialize ───────────────────────────────────────────────────────────────
@@ -109,9 +112,12 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
     };
   }
 
+  const openPanels = new Set([...layoutSrc.tabOrder, ...[...groups.values()].flatMap(group => group.childIds)]);
+
   return {
     version: 3,
     savedAt: Date.now(),
+    panelShortcuts: Object.fromEntries(Object.entries(usePanelShortcutStore.getState().bindings).filter(([, id]) => openPanels.has(id))),
     instances: Array.from(instances.values()).map((inst) => ({
       id: inst.id,
       name: inst.name,
@@ -228,6 +234,7 @@ function normalizeSnapshot(raw: unknown): NormalizedSnapshot | null {
         : null,
       groups: snap.groups ?? {},
       plugins: snap.plugins ?? [],
+      panelShortcuts: normalizePanelShortcuts(snap.panelShortcuts),
     };
   }
 
@@ -475,6 +482,11 @@ export function deserializeWorkspace(raw: unknown): void {
   // that no longer map to a live instance.
   const liveIds = new Set(useInstanceStore.getState().instances.keys());
   useLlmChatStore.getState().remapConversations(idMap, liveIds);
+  const openPanels = new Set([...useLayoutStore.getState().tabOrder, ...[...newGroups.values()].flatMap(group => group.childIds)]);
+  usePanelShortcutStore.getState().restore(Object.fromEntries(
+    Object.entries(snapshot.panelShortcuts ?? {}).map(([number, id]) => [number, remapId(id)])
+      .filter(([, id]) => openPanels.has(id)),
+  ));
 }
 
 // ─── Restore (once per app lifetime) ─────────────────────────────────────────

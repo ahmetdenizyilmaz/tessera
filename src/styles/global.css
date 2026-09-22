@@ -366,6 +366,11 @@ body,
 
 .agent-panel-toolbar { height: 40px; gap: 6px; container-type: inline-size; }
 .agent-panel-heading { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.panel-title-with-shortcut { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.panel-shortcut-badge { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 13px; padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; background: transparent; color: var(--accent); font: 500 9px/1 var(--font-ui, sans-serif); white-space: nowrap; pointer-events: none; }
+.panel-shortcut-badge--assign { color: #ef5350; }
+.terminal-toolbar span > .panel-shortcut-badge { margin-left: 4px; }
+.tab-item > .panel-shortcut-badge { height: 11px; padding: 0 2px; font-size: 8px; margin-left: -3px; }
 .agent-panel-metadata { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--text-muted); font-size: 10px; overflow: hidden; white-space: nowrap; }
 .agent-panel-provider-icon { display: inline-flex; flex-shrink: 0; }
 .agent-panel-metadata-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

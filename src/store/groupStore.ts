@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { LayoutConfig, PanelRect, StealFraction } from '../types/session';
 import { useLayoutStore, getDefaultConfig, computeRects, type PanelType } from './layoutStore';
+import { usePanelShortcutStore } from './panelShortcutStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -201,6 +202,7 @@ export function ensurePanelAtLevel(panelId: string, parentId: string | null, typ
 /** Remove closed views from every navigation level, including saved ancestors. */
 export function removePanelsFromWorkspace(panelIds: Iterable<string>) {
   const ids = new Set(panelIds);
+  usePanelShortcutStore.getState().removePanels(ids);
   const withoutTypes = <T,>(values: Record<string, T>) => Object.fromEntries(
     Object.entries(values).filter(([id]) => !ids.has(id)),
   );

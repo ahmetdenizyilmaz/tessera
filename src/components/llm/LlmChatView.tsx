@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { takeForkOpeningMessage } from '../../lib/forkActions';
 import { useLlmChat } from '../../hooks/useLlmChat';
+import { usePanelDraft } from '../../hooks/usePanelDraft';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
@@ -28,7 +29,7 @@ export default function LlmChatView({ instanceId }: LlmChatViewProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [input, setInput] = useState('');
+  const [input, setInput] = usePanelDraft(instanceId, 'text', '');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
 

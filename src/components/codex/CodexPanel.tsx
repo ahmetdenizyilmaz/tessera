@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useCodexStore } from "../../store/codexStore";
+import { usePanelDraft } from '../../hooks/usePanelDraft';
 import { ensureCodex } from "../../lib/codexBridge";
 import {
   findCodexPanel,
@@ -115,8 +116,8 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
   const [ready, setReady] = useState(false),
     [pending, setPending] = useState(false),
     [restartKey, setRestartKey] = useState(0);
-  const [text, setText] = useState(""),
-    [images, setImages] = useState<string[]>([]);
+  const [text, setText] = usePanelDraft(instanceId, 'text', ''),
+    [images, setImages] = usePanelDraft<string[]>(instanceId, 'images', []);
   const [models, setModels] = useState<CodexDiscovery["models"]>([]);
   const body = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLElement>(null);

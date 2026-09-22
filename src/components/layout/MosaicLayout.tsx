@@ -462,6 +462,7 @@ export function MosaicLayout() {
           <div
             key={id}
             data-panel-id={id}
+            tabIndex={-1}
             className={
               'mosaic-tile'
               + (isDrag ? ' mosaic-tile-dragging' : '')

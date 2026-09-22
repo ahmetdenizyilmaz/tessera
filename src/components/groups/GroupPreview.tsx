@@ -6,6 +6,7 @@ import { usePluginStore } from '../../store/pluginStore';
 import { ProviderIcon, ClaudeIcon } from '../icons/ProviderIcons';
 import { closePanel } from '../../lib/panelCleanup';
 import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
 interface GroupPreviewProps {
   groupId: string;
@@ -202,6 +203,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
           }}
         >
           {group?.name ?? 'Group'}
+          <PanelShortcutBadge panelId={groupId} />
           {childIds.length > 0 && (
             <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
               {childIds.length}

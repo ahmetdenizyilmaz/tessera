@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ClaudeInstance, InstanceConfig } from '../types/instance';
 import { INSTANCE_COLORS } from '../types/instance';
+import { usePanelShortcutStore } from './panelShortcutStore';
 
 interface InstanceState {
   instances: Map<string, ClaudeInstance>;
@@ -43,6 +44,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   removeInstance: (id: string) => {
+    usePanelShortcutStore.getState().removePanels([id]);
     set((state) => {
       const next = new Map(state.instances);
       next.delete(id);

@@ -52,6 +52,15 @@ defaults, and the separate Preview build.
   panels, with image attachments. Direct LLM panels offer streaming chat with markdown and syntax highlighting.
 - **Panel groups & tabs** — collapse related panels into a tabbed group; maximize one to fill the
   area and reach the rest with `Ctrl+Tab` / `Ctrl+Shift+Tab`.
+- **Assigned panel shortcuts** — focus a panel and press `Alt+0–9` to assign its number, then
+  `Ctrl+0–9` to focus it, even inside another group. Hold `Ctrl` to show compact blue `Ctrl + 1`
+  labels beside panel names. Hold `Alt` for red assignment labels (`Ctrl + ?` only for the
+  focused panel if it is unassigned); release the keys to hide them. Unfocused, unassigned
+  panels show no label. Reassigning a number moves it to the new panel.
+  Assignments are included in workspace files and restored on restart with Auto-save enabled,
+  independent of tab order.
+- **Quiet conversation forks** — forks inherit conversation history and wait for your next
+  message by default. An optional automatic opener can be set in Settings → General.
 - **Panel-to-panel messaging** — an in-app MCP server lets coding-agent sessions list the other open panels
   and message them (delegate, ask a peer, hand off a result), fire-and-forget or awaiting a reply.
 - **Encrypted LAN subgroups** — pair two Tessera computers on the same private subnet and use each

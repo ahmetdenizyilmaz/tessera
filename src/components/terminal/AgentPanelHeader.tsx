@@ -4,6 +4,7 @@ import { useLayoutStore } from "../../store/layoutStore";
 import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
 import { ProviderIcon } from "../icons/ProviderIcons";
 import { GitFork } from "lucide-react";
+import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
 /** Shared panel chrome. Provider-specific controls stay inside the same menu. */
 export function AgentPanelHeader({
@@ -109,6 +110,7 @@ export function AgentPanelHeader({
             onClick={() => setColorPicker((v) => !v)}
           />
           <div className="agent-panel-heading">
+            <div className="panel-title-with-shortcut">
             {renaming ? (
               <div className="instance-name">
                 <input
@@ -139,6 +141,8 @@ export function AgentPanelHeader({
                 {instance.name}
               </span>
             )}
+            <PanelShortcutBadge panelId={instanceId} />
+            </div>
             <span
               className="agent-panel-metadata"
               title={`${metadata}\n${instance.config.cwd}`}

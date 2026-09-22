@@ -8,6 +8,8 @@ interface SettingsState {
   resetSettings: () => void;
 }
 
+const LEGACY_FORK_OPENING_MESSAGE = 'Summarize the current situation in short, then wait for my next instruction.';
+
 const DEFAULT_SETTINGS: AppSettings = {
   defaultModel: 'opus',
   // 'auto' is a real CLI permission mode (choices: acceptEdits, auto,
@@ -21,7 +23,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lastModel: '',
   lastPanelView: 'chat',
   lastCwd: '',
-  forkOpeningMessage: 'Summarize the current situation in short, then wait for my next instruction.',
+  forkOpeningMessage: '',
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
   autoSave: true,
@@ -54,22 +56,27 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'tessera-settings',
-      version: 1,
+      version: 2,
       // v0 → v1: new instances defaulted to sonnet with permissions bypassed.
       // Persisted settings shadow the defaults above, so without this the new
       // values would never reach anyone who has used the app before.
       migrate: (persisted, version) => {
         const state = persisted as SettingsState | undefined;
         if (!state?.settings) return state as SettingsState;
-        if (version >= 1) return state;
+        const settings = { ...state.settings };
+        if (version < 1) {
+          settings.defaultModel = 'opus';
+          settings.defaultPermissionMode = 'auto';
+          settings.defaultSkipPermissions = false;
+        }
+        // v1 → v2: forks inherit their history without automatically asking for
+        // a summary. Clear the old stock prompt, but keep user-written openers.
+        if (version < 2 && settings.forkOpeningMessage?.trim() === LEGACY_FORK_OPENING_MESSAGE) {
+          settings.forkOpeningMessage = '';
+        }
         return {
           ...state,
-          settings: {
-            ...state.settings,
-            defaultModel: 'opus',
-            defaultPermissionMode: 'auto',
-            defaultSkipPermissions: false,
-          },
+          settings,
         };
       },
       merge: (persisted, current) => {
