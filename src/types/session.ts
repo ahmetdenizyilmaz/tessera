@@ -43,6 +43,9 @@ export interface LayoutConfig {
   type: 'single' | 'split' | 'half-stack' | 'three-col' | 'quarter-fill' | 'quarters' | 'main' | 'grid';
   direction?: string;
   panelOrder: string[];
+  /** Main/sidebar divider for 5+ panels, independent of which panel is focused.
+   *  Stored with each layout (including groups); absent in older workspaces. */
+  mainWidthPercent?: number;
 }
 
 export type SnapZone =

@@ -82,7 +82,7 @@ function applyLayoutFromGroup(group: GroupState) {
   // (e.g. a panel was moved into this group while it wasn't open)
   const config = group.layoutConfig && group.layoutConfig.panelOrder.length === childIds.length
     ? group.layoutConfig
-    : getDefaultConfig(childIds, group.focusedChildId);
+    : getDefaultConfig(childIds, group.focusedChildId, group.layoutConfig);
   const rects = group.panelRects.size === childIds.length
     ? group.panelRects
     : computeRects(config, group.focusedChildId, group.stealFraction, ls.sidebarSlotFractions);
@@ -112,7 +112,7 @@ function restoreLayoutFromSaved(saved: SavedLayoutState) {
   let rects = saved.panelRects;
   if (saved.tabOrder.length > 0) {
     if (!config || config.panelOrder.length !== saved.tabOrder.length) {
-      config = getDefaultConfig(saved.tabOrder, saved.focusedId);
+      config = getDefaultConfig(saved.tabOrder, saved.focusedId, config);
     }
     if (rects.size !== saved.tabOrder.length) {
       rects = computeRects(config, saved.focusedId, saved.stealFraction, ls.sidebarSlotFractions);
@@ -173,7 +173,15 @@ export function captureGroupSnapshot(): {
   state.groupStack.slice(0, -1).forEach((id, index) => {
     const saved = savedLayoutStack[index + 1];
     const group = groups.get(id);
-    if (saved && group) groups.set(id, { ...group, childIds: saved.tabOrder });
+    if (saved && group) groups.set(id, {
+      ...group,
+      childIds: saved.tabOrder,
+      layoutConfig: saved.layoutConfig,
+      panelRects: saved.panelRects,
+      focusedChildId: saved.focusedId,
+      activeChildId: saved.activeTabId,
+      stealFraction: saved.stealFraction,
+    });
   });
   const rootLayout = savedLayoutStack.length > 0 ? savedLayoutStack[0] : null;
   return { groups, rootLayout };

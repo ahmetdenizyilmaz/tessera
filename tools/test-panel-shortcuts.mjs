@@ -30,6 +30,9 @@ try {
   await expect(page.locator('[data-panel-id="chat"] .panel-shortcut-badge')).toHaveText('Ctrl + ?');
   await expect(page.locator('[data-panel-id="terminal"] .panel-shortcut-badge')).toHaveCount(0);
   await expect(badge.first()).toHaveCSS('color', 'rgb(239, 83, 80)');
+  for (const hint of await badge.all()) {
+    await expect(hint).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 2)');
+  }
   await page.evaluate(() => window.focusPanel('terminal'));
   await expect(badge).toHaveCount(2);
   await expect(page.locator('[data-panel-id="terminal"] .panel-shortcut-badge')).toHaveText('Ctrl + ?');
@@ -52,6 +55,9 @@ try {
   await page.evaluate(() => { window.calls = []; });
   await page.keyboard.down('Control');
   await expect(badge).toHaveCount(4); // Panel titles and tabs.
+  for (const hint of await badge.all()) {
+    await expect(hint).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 2)');
+  }
   await expect(page.locator('[data-panel-id="chat"] .panel-shortcut-badge')).toHaveText('Ctrl + 1');
   await expect(page.locator('[data-panel-id="terminal"] .panel-shortcut-badge')).toHaveText('Ctrl + 2');
   await expect(page.locator('.tab-item .panel-shortcut-badge').first()).toHaveCSS('font-size', '8px');
@@ -63,6 +69,9 @@ try {
   await expect(badge).toHaveCount(0);
   await page.keyboard.down('Alt');
   await expect(page.locator('.panel-shortcut-badge--assign')).toHaveCount(4);
+  for (const hint of await badge.all()) {
+    await expect(hint).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 2)');
+  }
   await expect(badge.filter({ hasText: 'Ctrl + ?' })).toHaveCount(0);
   await expect(page.locator('[data-panel-id="chat"] .panel-shortcut-badge')).toHaveText('Ctrl + 1');
   await expect(page.locator('[data-panel-id="terminal"] .panel-shortcut-badge')).toHaveText('Ctrl + 2');

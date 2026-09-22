@@ -42,6 +42,7 @@ beforeEach(() => {
     focusedId: null,
   });
   useGroupStore.setState({ groups: new Map(), groupStack: [] });
+  useGroupStore.getState().restoreGroups(new Map());
   usePanelShortcutStore.getState().restore({});
 });
 it("restores an unsent Codex panel without an unresumable thread ID", () => {
@@ -190,4 +191,74 @@ it('loading an older workspace clears shortcuts from the previous workspace', ()
   usePanelShortcutStore.getState().assign('1', 'old-panel');
   deserializeWorkspace({ version: 3, instances: [], groups: {}, plugins: [] });
   expect(usePanelShortcutStore.getState().bindings).toEqual({});
+});
+
+function resizeMain(width: number) {
+  const state = useLayoutStore.getState();
+  const [main, ...side] = state.layoutConfig!.panelOrder;
+  state.setPanelRect(main, { ...state.panelRects.get(main)!, w: width });
+  state.finishResize('x', [main], side.slice(0, 4));
+  state.setFocused(main);
+}
+
+it.each([false, true])('saves the main divider across workspace reload (legacy rectangles: %s)', legacy => {
+  for (let i = 0; i < 5; i++) {
+    const id = useInstanceStore.getState().addInstance(config, `Panel ${i}`);
+    useLayoutStore.getState().addPanel(id);
+  }
+  resizeMain(50);
+  const snapshot = JSON.parse(JSON.stringify(serializeWorkspace()));
+  if (legacy) delete snapshot.layout.layoutConfig.mainWidthPercent;
+  deserializeWorkspace(snapshot);
+  const restored = useLayoutStore.getState();
+  for (const id of restored.tabOrder) {
+    restored.setFocused(id);
+    expect(useLayoutStore.getState().panelRects.get(id)?.w).toBe(50);
+  }
+  expect(serializeWorkspace().layout.layoutConfig?.mainWidthPercent).toBe(50);
+});
+
+it.each(['terminal', 'remote'] as const)('keeps independent root and %s-group divider widths through navigation and reload', panelType => {
+  const group = useGroupStore.getState().createGroup(null, 'Stack');
+  useLayoutStore.getState().addPanel(group, 'group');
+  for (let i = 0; i < 4; i++) {
+    const id = useInstanceStore.getState().addInstance(config, `Root ${i}`);
+    useLayoutStore.getState().addPanel(id);
+  }
+  resizeMain(55);
+  for (let i = 0; i < 5; i++) {
+    const id = panelType === 'remote' ? `lan:test:${i}`
+      : useInstanceStore.getState().addInstance(config, `Child ${i}`);
+    useGroupStore.getState().addToGroup(group, id);
+    useLayoutStore.setState(state => ({ panelTypes: { ...state.panelTypes, [id]: panelType } }));
+  }
+  useGroupStore.getState().enterGroup(group);
+  useGroupStore.getState().commitEnterGroup();
+  resizeMain(65);
+  useGroupStore.getState().exitGroup();
+  useLayoutStore.getState().cycleFocus(1);
+  expect(useLayoutStore.getState().layoutConfig?.mainWidthPercent).toBe(55);
+  useGroupStore.getState().enterGroup(group);
+  useGroupStore.getState().commitEnterGroup();
+  useLayoutStore.getState().cycleFocus(1);
+  expect(useLayoutStore.getState().layoutConfig?.mainWidthPercent).toBe(65);
+  // Saving while deeper inside a subgroup must also capture the ancestor's
+  // live divider, not its stale layout from before navigation.
+  const nested = useGroupStore.getState().createGroup(group, 'Nested');
+  useGroupStore.getState().addToGroup(group, nested);
+  useLayoutStore.getState().addPanel(nested, 'group');
+  resizeMain(62);
+  useGroupStore.getState().enterGroup(nested);
+  useGroupStore.getState().commitEnterGroup();
+  const snapshot = JSON.parse(JSON.stringify(serializeWorkspace()));
+  expect(snapshot.layout.layoutConfig.mainWidthPercent).toBe(55);
+  expect(snapshot.groups[group].layoutConfig.mainWidthPercent).toBe(62);
+  deserializeWorkspace(snapshot);
+  useLayoutStore.getState().cycleFocus(1);
+  expect(useLayoutStore.getState().panelRects.get(useLayoutStore.getState().focusedId!)?.w).toBe(55);
+  useGroupStore.getState().enterGroup(group);
+  useGroupStore.getState().commitEnterGroup();
+  useLayoutStore.getState().cycleFocus(1);
+  expect(useLayoutStore.getState().panelRects.get(useLayoutStore.getState().focusedId!)?.w).toBe(62);
+  useGroupStore.getState().exitGroup();
 });

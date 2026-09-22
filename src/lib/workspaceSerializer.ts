@@ -436,7 +436,7 @@ export function deserializeWorkspace(raw: unknown): void {
     // panel was moved to root while inside a group), fall back to a default
     if (newTabOrder.length > 0) {
       if (!newLayoutConfig || newLayoutConfig.panelOrder.length !== newTabOrder.length) {
-        newLayoutConfig = getDefaultConfig(newTabOrder, newFocusedId);
+        newLayoutConfig = getDefaultConfig(newTabOrder, newFocusedId, layout.layoutConfig);
       }
       if (newPanelRects.size !== newTabOrder.length) {
         newPanelRects = computeRects(newLayoutConfig, newFocusedId, stealFraction, slotFractions);

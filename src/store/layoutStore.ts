@@ -91,6 +91,12 @@ export function normalizeSideFractions(
   return floored.map((p) => (p / fsum) * 100);
 }
 
+function normalizeMainWidth(width: number | undefined): number {
+  return typeof width === 'number' && Number.isFinite(width)
+    ? Math.max(10, Math.min(90, width))
+    : 80;
+}
+
 export function computeRects(
   config: LayoutConfig,
   focusedId: string | null,
@@ -263,8 +269,9 @@ export function computeRects(
     // Render those as 'main' so an old layout doesn't come back as equal cells.
     case 'grid':
     case 'main': {
-      // 5+ panels: main(80%) + sidebar(20%) + bottom(20%)
-      const SIDE = 20;
+      // 5+ panels: a saved main/sidebar split, plus an optional bottom strip.
+      const mainW = normalizeMainWidth(config.mainWidthPercent);
+      const bottomH = 20;
       const MAX_R = 4;
 
       const mainId = order[0];
@@ -272,26 +279,26 @@ export function computeRects(
       const bottomIds = order.slice(1 + MAX_R);
 
       const hasBottom = bottomIds.length > 0;
-      const mainH = hasBottom ? 100 - SIDE : 100;
+      const mainH = hasBottom ? 100 - bottomH : 100;
 
       // Main panel (top-left area)
-      rects.set(mainId, { x: 0, y: 0, w: 100 - SIDE, h: mainH });
+      rects.set(mainId, { x: 0, y: 0, w: mainW, h: mainH });
 
-      // Sidebar panels (stacked vertically in the right 20%, always full
+      // Sidebar panels (stacked vertically on the right, always full
       // height). Heights are per-SLOT: a resized slot keeps its fraction no
       // matter which panel rotates into it on reorder/focus changes.
       const sideFracs = normalizeSideFractions(sideFractions, sideIds.length);
       let sideY = 0;
       sideIds.forEach((id, i) => {
-        rects.set(id, { x: 100 - SIDE, y: sideY, w: SIDE, h: sideFracs[i] });
+        rects.set(id, { x: mainW, y: sideY, w: 100 - mainW, h: sideFracs[i] });
         sideY += sideFracs[i];
       });
 
       // Bottom panels (equal widths, spanning only the main area width)
       if (hasBottom) {
-        const botW = (100 - SIDE) / bottomIds.length;
+        const botW = mainW / bottomIds.length;
         bottomIds.forEach((id, i) => {
-          rects.set(id, { x: i * botW, y: mainH, w: botW, h: SIDE });
+          rects.set(id, { x: i * botW, y: mainH, w: botW, h: bottomH });
         });
       }
       break;
@@ -417,6 +424,7 @@ export function computeGutters(rects: Map<string, PanelRect>): Gutter[] {
 export function getDefaultConfig(
   tabOrder: string[],
   focusedId: string | null,
+  previousConfig?: LayoutConfig | null,
 ): LayoutConfig {
   const n = tabOrder.length;
   if (n <= 1) {
@@ -442,7 +450,7 @@ export function getDefaultConfig(
     order.splice(idx, 1);
     order.unshift(focusedId);
   }
-  return { type: 'main', panelOrder: order };
+  return { type: 'main', panelOrder: order, mainWidthPercent: previousConfig?.mainWidthPercent };
 }
 
 // ─── Build Snap Config ──────────────────────────────────────────────────────
@@ -517,7 +525,7 @@ export function buildSnapConfig(
   }
 
   // 5+: main layout with the snapped panel as main
-  return { type: 'main', panelOrder: [snappedId, ...others] };
+  return { type: 'main', panelOrder: [snappedId, ...others], mainWidthPercent: currentConfig?.mainWidthPercent };
 }
 
 // ─── Snap Zone Detection ────────────────────────────────────────────────────
@@ -663,7 +671,7 @@ function recompute(
 ): { layoutConfig: LayoutConfig; panelRects: Map<string, PanelRect> } {
   const config = currentConfig && currentConfig.panelOrder.length === tabOrder.length
     ? { ...currentConfig, panelOrder: [...tabOrder] }
-    : getDefaultConfig(tabOrder, focusedId);
+    : getDefaultConfig(tabOrder, focusedId, currentConfig);
   const rects = computeRects(config, focusedId, stealFraction, sideFractions);
   return { layoutConfig: config, panelRects: rects };
 }
@@ -705,7 +713,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       newOrder,
       id,
       state.stealFraction,
-      null, // Force new default config when panel count changes
+      state.layoutConfig, // Count changes choose a new config but keep the main/sidebar split.
       state.sidebarSlotFractions,
     );
 
@@ -747,10 +755,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     let panelRects: Map<string, PanelRect>;
 
     if (zone && newOrder.length >= 2) {
-      layoutConfig = buildSnapConfig(newOrder, id, zone, null);
+      layoutConfig = buildSnapConfig(newOrder, id, zone, state.layoutConfig);
       panelRects = computeRects(layoutConfig, id, state.stealFraction, state.sidebarSlotFractions);
     } else {
-      const result = recompute(newOrder, id, state.stealFraction, null, state.sidebarSlotFractions);
+      const result = recompute(newOrder, id, state.stealFraction, state.layoutConfig, state.sidebarSlotFractions);
       layoutConfig = result.layoutConfig;
       panelRects = result.panelRects;
     }
@@ -808,7 +816,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       newOrder,
       newFocused,
       state.stealFraction,
-      null,
+      state.layoutConfig,
       state.sidebarSlotFractions,
     );
 
@@ -826,6 +834,15 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     set(newState);  },
 
   restoreLayout: (tabOrder, activeTabId, focusedId, layoutConfig, panelRects, stealFraction, panelTypes, widgetKinds, sidebarSlotFractions) => {
+    // Older snapshots recorded the dragged rectangles but not the divider.
+    // Recover that width once so the first focus change doesn't discard it.
+    if (layoutConfig?.type === 'main' || layoutConfig?.type === 'grid') {
+      layoutConfig = {
+        ...layoutConfig,
+        mainWidthPercent: normalizeMainWidth(layoutConfig.mainWidthPercent
+          ?? (layoutConfig.type === 'main' ? panelRects.get(layoutConfig.panelOrder[0])?.w : undefined)),
+      };
+    }
     set((state) => ({
       layout: tabOrder[0] ?? null,
       tabOrder,
@@ -897,7 +914,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     let config = state.layoutConfig;
 
     // For 'main' layout: promote focused panel to order[0] (the large main panel)
-    if (config.type === 'main' && id && config.panelOrder[0] !== id) {
+    if ((config.type === 'main' || config.type === 'grid') && id && config.panelOrder[0] !== id) {
       const order = [...config.panelOrder];
       const idx = order.indexOf(id);
       if (idx > 0) {
@@ -940,15 +957,28 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     set({ panelRects: rects });
   },
 
-  finishResize: (gutterAxis: 'x' | 'y', _gutterBefore: string[], _gutterAfter: string[]) => {
+  finishResize: (gutterAxis: 'x' | 'y', gutterBefore: string[], gutterAfter: string[]) => {
     const state = get();
     if (!state.layoutConfig) return;
+
+    // Main+sidebar widths belong to the layout, not to the focused panel.
+    // Only capture the main/sidebar gutter, not dividers inside the bottom strip.
+    const type = state.layoutConfig.type;
+    if ((type === 'main' || type === 'grid') && gutterAxis === 'x') {
+      const [mainId, ...otherIds] = state.layoutConfig.panelOrder;
+      if (gutterBefore.includes(mainId) && otherIds.slice(0, 4).some(id => gutterAfter.includes(id))) {
+        set({ layoutConfig: {
+          ...state.layoutConfig,
+          mainWidthPercent: normalizeMainWidth(state.panelRects.get(mainId)?.w),
+        } });
+      }
+      return;
+    }
 
     // Main+sidebar layout: a y-drag is a sidebar-slot divider. Capture the
     // dragged heights as per-SLOT fractions and leave stealFraction alone —
     // deriveStealFraction reads the main panel here and would corrupt the
     // fraction used by the 2-4 panel layouts.
-    const type = state.layoutConfig.type;
     if ((type === 'main' || type === 'grid') && gutterAxis === 'y') {
       const sideIds = state.layoutConfig.panelOrder.slice(1, 5);
       const heights = sideIds.map((id) => state.panelRects.get(id)?.h ?? 0);
@@ -973,9 +1003,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     if (!state.layoutConfig) return;
 
     const reset = { x: 0.5, y: 0.5 };
-    // Gutter double-click resets sidebar slots to equal heights too.
-    const rects = computeRects(state.layoutConfig, state.focusedId, reset, []);
-    set({ stealFraction: reset, sidebarSlotFractions: [], panelRects: rects });  },
+    // Gutter double-click resets the main split and sidebar slot heights too.
+    const config = { ...state.layoutConfig, mainWidthPercent: undefined };
+    const rects = computeRects(config, state.focusedId, reset, []);
+    set({ layoutConfig: config, stealFraction: reset, sidebarSlotFractions: [], panelRects: rects });  },
 
   clearPanelRects: () => {
     set({ panelRects: new Map() });
