@@ -2,6 +2,7 @@ pub mod executable;
 pub mod rpc;
 mod panel_delivery;
 mod terminal_runtime;
+mod terminal_startup;
 
 use rpc::Client;
 use serde::{Deserialize, Serialize};
@@ -93,6 +94,7 @@ pub struct Session {
     pub client: Arc<Client>,
     pub config: Config,
     pub initial: Value,
+    resumable: bool,
     panel_delivery: panel_delivery::PanelDelivery,
 }
 
@@ -410,9 +412,14 @@ pub async fn configure(
         params["threadId"] = json!(sid);
         "thread/resume"
     } else {
+        if config.terminal {
+            // Native resume and Tessera's transcript reader use the legacy
+            // history contract. Do not migrate existing saved conversations.
+            params["historyMode"] = json!("legacy");
+        }
         "thread/start"
     };
-    let initial = match client.call(method, params).await {
+    let mut initial = match client.call(method, params).await {
         Ok(value) => value,
         Err(e) => {
             client.stop();
@@ -427,21 +434,29 @@ pub async fn configure(
         }
     };
     *client.thread.lock().unwrap() = Some(sid.clone());
+    if config.terminal && method == "thread/start" {
+        if let Err(e) = terminal_startup::persist_empty_terminal(&client, &config, &mut initial).await {
+            client.stop();
+            return Err(format!("Cannot prepare the empty Codex terminal: {e}"));
+        }
+    }
     client.capture_initial_settings(&initial);
+    let resumable = config.terminal || method == "thread/resume";
     let session = Session {
         panel_delivery: panel_delivery::PanelDelivery::new(client.clone()),
         client: client.clone(),
         config,
         initial,
+        resumable,
     };
     let snapshot = snapshot_session(&session);
     manager.sessions.lock().unwrap().insert(id, session);
-    client.publish(json!({"method":"tessera/ready","params":{"threadId":sid}}));
+    client.publish(json!({"method":"tessera/ready","params":{"threadId":sid,"resumable":resumable}}));
     Ok(snapshot)
 }
 
 fn snapshot_session(s: &Session) -> Value {
-    json!({"generation":s.client.generation,"thread":s.initial["thread"],
+    json!({"generation":s.client.generation,"thread":s.initial["thread"],"resumable":s.resumable,
         "threadId":s.client.thread.lock().unwrap().clone(),
         "events":s.client.events.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
         "settingsEvent":s.client.settings_event.lock().unwrap().clone(),
@@ -622,8 +637,8 @@ pub async fn codex_terminal_spawn(
         .ok_or("Missing configuration")?
         .config
         .clone();
-    // First turn/start creates the transcript lazily. Wait until the TUI can
-    // read it, without generating an artificial bootstrap message.
+    // Fresh terminals persist their empty metadata during configure. Also
+    // tolerate a first turn still being flushed by an older session.
     let mut readable = false;
     for _ in 0..40 {
         match c
@@ -641,7 +656,7 @@ pub async fn codex_terminal_spawn(
         }
     }
     if !readable {
-        return Err("Send the first message before attaching the Codex terminal.".into());
+        return Err("Codex terminal history is not ready. Retry this panel without sending a bootstrap message.".into());
     }
     let executable = if config.executable_path.trim().is_empty() {
         match app.path().resource_dir() {

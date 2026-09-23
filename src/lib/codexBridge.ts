@@ -44,6 +44,7 @@ export function initCodexBridge() {
         .updateInstance(payload.id, {
           codexThreadId: session.threadId,
           codexHasTurns: session.materialized,
+          codexResumable: session.resumable,
         });
     if (!session?.connected)
       useInstanceStore.getState().setStatus(payload.id, "stopped");
@@ -84,6 +85,7 @@ export async function ensureCodex(id: string): Promise<void> {
       .updateInstance(id, {
         codexThreadId: result.threadId,
         codexHasTurns: useCodexStore.getState().sessions[id]?.materialized,
+        codexResumable: useCodexStore.getState().sessions[id]?.resumable,
         status: "running",
       });
     // Native changes may be in replay when a previously hidden panel mounts.

@@ -46,7 +46,7 @@ export const useCodexStore = create<{
       // Group switches remount panels. Keep the accumulated transcript, including
       // output older than the backend replay window, for an already hydrated generation.
       if (existing && state.hydrated[id] === snapshot.generation) {
-        let next = existing;
+        let next: CodexState = { ...existing, resumable: existing.resumable || snapshot.resumable };
         for (const event of events) next = reduceCodex(next, event);
         return { sessions: { ...state.sessions, [id]: next } };
       }
@@ -57,6 +57,7 @@ export const useCodexStore = create<{
         busy: snapshot.busy,
         connected: snapshot.alive,
         materialized: snapshot.materialized ?? !!snapshot.thread.turns?.length,
+        resumable: snapshot.resumable ?? snapshot.materialized ?? !!snapshot.thread.turns?.length,
       };
       for (const event of snapshotEvents) next = reduceCodex(next, event);
       // Requests and activity in the snapshot already include its replay events.
@@ -81,6 +82,7 @@ export const useCodexStore = create<{
         // thread explicitly false: undefined used to make autosave persist an
         // ID for which Codex had never written a resumable transcript.
         next.materialized = !!(next.materialized || existing.materialized);
+        next.resumable = !!(next.resumable || existing.resumable);
         // New backends retain a sequenced settings event independently of
         // replay. Older snapshots may only have the frontend's known policy.
         if (!snapshot.settingsEvent) next.permissions = existing.permissions ?? next.permissions;

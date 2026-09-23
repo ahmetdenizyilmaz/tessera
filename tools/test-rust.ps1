@@ -1,6 +1,6 @@
 # Tauri embeds its Windows manifest in app binaries only. Unit-test executables
 # also need common-controls v6 and WebView2Loader.dll before they can start.
-param([switch]$Live, [switch]$Permissions, [switch]$Stable, [switch]$OpenCode)
+param([switch]$Live, [switch]$Permissions, [switch]$Stable, [switch]$OpenCode, [switch]$CodexStartup)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Push-Location $repo
@@ -49,7 +49,8 @@ public static class TesseraTestResource {
         $profileDir = Split-Path -Parent $testDir
         $loader = Join-Path $profileDir 'WebView2Loader.dll'
         if (Test-Path -LiteralPath $loader) { Copy-Item -LiteralPath $loader -Destination $testDir -Force }
-        if ($OpenCode) { & $artifact 'live_opencode_server_and_terminal' '--ignored' '--nocapture' }
+        if ($CodexStartup) { & $artifact 'live_codex_empty_terminal_startup' '--ignored' '--nocapture' }
+        elseif ($OpenCode) { & $artifact 'live_opencode_server_and_terminal' '--ignored' '--nocapture' }
         elseif ($Live) { & $artifact 'live_transports_and_exact_thread_resume' '--ignored' '--nocapture' }
         elseif ($Permissions) { & $artifact 'live_native_permission_notifications' '--ignored' '--nocapture' }
         else { & $artifact '--test-threads=1' }

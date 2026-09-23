@@ -66,6 +66,21 @@ it("restores an unsent Codex panel without an unresumable thread ID", () => {
   });
   expect(serializeWorkspace().instances[0].codexThreadId).toBeUndefined();
 });
+it("saves and restores a persisted empty Codex terminal without inventing a turn", () => {
+  const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: "codex", panelView: "terminal" });
+  useInstanceStore.getState().updateInstance(id, {
+    codexThreadId: "persisted-empty", codexHasTurns: false, codexResumable: true,
+  });
+  useLayoutStore.getState().addPanel(id);
+  const saved = JSON.parse(JSON.stringify(serializeWorkspace()));
+  expect(saved.instances[0]).toMatchObject({ codexThreadId: "persisted-empty", codexHasTurns: false });
+  deserializeWorkspace(saved);
+  expect([...useInstanceStore.getState().instances.values()][0]).toMatchObject({
+    codexThreadId: "persisted-empty", codexHasTurns: false, codexResumable: true,
+    config: { panelView: "terminal" },
+  });
+  expect(serializeWorkspace().instances[0].codexThreadId).toBe("persisted-empty");
+});
 it('round-trips OpenCode view, endpoint, permissions, storage and conversation without Claude IDs', () => {
   const options = { ...DEFAULT_OPENCODE_OPTIONS, provider: 'ollama' as const, model: 'local-coder', baseUrl: 'http://localhost:11434/v1' };
   const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'opencode', panelView: 'terminal', model: options.model, opencode: options });

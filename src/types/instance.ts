@@ -81,6 +81,7 @@ export interface ClaudeInstance {
   claudeSessionId?: string;
   codexThreadId?: string;
   codexHasTurns?: boolean;
+  codexResumable?: boolean;
   opencodeSessionId?: string;
   opencodeDataId?: string;
 }

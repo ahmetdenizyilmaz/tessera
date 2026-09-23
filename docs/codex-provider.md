@@ -19,7 +19,8 @@ Tessera uses the existing Codex CLI login and Codex conversation storage. It doe
 not copy authentication tokens, start a second login flow, or require an API key.
 If detection fails, install the CLI, run `codex login` in a normal terminal, then
 click **Retry**. An executable-path override is available for nonstandard installs.
-This integration was exercised against `codex-cli 0.154.0` on Windows.
+The empty-terminal startup/resume path was exercised against both
+`codex-cli 0.154.0` (bundled renderer) and `0.155.1` (installed CLI) on Windows.
 
 Set **Settings → General → Default Codex permissions** to choose the starting
 mode for new chat and terminal panels. **Auto-review · automatic approval reviews**
@@ -83,11 +84,14 @@ Typing, editing, IME composition, or pasting ends history browsing and reveals
 the input again in both Claude and Codex terminals. Automatic terminal replies
 and history-scrolling shortcuts leave the reading position intact.
 
-A **new terminal conversation takes its first message in Tessera**, then attaches
-the native Codex TUI to that exact conversation. Codex creates its transcript only
-after the first user turn; attempting to resume an empty thread fails. No artificial
-bootstrap prompt is sent. Existing saved conversations attach immediately. Change
-models and reasoning effort inside the native terminal once it is attached.
+A **new terminal conversation opens directly in the native Codex TUI**, without
+a first message in Tessera's chat composer. For fresh terminals only, Tessera
+selects legacy history and calls Codex's official `thread/name/set` API to persist
+the empty conversation metadata. It verifies that the same thread can be read,
+then attaches the TUI to that exact ID. No artificial bootstrap prompt is sent,
+and Tessera does not write Codex's private history format for this startup path.
+Existing saved conversations keep their normal resume path. Change models and
+reasoning effort inside the native terminal once it is attached.
 
 Both providers share the same compact header, color chooser, rename behavior,
 and restart/maximize/close icons. Click the color dot (or right-click the title)
@@ -100,8 +104,9 @@ In chat, model and reasoning selections apply to the next turn. Markdown,
 reasoning summaries, command output, file changes, tool calls, image attachments,
 token usage, interruption, restart, and history are supported. Use the main **+**
 wizard for new conversations and history; the panel has no **New** or **History**
-buttons. **Restart** reconnects the current conversation. Empty unsent panels restore
-as empty panels because they do not yet have a resumable transcript.
+buttons. **Restart** reconnects the current conversation. Empty terminal panels
+retain their exact ID through restart and workspace save/restore; empty chats
+without a saved transcript still reopen as fresh empty chats.
 
 The paperclip in both chat composers opens the native Windows image picker.
 PNG, JPEG, GIF and WebP files up to 10 MB each are supported, with up to eight
@@ -194,6 +199,9 @@ Empty panels keep an explicit `materialized: false` state, including when ready
 events beat the configure response. Previously, merging an undefined event state
 could erase that flag and make autosave retain an ID with no rollout. Regression
 tests cover both an empty panel and a real first turn arriving during startup.
+The separate `resumable` flag records saved empty terminal metadata, without
+pretending that a first turn exists. Failed terminal preparation shows a retry
+state, never a temporary chat composer or an automatically substituted thread.
 Existing missing-rollout errors show recovery choices: retry the same ID, find a
 saved conversation, or explicitly start a new conversation. Tessera does not
 silently substitute another thread when a saved transcript is unavailable.
@@ -207,8 +215,14 @@ node tools/test-terminal-cursor.mjs
 node tools/test-terminal-scroll.mjs
 # With npm run dev running in another terminal:
 node tools/test-panel-ui.mjs
+node tools/test-codex-startup-ui.mjs
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1 -Stable
+
+# Optional native empty-terminal check: isolated home, loopback-only provider,
+# no account credentials or model turns. Supply the native executable path.
+$env:TESSERA_CODEX_TEST_EXECUTABLE = 'C:\path\to\codex.exe'
+powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1 -Stable -CodexStartup
 
 # Optional: uses the existing account for two tiny model turns, then resumes them.
 powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1 -Live
@@ -220,7 +234,7 @@ powershell -ExecutionPolicy Bypass -File tools/promote-preview.ps1
 For an opt-in live UI check, start only the preview with
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, then run
 `node tools/smoke-preview.mjs http://127.0.0.1:9222 C:\path\to\scratch-project`.
-It verifies a chat turn, first-turn terminal attachment, and a second turn typed
+It verifies a chat turn, empty terminal attachment, and two turns typed
 through the native TUI on the same thread, then closes its own test panels.
 Relaunch preview without the debugging environment variable afterward.
 

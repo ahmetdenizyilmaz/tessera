@@ -72,11 +72,15 @@ try {
   console.log("PASS: streamed chat response");
 
   const terminal = await create("Terminal", names[1]);
-  await expect(terminal).toContainText("Send your first message");
-  await send(
-    terminal,
-    "Reply exactly TESSERA_TERMINAL_SMOKE_OK. Do not use tools.",
-  );
+  await expect(terminal.locator(".xterm")).toBeVisible();
+  await expect(terminal.getByLabel("Message Codex")).toHaveCount(0);
+  await expect(terminal.locator(".codex-terminal")).toContainText("OpenAI Codex", { timeout: 30000 });
+  await expect(terminal.locator(".codex-terminal")).not.toContainText("Resuming session", { timeout: 30000 });
+  const typing = terminal.locator(".xterm-helper-textarea");
+  await typing.focus();
+  await typing.pressSequentially("Reply exactly TESSERA_TERMINAL_SMOKE_OK. Do not use tools.", { delay: 2 });
+  await new Promise(resolve => setTimeout(resolve, 600));
+  await typing.press("Enter");
   await expect(terminal.locator(".codex-terminal")).toContainText(
     "TESSERA_TERMINAL_SMOKE_OK",
     { timeout: 60000 },
@@ -87,9 +91,8 @@ try {
   await expect(terminal.locator(".codex-terminal")).not.toContainText(
     "Permission overrides are not supported",
   );
-  console.log("PASS: native terminal attaches after first user turn");
+  console.log("PASS: native terminal attaches before the first user turn");
 
-  const typing = terminal.locator(".xterm-helper-textarea");
   await typing.focus();
   await typing.pressSequentially(
     "Reply exactly TESSERA_NATIVE_SECOND_OK. Do not use tools.",

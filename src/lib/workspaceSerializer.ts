@@ -28,6 +28,7 @@ export interface SavedInstance {
   config: InstanceConfig;
   claudeSessionId?: string;
   codexThreadId?: string;
+  codexHasTurns?: boolean;
   opencodeSessionId?: string;
   opencodeDataId?: string;
 }
@@ -127,9 +128,10 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
       color: inst.color,
       config: inst.config,
       claudeSessionId: inst.claudeSessionId,
-      // Codex has no resumable transcript until its first user turn. An empty
-      // panel restores as empty rather than trying to resume a nonexistent file.
-      codexThreadId: inst.codexHasTurns === false ? undefined : inst.codexThreadId,
+      // Older empty chats have no rollout. Named empty terminals do: retain
+      // their exact identity without inventing a first message.
+      codexThreadId: inst.codexHasTurns === false && !inst.codexResumable ? undefined : inst.codexThreadId,
+      codexHasTurns: inst.codexHasTurns,
       opencodeSessionId: inst.opencodeSessionId,
       opencodeDataId: inst.opencodeDataId,
     })),
@@ -319,7 +321,8 @@ export function deserializeWorkspace(raw: unknown): void {
     if (inst.config.agentProvider === 'codex' && inst.codexThreadId) {
       const identity = 'codex:' + inst.codexThreadId;
       if (!seenSessionIds.has(identity)) {
-        useInstanceStore.getState().updateInstance(newId, { codexThreadId: inst.codexThreadId, codexHasTurns: true });
+        useInstanceStore.getState().updateInstance(newId, { codexThreadId: inst.codexThreadId,
+          codexHasTurns: inst.codexHasTurns ?? true, codexResumable: true });
         seenSessionIds.add(identity);
       }
     }

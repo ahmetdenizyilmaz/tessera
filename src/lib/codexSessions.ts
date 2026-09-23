@@ -132,8 +132,9 @@ export async function restartCodex(
     codexThreadId: fresh
       ? undefined
       : (threadId ??
-        (inst.codexHasTurns === false ? undefined : inst.codexThreadId)),
+        (inst.codexHasTurns === false && !inst.codexResumable ? undefined : inst.codexThreadId)),
     codexHasTurns: !!threadId || (!fresh && inst.codexHasTurns),
+    codexResumable: !fresh && (!!threadId || inst.codexResumable),
     config: cwd ? { ...inst.config, cwd } : inst.config,
   });
   await ensureCodex(id);

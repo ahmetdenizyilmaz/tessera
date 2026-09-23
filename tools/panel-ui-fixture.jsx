@@ -35,6 +35,10 @@ const model = {
   inputModalities: ["text", "image"],
 };
 window.calls = [];
+// Startup regressions pause configure to catch even a transient chat composer.
+const startupMode = new URLSearchParams(location.search).get("startup");
+const startupGate = startupMode ? new Promise(resolve => { window.releaseStartup = resolve; }) : Promise.resolve();
+window.startupError = startupMode === "error";
 window.pick = ["C:\\images\\example.png"];
 mockIPC(
   async (command, args) => {
@@ -66,7 +70,9 @@ mockIPC(
         ],
         nextCursor: null,
       };
-    if (command === "codex_configure")
+    if (command === "codex_configure") {
+      await startupGate;
+      if (window.startupError) throw new Error("Cannot prepare the empty Codex terminal: fixture failure");
       return {
         generation: "fixture",
         threadId: args.threadId || "thread-fixture",
@@ -91,10 +97,12 @@ mockIPC(
           } },
         },
         requests: [],
+        resumable: args.config.terminal,
         materialized: !!window.mosaicMode,
         busy: false,
         alive: true,
       };
+    }
     if (command === "codex_send") return {};
     if (command === "list_slash_commands" || command === "list_project_files")
       return [];
@@ -109,7 +117,7 @@ const instance = (id, provider) => ({
   status: "running",
   config: {
     agentProvider: provider,
-    panelView: "chat",
+    panelView: provider === "codex" && startupMode ? "terminal" : "chat",
     cwd: "C:\\scratch",
     model: "test-model",
     systemPrompt: "",

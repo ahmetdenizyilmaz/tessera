@@ -128,7 +128,10 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
   const [recoverHistory, setRecoverHistory] = useState(false);
   const follow = useRef(true);
   const isTerminal = instance?.config.panelView === "terminal";
-  const terminalAttached = isTerminal && session?.materialized;
+  // Persisted empty terminals can attach immediately. Keep the existing
+  // context-import fallback if a fork's native history creation failed.
+  const terminalAttached = isTerminal && (session?.materialized ||
+    (session?.resumable && !instance?.config.fork?.pending));
   const model = models.find((m) => m.model === instance?.config.model);
   const missingThread =
     !!instance?.codexThreadId &&
@@ -162,14 +165,13 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
   useEffect(() => {
     if (!session?.requests.length) setRequestsExpanded(false);
   }, [session?.requests.length]);
-  // A forked Codex terminal has no first turn yet, and the TUI can only attach
-  // once one exists. Send the inherited conversation as that first turn so the
-  // terminal opens right away with the history visible.
+  // Keep the existing context-import fallback when native fork history creation
+  // failed. Normal fresh terminals persist metadata without sending any turn.
   const forkBootstrapped = useRef(false);
   const forkPending = !!instance?.config.fork?.pending;
-  // Between the fork's first turn and the terminal attaching, the panel shows
-  // an "opening" state instead of the chat composer.
-  const openingTerminal = isTerminal && !terminalAttached && !!instance?.config.fork && (forkPending || forkBootstrapped.current);
+  // Terminal panels never briefly show a chat composer while connecting.
+  const openingTerminal = isTerminal && !terminalAttached;
+  const openingFork = !!instance?.config.fork && (forkPending || forkBootstrapped.current);
   useEffect(() => {
     if (!isTerminal || terminalAttached || !ready || !session?.connected || session?.busy || pending) return;
     if (forkBootstrapped.current || !forkPending) return;
@@ -553,11 +555,14 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
         <div className="codex-transcript codex-fork-opening">
           <Loader2 size={18} className="spin" />
           <p className="codex-empty">
-            Opening the Codex terminal with the conversation forked from{" "}
-            {instance.config.fork?.sourceName}…
+            {openingFork
+              ? `Opening the Codex terminal with the conversation forked from ${instance.config.fork?.sourceName}…`
+              : "Opening the Codex terminal…"}
           </p>
           <p className="codex-empty" style={{ fontSize: 11, opacity: 0.7 }}>
-            {session?.error ? session.error : "Codex reads the earlier turns first; the terminal attaches as soon as it answers."}
+            {session?.error ? "Use Retry / resume above to reconnect."
+              : openingFork ? "Codex reads the earlier turns first; the terminal attaches as soon as it answers."
+              : "Preparing your conversation. No message will be sent."}
           </p>
         </div>
       ) : (
@@ -596,9 +601,7 @@ export function CodexPanel({ instanceId }: { instanceId: string }) {
             {!session?.items.length && !instance.config.fork?.pending && (
               <p className="codex-empty">
                 {ready
-                  ? isTerminal
-                    ? "Send your first message to open this conversation in the Codex terminal."
-                    : "Ask Codex to work in this project."
+                  ? "Ask Codex to work in this project."
                   : session?.error
                     ? "Reconnect this panel to continue."
                     : "Connecting to Codex…"}

@@ -47,6 +47,23 @@ beforeEach(async () => {
   await initCodexBridge();
 });
 
+it("keeps a persisted empty terminal resumable through hydration and remount", async () => {
+  useCodexStore.getState().remove(id);
+  listener.receive({ payload: { id, generation: "active", sequence: 5000,
+    message: { method: "tessera/ready", params: { threadId: "thread", resumable: true } },
+  } });
+  vi.mocked(invoke).mockResolvedValue({ ...snapshot(), resumable: true });
+  await ensureCodex(id);
+  await ensureCodex(id);
+  expect(useCodexStore.getState().sessions[id]).toMatchObject({
+    threadId: "thread", resumable: true, materialized: false, items: [],
+  });
+  expect(useInstanceStore.getState().instances.get(id)).toMatchObject({
+    codexThreadId: "thread", codexHasTurns: false, codexResumable: true,
+  });
+  expect(vi.mocked(invoke).mock.calls.every(([command]) => command === "codex_configure")).toBe(true);
+});
+
 it("saves a native /permissions change without restarting or answering its pending request", () => {
   const request = { id: 5, method: "item/commandExecution/requestApproval", params: { threadId: "thread" } };
   useCodexStore.setState(s => ({ sessions: { ...s.sessions,

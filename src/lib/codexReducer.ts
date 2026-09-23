@@ -16,6 +16,7 @@ export function emptyCodexState(generation = ""): CodexState {
     busy: false,
     connected: true,
     materialized: false,
+    resumable: false,
   };
 }
 export function historyItems(thread: CodexThread): CodexItem[] {
@@ -50,7 +51,8 @@ export function reduceCodex(state: CodexState, event: CodexEvent): CodexState {
     case "thread/settings/updated":
       return { ...next, permissions: permissionsFromThreadSettings(p.threadSettings) };
     case "tessera/ready":
-      return { ...next, threadId: String(p.threadId), connected: true };
+      return { ...next, threadId: String(p.threadId), connected: true,
+        resumable: next.resumable || p.resumable === true };
     case "item/started":
     case "item/completed":
       return { ...next, items: upsert(next.items, p.item as CodexItem) };
@@ -76,7 +78,7 @@ export function reduceCodex(state: CodexState, event: CodexEvent): CodexState {
       return { ...next, items: upsert(next.items, item) };
     }
     case "turn/started":
-      return { ...next, busy: true, materialized: true, error: undefined };
+      return { ...next, busy: true, materialized: true, resumable: true, error: undefined };
     case "turn/completed": {
       const turn = p.turn as { status?: string; error?: { message?: string } };
       return { ...next, busy: false, requests: [], error: turn.error?.message };

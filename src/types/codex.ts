@@ -80,6 +80,8 @@ export interface CodexSnapshot {
   busy: boolean;
   alive: boolean;
   materialized?: boolean;
+  /** Saved metadata can be resumed even before the first user turn. */
+  resumable?: boolean;
 }
 export interface CodexState {
   generation: string;
@@ -92,6 +94,7 @@ export interface CodexState {
   connected: boolean;
   usage?: Record<string, unknown>;
   materialized?: boolean;
+  resumable?: boolean;
   /** Effective permissions reported by the native terminal's app-server. */
   permissions?: Required<Pick<CodexConfig, "sandbox" | "approvalPolicy" | "approvalsReviewer">>;
 }
