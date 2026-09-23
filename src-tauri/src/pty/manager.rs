@@ -494,6 +494,16 @@ Claude session spawns, then try again"
     Ok(instance.input.clone())
 }
 
+pub fn input_session(state: &PtyManager, id: &str) -> Option<String> {
+    input_for_instance(state, id).ok()?.session()
+}
+
+/// A remote viewer must have seen this exact PTY, not a previous process in
+/// the same panel. Cloning the handle also keeps a restart from retargeting it.
+pub fn write_to_session(state: &PtyManager, id: &str, session: &str, data: &str) -> Result<(), String> {
+    input_for_instance(state, id)?.write_for_session(session, data)
+}
+
 pub async fn submit_to_instance(state: &PtyManager, id: &str, text: &str) -> Result<(), String> {
     input_for_instance(state, id)?.submit(text).await
 }

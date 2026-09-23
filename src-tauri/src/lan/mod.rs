@@ -643,6 +643,9 @@ impl LanManager {
                 },
             );
         }
+        // Capabilities must be learned again on every connection; a paired
+        // computer may have been downgraded since its last registry arrived.
+        self.remote_panels.lock().unwrap().remove(&derived_id);
         self.emit_state(&app);
 
         let initial = WireMessage::Registry {
@@ -724,17 +727,19 @@ impl LanManager {
             WireMessage::SendRequest {
                 request_id,
                 target_panel_id,
-                sender_panel_id: _,
+                sender_panel_id,
                 sender_panel_name,
                 sender_device_name,
                 message,
                 hop,
             } => {
-                let wrapped = format!("[panel-message from \"{sender_panel_name}\" on \"{sender_device_name}\" · hop {hop}]\n{message}");
+                let (text, inbound_hop) = inbound_message(
+                    &sender_panel_id, &sender_panel_name, &sender_device_name, &message, hop,
+                );
                 app.state::<crate::panelbus::PanelBus>()
-                    .record_inbound_hop(&target_panel_id, hop);
+                    .record_inbound_hop(&target_panel_id, inbound_hop);
                 let result =
-                    crate::panelbus::tools::deliver_inbound(app, &target_panel_id, &wrapped).await;
+                    crate::panelbus::tools::deliver_inbound(app, &target_panel_id, &text).await;
                 let reply = match result {
                     Ok(v) => WireMessage::SendResult {
                         request_id,
@@ -748,6 +753,20 @@ impl LanManager {
                     },
                 };
                 let _ = tx.send(reply);
+            }
+            WireMessage::TerminalInputRequest { request_id, target_panel_id, input_session, data } => {
+                // Synchronous delivery preserves wire order. It never spawns,
+                // resizes or forwards input to another computer.
+                let active = self.connections.lock().unwrap().get(peer_id)
+                    .is_some_and(|connection| connection.tx.same_channel(tx) && !*connection.cancel.borrow());
+                let result = if active {
+                    terminal::write_local(app, &target_panel_id, &input_session, &data)
+                } else { Err("This LAN connection is no longer active".into()) };
+                let (result, error) = match result {
+                    Ok(value) => (Some(value), None),
+                    Err(error) => (None, Some(error)),
+                };
+                let _ = tx.send(WireMessage::SendResult { request_id, result, error });
             }
             WireMessage::ReadRequest {
                 request_id,
@@ -919,6 +938,36 @@ impl LanManager {
             .await
     }
 
+    async fn terminal_input(
+        &self, device_id: &str, panel_id: &str, connection_id: &str, input_session: &str, data: &str,
+    ) -> Result<Value, String> {
+        terminal::validate_input(data)?;
+        let connection = self.connections.lock().unwrap().get(device_id).cloned()
+            .ok_or("Remote computer is offline")?;
+        if connection.id != connection_id {
+            return Err("The connection changed. Refresh the terminal before typing again.".into());
+        }
+        let supported = self.remote_panels.lock().unwrap().get(device_id)
+            .is_some_and(|panels| panels.iter().any(|p| p.id == panel_id && p.kind == "terminal" && p.terminal_input));
+        if !supported {
+            return Err("Update Tessera on the host computer to enable direct terminal input.".into());
+        }
+        let request_id = uuid::Uuid::new_v4().to_string();
+        let (tx, rx) = oneshot::channel();
+        self.pending.lock().unwrap().insert(request_id.clone(), tx);
+        let result = async {
+            connection.tx.send(WireMessage::TerminalInputRequest {
+                request_id: request_id.clone(), target_panel_id: panel_id.into(),
+                input_session: input_session.into(), data: data.into(),
+            }).map_err(|_| "Remote computer disconnected".to_string())?;
+            tokio::time::timeout(Duration::from_secs(5), rx).await
+                .map_err(|_| "Terminal input acknowledgement timed out; do not resend automatically".to_string())?
+                .map_err(|_| "Remote input channel closed".to_string())?
+        }.await;
+        self.pending.lock().unwrap().remove(&request_id);
+        result
+    }
+
     async fn read_remote_view(
         &self,
         device_id: &str,
@@ -927,19 +976,19 @@ impl LanManager {
         terminal: bool,
     ) -> Result<Value, String> {
         let request_id = uuid::Uuid::new_v4().to_string();
-        let tx = self
+        let connection = self
             .connections
             .lock()
             .unwrap()
             .get(device_id)
-            .map(|c| c.tx.clone())
+            .cloned()
             .ok_or("Remote computer is offline")?;
         let (wait_tx, wait_rx) = oneshot::channel();
         self.pending
             .lock()
             .unwrap()
             .insert(request_id.clone(), wait_tx);
-        if tx
+        if connection.tx
             .send(WireMessage::ReadRequest {
                 request_id: request_id.clone(),
                 target_panel_id: target_panel_id.into(),
@@ -952,7 +1001,12 @@ impl LanManager {
             return Err("Remote computer disconnected".into());
         }
         match tokio::time::timeout(Duration::from_secs(15), wait_rx).await {
-            Ok(Ok(result)) => result,
+            Ok(Ok(result)) => result.map(|mut value| {
+                if terminal && value.is_object() {
+                    value["connectionId"] = Value::String(connection.id.clone());
+                }
+                value
+            }),
             Ok(Err(_)) => Err("Remote transcript channel closed".into()),
             Err(_) => {
                 self.pending.lock().unwrap().remove(&request_id);
@@ -1002,6 +1056,7 @@ fn local_panel_snapshot(app: &AppHandle) -> Vec<RemotePanelInfo> {
         .local_panels()
         .into_iter()
         .map(|p| RemotePanelInfo {
+            terminal_input: p.kind == "terminal",
             reachable: p.reachable(),
             id: p.id,
             name: p.name,
@@ -1014,6 +1069,16 @@ fn local_panel_snapshot(app: &AppHandle) -> Vec<RemotePanelInfo> {
             model: p.model,
         })
         .collect()
+}
+
+fn inbound_message(sender_id: &str, sender_name: &str, device_name: &str, message: &str, hop: u32) -> (String, u32) {
+    if sender_id == crate::panelbus::registry::UI_SENDER_ID {
+        // Preserve the human's exact message, including whitespace. Names
+        // alone must not turn an agent message into unattributed user input.
+        (message.into(), 0)
+    } else {
+        (format!("[panel-message from \"{sender_name}\" on \"{device_name}\" · hop {hop}]\n{message}"), hop)
+    }
 }
 
 fn config_path() -> PathBuf {
@@ -1374,9 +1439,30 @@ pub async fn lan_read_terminal(
     state.read_remote_view(&device_id, &panel_id, 1, true).await
 }
 
+#[tauri::command]
+pub async fn lan_terminal_input(
+    device_id: String,
+    panel_id: String,
+    connection_id: String,
+    input_session: String,
+    data: String,
+    state: tauri::State<'_, LanManager>,
+) -> Result<Value, String> {
+    state.terminal_input(&device_id, &panel_id, &connection_id, &input_session, &data).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn human_messages_are_verbatim_but_agent_provenance_is_preserved() {
+        let text = "  thanks\n  indented\n";
+        assert_eq!(inbound_message(crate::panelbus::registry::UI_SENDER_ID, "Tessera user", "PC", text, 1), (text.into(), 0));
+        let (message, hop) = inbound_message("agent-id", "Tessera user", "PC", text, 2);
+        assert_eq!(message, format!("[panel-message from \"Tessera user\" on \"PC\" · hop 2]\n{text}"));
+        assert_eq!(hop, 2);
+    }
 
     #[tokio::test]
     async fn encrypted_peers_exchange_panel_kinds_and_complete_terminal_frames_both_ways() {
@@ -1414,6 +1500,7 @@ mod tests {
             awaiting_user: false,
             model: None,
             reachable: true,
+            terminal_input: true,
         }];
         let registry = WireMessage::Registry { panels };
         write_wire(&mut a, &a_noise, &registry).await.unwrap();
@@ -1464,6 +1551,12 @@ mod tests {
             matches!(received.unwrap(), WireMessage::ReadResult { request_id, result: Some(value), error: None }
             if request_id == "a-to-b" && value == frame)
         );
+        let input = WireMessage::TerminalInputRequest {
+            request_id: "keys".into(), target_panel_id: "same-panel-id".into(),
+            input_session: "one-pty-lifetime".into(), data: "Ünye\x1b[A\t\x03\r".into(),
+        };
+        write_wire(&mut b, &b_noise, &input).await.unwrap();
+        assert_eq!(serde_json::to_value(read_wire(&mut a, &a_noise).await.unwrap()).unwrap(), serde_json::to_value(input).unwrap());
     }
 
     #[test]

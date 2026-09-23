@@ -9,6 +9,9 @@ export interface TerminalSnapshot {
   rows: number;
   data: string;
   windowsPty?: ITerminalOptions['windowsPty'];
+  /** Added by the host/backend, not by the renderer's serializer. */
+  inputSession?: string | null;
+  connectionId?: string;
 }
 
 const sources = new Map<string, () => Promise<TerminalSnapshot>>();

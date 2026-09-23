@@ -20,7 +20,8 @@ let snapshotOverride;
 await viewer.exposeFunction('readRemote', async id => {
   if (oldHost) return { messages: [] };
   if (snapshotOverride) return snapshotOverride;
-  return owner.evaluate(id => window.readSharedTerminal(id), id);
+  const snapshot = await owner.evaluate(id => window.readSharedTerminal(id), id);
+  return { ...snapshot, inputSession: `pty-${id}`, connectionId: 'fixture-connection' };
 });
 const terminalState = (page, id) => page.evaluate(id => {
   const t = window.terminals.get(id), b = t.buffer.active;
@@ -67,9 +68,11 @@ try {
   await expect(viewer.locator('[data-fixture-id="host-claude"] .panel-shortcut-badge')).toHaveText('Ctrl + 5');
   await viewer.keyboard.up('Control');
   await expect(viewer.locator('.panel-shortcut-badge')).toHaveCount(0);
-  await viewer.keyboard.type('not sent to host');
+  expect(await viewer.evaluate(() => window.calls.filter(c => c.command === 'lan_terminal_input'))).toEqual([]);
+  await viewer.keyboard.type('typed directly');
+  await expect.poll(() => viewer.evaluate(() => window.calls.filter(c => c.command === 'lan_terminal_input').map(c => c.args.data).join(''))).toBe('typed directly');
   expect(await viewer.evaluate(() => window.calls.filter(c => ['pty_write', 'lan_send_panel'].includes(c.command)))).toEqual([]);
-  console.log('PASS remote panel shortcuts navigate into the peer group, show Ctrl-only badges and never type into the host');
+  console.log('PASS remote shortcuts navigate and stay local; ordinary typing uses only direct terminal input');
 
   await owner.evaluate(() => window.showOwner(true));
   await owner.locator('[data-fixture-id="host-claude"]').waitFor({ state: 'detached' });
@@ -87,7 +90,7 @@ try {
   await expect.poll(async () => (await terminalState(viewer, 'host-claude')).lines.join('\n')).toContain('Output while disconnected');
   await viewer.setViewportSize({ width: 800, height: 600 });
   expect(await viewer.evaluate(() => window.calls.filter(c => ['pty_spawn', 'codex_terminal_spawn', 'pty_resize', 'pty_write'].includes(c.command)))).toEqual([]);
-  console.log('PASS reconnect catches up; remote rendering never spawns, types into, or resizes the host PTY');
+  console.log('PASS reconnect catches up; remote rendering never spawns or resizes the host PTY');
 
   const stable = await terminalState(viewer, 'host-codex');
   oldHost = true;

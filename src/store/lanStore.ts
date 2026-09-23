@@ -16,6 +16,7 @@ export interface RemotePanelInfo {
   awaitingUser: boolean;
   model: string | null;
   reachable: boolean;
+  terminalInput?: boolean;
 }
 
 export interface LanPeerState {

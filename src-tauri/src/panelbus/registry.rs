@@ -10,6 +10,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub const UI_SENDER_ID: &str = "tessera-ui";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PanelInfo {
     pub id: String,
@@ -66,7 +68,7 @@ impl PanelInfo {
 
     pub fn ui_sender() -> Self {
         Self {
-            id: "tessera-ui".into(),
+            id: UI_SENDER_ID.into(),
             name: "Tessera user".into(),
             cwd: String::new(),
             kind: "chat".into(),
@@ -213,6 +215,7 @@ mod tests {
             awaiting_user: false,
             model: None,
             reachable: true,
+            terminal_input: false,
         }
     }
 

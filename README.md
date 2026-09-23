@@ -209,8 +209,12 @@ tools/                    cgui launcher + release/promote scripts
   its connection request on screen; unanswered requests expire after two minutes.
 - LAN sharing accepts only directly connected private IPv4 subnets. It has no discovery broadcast,
   cloud relay, UPnP, or automatic router configuration. Paired devices can see panel metadata, read
-  recent transcripts and terminal screens, and deliver messages, but cannot access files, raw shells,
-  or approval controls. Use Tessera 0.3.7 or newer on both PCs for terminal screen sharing.
+  recent transcripts and terminal screens, and deliver messages. With Tessera 0.4.3+ on both PCs,
+  remote chats keep their chat composer and remote terminals accept direct typing (no extra composer).
+  A paired computer's user can control running terminals, including commands and permission prompts;
+  pair only trusted computers. Disconnect or forget a peer to revoke access. Agent-to-agent messages
+  keep their provenance labels and cannot answer permission prompts. Older hosts remain read-only
+  terminal viewers until updated. Viewer resizing/closing never resizes or closes the host terminal.
 - Product analytics are **off unless an analytics key is supplied at runtime**; none is bundled here.
 
 ---

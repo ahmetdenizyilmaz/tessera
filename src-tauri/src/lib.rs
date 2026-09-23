@@ -196,6 +196,7 @@ pub fn run() {
             lan::lan_send_panel,
             lan::lan_read_panel,
             lan::lan_read_terminal,
+            lan::lan_terminal_input,
             lan::terminal::lan_terminal_snapshot_result,
             // Computer commands
             computer::computer_screenshot,

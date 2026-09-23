@@ -1,4 +1,4 @@
-//! Read-only snapshots supplied by the host's xterm parser, including hidden panels.
+//! Host-rendered terminal snapshots and human input to existing local PTYs.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -51,6 +51,7 @@ pub async fn read_local(app: &AppHandle, panel_id: &str) -> Result<Value, String
     if panel.kind != "terminal" {
         return Err("This panel is not a terminal".into());
     }
+    let input_session = crate::pty::manager::input_session(&app.state(), panel_id);
     let state = app.state::<TerminalRequests>();
     let request_id = uuid::Uuid::new_v4().to_string();
     let (tx, rx) = oneshot::channel();
@@ -72,11 +73,37 @@ pub async fn read_local(app: &AppHandle, panel_id: &str) -> Result<Value, String
             .map_err(|_| "Host terminal renderer did not respond".to_string())?
             .map_err(|_| "Host terminal renderer disconnected".to_string())??;
         snapshot.validate()?;
-        serde_json::to_value(snapshot).map_err(|e| e.to_string())
+        // Never attach a replacement PTY's token to an in-flight old screen.
+        if crate::pty::manager::input_session(&app.state(), panel_id) != input_session {
+            return Err("Host terminal changed while reading its screen".into());
+        }
+        let mut value = serde_json::to_value(snapshot).map_err(|e| e.to_string())?;
+        value["inputSession"] = serde_json::to_value(input_session).map_err(|e| e.to_string())?;
+        Ok(value)
     }
     .await;
     state.pending.lock().unwrap().remove(&request_id);
     result
+}
+
+pub fn validate_input(data: &str) -> Result<(), String> {
+    if data.is_empty() || data.len() > super::protocol::MAX_MESSAGE_BYTES {
+        return Err("Terminal input must contain between 1 byte and 64 KiB".into());
+    }
+    Ok(())
+}
+
+/// Explicit human terminal control. Do not expose this through panel-bus MCP:
+/// agent messages still cannot answer approval prompts or send control keys.
+pub fn write_local(app: &AppHandle, panel_id: &str, session: &str, data: &str) -> Result<Value, String> {
+    validate_input(data)?;
+    let panel = app.state::<crate::panelbus::PanelBus>().local_panels()
+        .into_iter().find(|p| p.id == panel_id).ok_or("Local panel is no longer open")?;
+    if panel.kind != "terminal" || panel.remote_device_id.is_some() {
+        return Err("Direct input is only available for a local terminal".into());
+    }
+    crate::pty::manager::write_to_session(&app.state(), panel_id, session, data)?;
+    Ok(serde_json::json!({"delivered": true}))
 }
 
 #[tauri::command]
@@ -99,6 +126,13 @@ pub fn lan_terminal_snapshot_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn raw_input_allows_user_control_keys_but_bounds_bytes() {
+        assert!(validate_input("\x1b[A\t\x03\r").is_ok());
+        assert!(validate_input("").is_err());
+        assert!(validate_input(&"a".repeat(64 * 1024)).is_ok());
+        assert!(validate_input(&"漢".repeat(23000)).is_err());
+    }
     #[test]
     fn validates_geometry_and_encoded_frame_size() {
         let mut snapshot = TerminalSnapshot {

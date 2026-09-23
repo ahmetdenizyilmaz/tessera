@@ -65,8 +65,8 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
   }, [refresh, peer?.connected, panel?.busy, isTerminal]);
 
   const send = async () => {
-    const text = draft.trim();
-    if (!parsed || !text || !peer?.connected || sending) return;
+    const text = draft;
+    if (!parsed || !text.trim() || !peer?.connected || sending) return;
     setSending(true);
     try {
       await invoke('lan_send_panel', { deviceId: parsed.deviceId, panelId: parsed.panelId, message: text });
@@ -118,7 +118,8 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
           </div>
         )}
       {isTerminal ? (
-        <RemoteTerminalView deviceId={parsed.deviceId} panelId={parsed.panelId} connected={peer.connected} refreshKey={refreshKey} />
+        <RemoteTerminalView deviceId={parsed.deviceId} panelId={parsed.panelId} connected={peer.connected}
+          inputSupported={peer.registryReady !== false && panel.terminalInput === true} refreshKey={refreshKey} />
       ) : (
       <div style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {messages.map((message, index) => {
@@ -141,7 +142,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
       )}
 
       {error && <div style={{ color: '#ff6b6b', fontSize: 11, padding: '4px 10px' }}>{error}</div>}
-      <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+      {!isTerminal && <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -155,7 +156,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
         <button className="btn btn-primary" onClick={() => void send()} disabled={!draft.trim() || sending || !peer.connected || !panel.reachable} title="Send to remote panel">
           <Send size={14} />
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

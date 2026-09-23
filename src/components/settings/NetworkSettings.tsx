@@ -148,7 +148,7 @@ export function NetworkSettings() {
       {(error || globalError) && <div style={{ color: '#ff6b6b', fontSize: 11 }}>{error || globalError}</div>}
       <p className="form-hint">
         Closing a remote panel or group hides it only on this computer; the host keeps running. Restore closed groups and panels above to show them again.
-        Windows may ask once for firewall access. Allow Tessera on Private networks only. A paired computer sees panel names, status, recent transcripts and terminal screens and can send messages; it cannot access files, shell commands, or approval controls.
+        Windows may ask once for firewall access. Allow Tessera on Private networks only. A paired computer can view your panels and send chat messages. Its user can type directly into running terminals, including commands and permission prompts. Pair only trusted computers; disconnect or forget a peer to revoke access.
       </p>
     </div>
   );

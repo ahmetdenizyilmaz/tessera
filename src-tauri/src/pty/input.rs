@@ -12,6 +12,7 @@ struct Writer {
 /// One handle per PTY lifetime: a delayed Enter can never reach a replacement
 /// process, and simultaneous panel messages cannot interleave their input.
 pub(super) struct TerminalInput {
+    session: String,
     writer: Mutex<Writer>,
     messages: tokio::sync::Mutex<()>,
 }
@@ -19,6 +20,7 @@ pub(super) struct TerminalInput {
 impl TerminalInput {
     pub fn new(stream: Box<dyn Write + Send>) -> Self {
         Self {
+            session: uuid::Uuid::new_v4().to_string(),
             writer: Mutex::new(Writer { stream: Some(stream), revision: 0 }),
             messages: tokio::sync::Mutex::new(()),
         }
@@ -28,6 +30,18 @@ impl TerminalInput {
         if let Ok(mut writer) = self.writer.lock() {
             writer.stream = None;
         }
+    }
+
+    pub fn session(&self) -> Option<String> {
+        self.writer.lock().ok()?.stream.as_ref()?;
+        Some(self.session.clone())
+    }
+
+    pub fn write_for_session(&self, session: &str, data: &str) -> Result<(), String> {
+        if session != self.session {
+            return Err("The host terminal restarted. Refresh its screen before typing again.".into());
+        }
+        self.write(data)
     }
 
     fn write_checked(&self, data: &str, expected: Option<u64>) -> Result<u64, String> {
@@ -78,6 +92,22 @@ mod tests {
             Ok(bytes.len())
         }
         fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+
+    #[test]
+    fn remote_keys_are_exact_and_bound_to_a_single_live_session() {
+        let capture = Capture::default();
+        let input = TerminalInput::new(Box::new(capture.clone()));
+        let session = input.session().unwrap();
+        let data = "Ünye\x1b[A\t\x03\r";
+        input.write_for_session(&session, data).unwrap();
+        let replacement = TerminalInput::new(Box::new(capture.clone()));
+        assert!(replacement.write_for_session(&session, "stale\r").is_err());
+        input.close();
+        assert!(input.session().is_none());
+        assert!(input.write_for_session(&session, "closed\r").is_err());
+        assert_eq!(capture.0.lock().unwrap()[0].1, data.as_bytes());
+        assert_eq!(capture.0.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

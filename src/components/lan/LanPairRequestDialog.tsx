@@ -45,8 +45,9 @@ export function LanPairRequestDialog() {
           <strong>{request.name}</strong> ({request.address}) wants to connect to this computer over the local network.
         </p>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 10 }}>
-          Approving lets that computer see your open Claude and Codex panels, read their recent transcripts,
-          and send them messages. It cannot open files, run commands, or answer permission prompts.
+          Approving lets that computer view your open panels and send chat messages. Its user can also type
+          directly into your running terminals, including commands and permission prompts. Only approve
+          computers and people you trust with that access.
         </p>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>
           Device fingerprint <code>{request.fingerprint}</code>. The same fingerprint is shown on {request.name} while it waits.

@@ -28,6 +28,9 @@ pub struct RemotePanelInfo {
     pub awaiting_user: bool,
     pub model: Option<String>,
     pub reachable: bool,
+    /// Optional extension. Never send raw-input requests to older hosts.
+    #[serde(default)]
+    pub terminal_input: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +62,13 @@ pub enum WireMessage {
         result: Option<Value>,
         error: Option<String>,
     },
+    /// Human keyboard input, not an agent message. Scoped to one PTY lifetime.
+    TerminalInputRequest {
+        request_id: String,
+        target_panel_id: String,
+        input_session: String,
+        data: String,
+    },
     ReadRequest {
         request_id: String,
         target_panel_id: String,
@@ -84,6 +94,15 @@ pub enum WireMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_registry_does_not_enable_terminal_input() {
+        let mut panel = serde_json::json!({"id":"p", "name":"Terminal", "cwd":"", "kind":"terminal",
+            "provider":"claude", "status":"running", "busy":false, "awaitingUser":false, "model":null, "reachable":true});
+        assert!(!serde_json::from_value::<RemotePanelInfo>(panel.clone()).unwrap().terminal_input);
+        panel["terminalInput"] = Value::Bool(true);
+        assert!(serde_json::from_value::<RemotePanelInfo>(panel).unwrap().terminal_input);
+    }
 
     #[test]
     fn legacy_reads_remain_transcripts_and_terminal_reads_are_explicit() {

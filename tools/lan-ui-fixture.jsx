@@ -33,13 +33,14 @@ mockIPC(async (command, args) => {
   if (command === 'codex_configure') return { generation: 'test', threadId: 'test-thread',
     thread: { id: 'test-thread', turns: [] }, events: [], requests: [], materialized: true, busy: false, alive: true };
   if (command === 'lan_read_terminal') return window.readRemote(args.panelId);
+  if (command === 'lan_terminal_input') return window.writeRemote?.(args);
   if (command === 'lan_read_panel') return { messages: [{ role: 'assistant', content: 'Actual chat transcript' }] };
   return null;
 }, { shouldMockEvents: true });
 
 const panels = ['claude', 'codex'].map(provider => ({
   id: `host-${provider}`, name: `${provider} terminal`, cwd: 'C:/fixture', provider, kind: 'terminal',
-  status: 'running', busy: false, awaitingUser: false, model: null, reachable: true,
+  status: 'running', busy: false, awaitingUser: false, model: null, reachable: true, terminalInput: true,
 }));
 useInstanceStore.setState({ instances: new Map(panels.map(panel => [panel.id, {
   id: panel.id, name: panel.name, status: 'running', color: '#4a9eff',
@@ -47,7 +48,7 @@ useInstanceStore.setState({ instances: new Map(panels.map(panel => [panel.id, {
     allowedTools: [], permissionMode: 'default', dangerouslySkipPermissions: false,
     systemPrompt: '', maxBudget: 0, agentMode: false },
 }])) });
-panels.push({ ...panels[0], id: 'host-chat', name: 'Chat', kind: 'chat' });
+panels.push({ ...panels[0], id: 'host-chat', name: 'Chat', kind: 'chat', terminalInput: false });
 const setStatus = connected => useLanStore.getState().setStatus({
   sharing: true, deviceId: 'viewer', name: 'Viewer', fingerprint: '', port: 43721, addresses: [], pendingRequests: [],
   peers: [{ deviceId: 'owner', name: 'Host PC', address: '192.168.1.2', connected, registryReady: true, panels }],
@@ -102,4 +103,9 @@ window.workspaceState = () => ({ order: useLayoutStore.getState().tabOrder,
 window.readSharedTerminal = readSharedTerminal;
 window.output = (id, data) => emit(`pty-data-${id}`, data);
 window.setConnected = setStatus;
+window.setInputSupported = supported => {
+  for (const panel of panels) panel.terminalInput = supported && panel.kind === 'terminal';
+  setStatus(true);
+};
+window.hideViewer = () => root.render(null);
 window.clearShared = clearTerminalState;

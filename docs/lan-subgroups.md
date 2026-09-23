@@ -1,9 +1,9 @@
 # LAN remote subgroups
 
 Tessera can pair directly with another Tessera installation on the same private IPv4 subnet. Each
-computer appears in the other's workspace as a group containing its currently open Claude and Codex
+computer appears in the other's workspace as a group containing its currently open agent
 panels. The agents continue to run on the computer that owns them; only panel metadata, recent
-conversation reads, terminal screen snapshots, and message delivery cross the connection.
+conversation reads, terminal screen snapshots, message delivery, and explicit user terminal input cross the connection.
 
 ## Panel views and updates (0.3.7)
 
@@ -15,8 +15,26 @@ silently displaying its terminal as chat. Existing pairings remain valid.
 Terminal screens refresh while connected, including when the host switches into another group.
 The viewer preserves the host's rows and columns; smaller tiles can scroll without resizing the
 host's terminal. Recent scrollback is included (up to 2,000 lines, reduced to fit the encrypted frame).
-The screen is read-only; the existing message box still delivers a message through the panel bus.
 A terminal that has never started must first be opened on its host.
+
+## Direct terminal input (0.4.3)
+
+Install 0.4.3 or newer on **both computers**. Remote chat panels retain their transcript and message
+composer. Remote terminal panels retain the host's xterm screen and accept typing, Enter, arrows,
+control keys and paste directly, with no extra message box. Paste respects the host's bracketed-paste
+mode and does not append Enter. Ctrl+C copies a selection or interrupts if nothing is selected;
+Ctrl+V/Shift+Insert paste. Tessera's assigned Ctrl+number/Alt+number shortcuts stay local.
+
+Human chat messages are delivered verbatim, without a `[panel-message ...]` header. Agent-to-agent
+messages still include their sender and hop metadata and retain their existing approval restrictions.
+Older hosts advertise no input capability and remain read-only with an update notice; the viewer
+does not fall back to sending terminal keystrokes as chat messages. Existing pairings stay valid.
+
+Input uses an ordered, bounded queue and is scoped to the connection and exact host PTY lifetime.
+Disconnecting, closing the viewer or replacing a host PTY discards unsent input. A failed or timed-out
+input acknowledgement stops the queue without retrying; check the host screen, then click Refresh
+before continuing. xterm-generated device-query replies and focus reports are never sent back as
+user input. The host remains responsible for terminal dimensions and rendering.
 
 Panel lists include the whole workspace across navigation levels. Group changes and continuous
 streaming cannot postpone roster publication indefinitely; failed updates are retried. Disconnected
@@ -73,10 +91,13 @@ A paired computer can list messageable open panels, see their provider/model/sta
 metadata, read up to 100 recent transcript messages or the current terminal screen, and deliver a user message. Delivery goes through
 the same local panel bus used inside one Tessera window, including Codex's automatic busy-turn queue.
 
-Pairing does not expose filesystem APIs, shell commands, raw terminal input, session creation or
-deletion, interrupts, permission answers, API keys, or CLI credentials. Use **Forget** in Local Network
-settings to revoke the pinned device key and remove its subgroup; a forgotten computer has to send a
-new request, which is approved again by hand.
+From 0.4.3 onward, a paired computer's user can also control existing terminal panels directly,
+including commands, interrupts and answers to terminal permission prompts. That can cause agents
+or shells to access files and execute tools with the host user's permissions. Only pair computers
+and people you trust with this access. There are no separate filesystem, credential, session-creation,
+host-close or host-resize APIs. Agent-to-agent messaging cannot use the raw-input route or answer
+approval prompts. Use **Disconnect** to stop access or **Forget** to revoke the pinned device key and
+remove its subgroup; a forgotten computer must request approval again.
 
 ## Regression checks
 
@@ -84,5 +105,7 @@ new request, which is approved again by hand.
 legacy protocol reads and bidirectional encrypted terminal frames over isolated TCP sockets.
 With `npm run dev` running, `node tools/test-lan-panels.mjs` uses independent browser contexts and
 real xterm parsers to verify both providers, chat/terminal routing, hidden panels, reconnects, and
-old-host errors. Browser tests mock native IPC and do not start agents or touch saved workspaces;
+old-host errors. `node tools/test-lan-input.mjs` additionally exercises direct keys, Unicode/paste,
+terminal-query suppression, capability gating, disconnect/restart, delivery failure and local close.
+Browser tests mock native IPC and do not start agents or touch saved workspaces;
 they do not replace a final test between the user's two physical computers.
