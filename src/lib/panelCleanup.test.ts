@@ -38,11 +38,19 @@ const enter = (id: string) => {
   useGroupStore.getState().enterGroup(id);
   useGroupStore.getState().commitEnterGroup();
 };
-const terminal = (provider: 'claude' | 'codex' = 'claude') => {
+const terminal = (provider: 'claude' | 'codex' | 'opencode' = 'claude') => {
   const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: provider }, provider);
   useLayoutStore.getState().addPanel(id, 'terminal');
   return id;
 };
+it('closing a local OpenCode panel stops its own server and PTY, without deleting history', async () => {
+  const id = terminal('opencode');
+  await closePanel(id);
+  expect(invoke).toHaveBeenCalledWith('opencode_close', { id });
+  expect(invoke).toHaveBeenCalledWith('pty_kill', { id });
+  expect(useInstanceStore.getState().instances.has(id)).toBe(false);
+  expect(vi.mocked(invoke).mock.calls.some(([command]) => command.includes('delete'))).toBe(false);
+});
 
 it('closes a local group recursively, including live nested children, without spilling them into its parent', async () => {
   const unaffected = terminal();

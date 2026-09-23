@@ -1,4 +1,5 @@
 import type { AgentProvider, CodexConfig } from './codex';
+import type { OpenCodeOptions } from './opencode';
 /** 'claude' is the Claude Code CLI (subscription login, tools, agentic).
  *  'anthropic' is the Messages API with your own key — plain chat only. */
 export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'openrouter' | 'gemini' | 'ollama' | 'lmstudio';
@@ -51,6 +52,7 @@ export interface ForkContext {
 
 export interface InstanceConfig {
   agentProvider?: AgentProvider;
+  opencode?: OpenCodeOptions;
   codex?: Partial<Pick<CodexConfig, 'effort' | 'sandbox' | 'approvalPolicy' | 'approvalsReviewer' | 'executablePath'>>;
   cwd: string;
   model: string;
@@ -79,6 +81,8 @@ export interface ClaudeInstance {
   claudeSessionId?: string;
   codexThreadId?: string;
   codexHasTurns?: boolean;
+  opencodeSessionId?: string;
+  opencodeDataId?: string;
 }
 
 export const INSTANCE_COLORS: string[] = [

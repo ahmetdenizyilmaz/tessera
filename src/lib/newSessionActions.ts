@@ -10,9 +10,16 @@ import { LLM_PROVIDERS } from '../types/llmProviders';
 import type { InstanceConfig, LlmConfig, LlmProvider, ClaudeRouting } from '../types/instance';
 import type { LastSessionPreset } from '../types/session';
 import { applyForkToInstance } from './forkActions';
+import { focusShortcutPanel } from './panelShortcuts';
 
 /** THE creation entry point: every +/Ctrl+N/menu trigger funnels here. */
 export function openNewSessionWizard(): void {
+  const existingId = Object.entries(useLayoutStore.getState().widgetKinds)
+    .find(([, kind]) => kind === 'new-session')?.[0];
+  // Reuse normal panel navigation: recompute focus sizing, reveal maximized
+  // panels, and enter the wizard's group without resetting its selections.
+  if (existingId && focusShortcutPanel(existingId)) return;
+
   const id = useLayoutStore.getState().addWidgetPanel('new-session');
   // Empty id = duplicate (refocused the existing wizard, keep its picks) or
   // panel limit (toast already shown) — only a genuinely new panel resets.
@@ -49,13 +56,14 @@ export function replaceWizard(wizardId: string, fn: () => void): void {
 
 /** Which keyring provider (if any) a route needs, and its display identity. */
 export function routeMeta(route: WizardRoute): {
-  branch: 'claude' | 'llm' | 'codex';
+  branch: 'claude' | 'llm' | 'codex' | 'opencode';
   provider: Exclude<LlmProvider, 'claude'> | null;
   keyProvider: string | null;
   gateway?: ClaudeRouting['gateway'];
   label: string;
 } {
   switch (route) {
+    case 'opencode': return { branch: 'opencode', provider: null, keyProvider: null, label: 'OpenCode · API & local models' };
     case 'codex': return { branch: 'codex', provider: null, keyProvider: null, label: 'Codex · CLI login' };
     case 'claude-sub': return { branch: 'claude', provider: null, keyProvider: null, gateway: 'anthropic', label: 'Claude · subscription' };
     case 'gw-openrouter': return { branch: 'claude', provider: 'openrouter', keyProvider: 'openrouter', gateway: 'openrouter', label: 'OpenRouter gateway' };
@@ -108,7 +116,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
   const s = useWizardStore.getState();
   if (!s.panelView || !s.route) return;
   const meta = routeMeta(s.route);
-  if (meta.branch === 'codex') return;
+  if (meta.branch === 'codex' || meta.branch === 'opencode') return;
 
   const others = useLayoutStore.getState().tabOrder.filter((id) => id !== wizardPanelId);
   if (others.length >= MAX_PANELS) { notifyPanelLimit(); return; }

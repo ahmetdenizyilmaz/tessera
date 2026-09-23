@@ -150,7 +150,7 @@ export function AgentPanelHeader({
               <span className="agent-panel-provider-icon" aria-hidden="true">
                 <ProviderIcon
                   provider={
-                    instance.config.agentProvider === "codex" ? "openai" : "claude"
+                    instance.config.agentProvider === "codex" ? "openai" : instance.config.agentProvider ?? "claude"
                   }
                   size={12}
                 />

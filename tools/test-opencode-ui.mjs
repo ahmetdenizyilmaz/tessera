@@ -1,0 +1,70 @@
+// npm run dev -- --host 127.0.0.1, then node tools/test-opencode-ui.mjs
+import { chromium, expect } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+const errors = [];
+page.on('pageerror', e => { if (e.message !== 'WebSocket closed without opened.') errors.push(e.message); });
+await page.route('**/opencode-ui-test', r => r.fulfill({ contentType: 'text/html', body: `<div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script><script type="module" src="/tools/opencode-ui-fixture.jsx"></script>` }));
+const start = async (view) => {
+  await page.goto(`${process.argv[2] || 'http://127.0.0.1:1420'}/opencode-ui-test`);
+  await page.getByRole('button', { name: view === 'chat' ? /^Chat Rich GUI/ : /^Terminal Native coding/ }).click();
+  await page.getByRole('button', { name: 'OpenCode · API & local models' }).click();
+};
+try {
+  await start('chat');
+  await expect(page.getByText('OpenCode runs the coding tools.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Discover models' }).click();
+  await expect(page.getByRole('status')).toContainText('Connected · 2 models');
+  await page.getByLabel('Model provider').selectOption('openrouter');
+  await page.getByLabel(/^API key/).fill('fixture-key');
+  await page.getByRole('button', { name: 'Save key' }).click();
+  await expect(page.getByText('API key saved in the OS keychain.')).toBeVisible();
+  await page.getByLabel('Model ID', { exact: false }).fill('vendor/model');
+  await page.getByText('OpenCode CLI & advanced').click();
+  await page.getByRole('button', { name: 'Check OpenCode CLI' }).click();
+  await expect(page.getByText(/OpenCode 1.18.32 · C:/)).toBeVisible();
+  await mkdir('.tmp/opencode-integration/ui', { recursive: true });
+  await page.screenshot({ path: '.tmp/opencode-integration/ui/setup.png', fullPage: true });
+  await page.getByRole('button', { name: 'Open OpenCode chat', exact: true }).click();
+  await expect(page.getByLabel('Message OpenCode')).toBeEnabled();
+  await page.getByLabel('Message OpenCode').fill('Check this project');
+  await page.getByLabel('Message OpenCode').press('Enter');
+  await expect(page.getByText('OpenCode fixture reply')).toBeVisible();
+  await expect(page.getByText('read · completed')).toBeVisible();
+  const id = await page.evaluate(() => window.layout.getState().tabOrder[0]);
+  await page.evaluate(async id => {
+    window.snapshots[id].permissions = [{ id: 'per_test', sessionID: 'ses_fixture', permission: 'bash', patterns: ['echo test'], metadata: { command: 'echo test' } }];
+    await window.refresh(id);
+  }, id);
+  await expect(page.getByText('Allow bash?')).toBeVisible();
+  await page.getByRole('button', { name: 'Reject', exact: true }).click();
+  await expect(page.getByText('Allow bash?')).toHaveCount(0);
+  await page.evaluate(async id => {
+    window.snapshots[id].questions = [{ id: 'que_test', sessionID: 'ses_fixture', questions: [{ header: 'Test', question: 'Choose your mode', options: [{ label: 'Fast', description: 'First' }, { label: 'Careful', description: 'Second' }] }] }];
+    await window.refresh(id);
+  }, id);
+  await page.getByRole('radio', { name: /Careful/ }).check();
+  await page.getByRole('button', { name: 'Send answers' }).click();
+  await page.getByLabel('Message OpenCode').fill('Keep this draft');
+  await page.evaluate(async id => { window.snapshots[id].messages[1].parts[0].text += ' (stream update)'; await window.refresh(id); }, id);
+  await expect(page.getByLabel('Message OpenCode')).toHaveValue('Keep this draft');
+  await expect(page.getByLabel('Message OpenCode')).toBeFocused();
+  await page.setViewportSize({ width: 560, height: 820 });
+  await expect(page.getByTitle('Close instance')).toBeVisible();
+  await page.screenshot({ path: '.tmp/opencode-integration/ui/chat.png', fullPage: true });
+  expect(await page.evaluate(() => window.calls.filter(c => c.command === 'opencode_respond').map(c => c.args))).toEqual(expect.arrayContaining([expect.objectContaining({ reply: 'reject' }), expect.objectContaining({ answers: [['Careful']] })]));
+  expect(await page.evaluate(() => window.calls.some(c => c.command === 'stream_send' || c.command === 'pty_spawn'))).toBe(false);
+  await page.getByTitle('Close instance').click();
+  expect(await page.evaluate(() => window.calls.some(c => c.command === 'opencode_close'))).toBe(true);
+  console.log('PASS setup, provider key storage, model discovery, chat/tool rendering, approvals, questions, draft focus, narrow header and close');
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await start('terminal');
+  await page.getByRole('button', { name: 'Open OpenCode terminal', exact: true }).click();
+  await expect(page.locator('.xterm')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.calls.some(c => c.command === 'opencode_terminal_spawn'))).toBe(true);
+  expect(await page.evaluate(() => window.calls.some(c => c.command === 'pty_spawn' || c.command === 'codex_terminal_spawn'))).toBe(false);
+  await page.screenshot({ path: '.tmp/opencode-integration/ui/terminal.png', fullPage: true });
+  expect(errors).toEqual([]);
+  console.log('PASS terminal selects the OpenCode PTY, never Claude/Codex');
+} finally { await browser.close(); }

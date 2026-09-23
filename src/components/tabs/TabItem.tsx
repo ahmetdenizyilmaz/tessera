@@ -9,6 +9,7 @@ import { useGroupStore } from '../../store/groupStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { closePanel } from '../../lib/panelCleanup';
 import claudeIcon from '../../assets/claude-icon.ico';
+import opencodeIcon from '../../assets/opencode-icon.svg';
 import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
@@ -17,6 +18,7 @@ import { remotePanelByCompositeId, useLanStore } from '../../store/lanStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
 const PROVIDER_ICONS: Record<string, string> = {
+  opencode: opencodeIcon,
   claude: claudeIcon,
   anthropic: claudeIcon,
   openai: openaiIcon,
@@ -186,7 +188,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       ) : (
         <img
           className="tab-provider-icon"
-          src={PROVIDER_ICONS[instance!.config.llmConfig?.provider ?? (instance!.config.agentProvider === 'codex' ? 'openai' : 'claude')] ?? claudeIcon}
+          src={PROVIDER_ICONS[instance!.config.llmConfig?.provider ?? (instance!.config.agentProvider === 'codex' ? 'openai' : instance!.config.agentProvider ?? 'claude')] ?? claudeIcon}
           alt=""
           style={{ filter: `drop-shadow(0 0 3px ${instance!.color})` }}
         />

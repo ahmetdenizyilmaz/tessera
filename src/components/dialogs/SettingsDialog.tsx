@@ -9,6 +9,7 @@ import { ProxySettings } from '../settings/ProxySettings';
 import { StorageSettings } from '../settings/StorageSettings';
 import { LlmProviderSettings } from '../settings/LlmProviderSettings';
 import { NetworkSettings } from '../settings/NetworkSettings';
+import { OpenCodeSettings } from '../settings/OpenCodeSettings';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface SettingsDialogProps {
 }
 
 const TABS = [
+  { id: 'opencode', label: 'OpenCode', icon: '>_' },
   { id: 'network', label: 'Local Network', icon: '⇄' },
   { id: 'general', label: 'General', icon: '⚙' },
   { id: 'permissions', label: 'Permissions', icon: '🔒' },
@@ -37,6 +39,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'opencode': return <OpenCodeSettings />;
       case 'network': return <NetworkSettings />;
       case 'general': return <GeneralSettings />;
       case 'permissions': return <PermissionsSettings />;

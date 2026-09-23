@@ -3,6 +3,9 @@ import { useInstanceStore } from '../store/instanceStore';
 import { useWizardStore } from '../store/wizardStore';
 import { useChatStore } from '../store/chatStore';
 import { useCodexStore } from '../store/codexStore';
+import { ensureOpenCode, refreshOpenCode } from './opencodeBridge';
+import { useOpenCodeStore } from '../store/opencodeStore';
+import { openCodeTranscript } from './opencodeConfig';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { canAddPanel, notifyPanelLimit } from '../store/layoutStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -35,6 +38,12 @@ function providerLabel(inst: ClaudeInstance | undefined): string {
 export async function collectTranscript(instanceId: string): Promise<ForkMessage[]> {
   const inst = useInstanceStore.getState().instances.get(instanceId);
   if (!inst) return [];
+
+  if (inst.config.agentProvider === 'opencode') {
+    await ensureOpenCode(instanceId);
+    await refreshOpenCode(instanceId);
+    return openCodeTranscript(useOpenCodeStore.getState().sessions[instanceId]?.messages ?? []);
+  }
 
   if (inst.config.llmConfig) {
     const rows = useLlmChatStore.getState().getConversation(instanceId).messages.filter((m) => !m.isStreaming);
@@ -132,7 +141,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
   const isLlm = !!inst.config.llmConfig;
   const openingMessage = fork.openingMessage.trim() || undefined;
 
-  if (!isLlm) {
+  if (!isLlm && inst.config.agentProvider !== 'opencode') {
     const wire = normalizeAlternation(transcript);
     try {
       if (inst.config.agentProvider === 'codex') {
@@ -165,7 +174,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
   // goes in at spawn time (below). Codex terminals send their first message
   // through the composer before the terminal attaches, so they can carry the
   // transcript in that message like chat panels, where it stays visible.
-  const isClaudeTerminal = !isLlm && inst.config.agentProvider !== 'codex' && inst.config.panelView === 'terminal';
+  const isClaudeTerminal = !isLlm && (!inst.config.agentProvider || inst.config.agentProvider === 'claude') && inst.config.panelView === 'terminal';
   const context: ForkContext = {
     sourceId: fork.sourceId,
     sourceName: fork.sourceName,
@@ -202,7 +211,7 @@ export async function applyForkToInstance(newId: string): Promise<void> {
         },
       },
     }));
-  } else if (inst.config.agentProvider !== 'codex' && inst.config.panelView !== 'terminal') {
+  } else if ((!inst.config.agentProvider || inst.config.agentProvider === 'claude') && inst.config.panelView !== 'terminal') {
     useChatStore.getState().seedHistory(newId, transcript);
   }
   // Codex panels render config.fork.transcript themselves (CodexPanel).

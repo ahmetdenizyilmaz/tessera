@@ -5,6 +5,7 @@ import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/g
 import { usePluginStore } from '../store/pluginStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useCodexStore } from '../store/codexStore';
+import { stopOpenCodeWatch } from './opencodeBridge';
 import { normalizePanelShortcuts, usePanelShortcutStore, type PanelShortcutBindings } from '../store/panelShortcutStore';
 import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
@@ -27,6 +28,8 @@ export interface SavedInstance {
   config: InstanceConfig;
   claudeSessionId?: string;
   codexThreadId?: string;
+  opencodeSessionId?: string;
+  opencodeDataId?: string;
 }
 
 export interface SerializedGroup {
@@ -127,6 +130,8 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
       // Codex has no resumable transcript until its first user turn. An empty
       // panel restores as empty rather than trying to resume a nonexistent file.
       codexThreadId: inst.codexHasTurns === false ? undefined : inst.codexThreadId,
+      opencodeSessionId: inst.opencodeSessionId,
+      opencodeDataId: inst.opencodeDataId,
     })),
     layout: {
       tabOrder: [...layoutSrc.tabOrder],
@@ -259,6 +264,8 @@ export function deserializeWorkspace(raw: unknown): void {
   const openIds = new Set([...useLayoutStore.getState().tabOrder, ...useInstanceStore.getState().instances.keys()]);
   if (openIds.size > 0) {
     for (const id of openIds) {
+      stopOpenCodeWatch(id);
+      invoke('opencode_close', { id }).catch(() => {});
       invoke('codex_close', { id }).catch(() => {});
       invoke('stream_kill', { id }).catch(() => {});
       invoke('pty_kill', { id }).catch(() => {});
@@ -300,6 +307,14 @@ export function deserializeWorkspace(raw: unknown): void {
   for (const inst of liveInstances) {
     const newId = useInstanceStore.getState().addInstance(inst.config, inst.name);
     idMap.set(inst.id, newId);
+
+    if (inst.config.agentProvider === 'opencode' && inst.opencodeDataId) {
+      const identity = 'opencode:' + inst.opencodeDataId;
+      if (!seenSessionIds.has(identity)) {
+        useInstanceStore.getState().updateInstance(newId, { opencodeSessionId: inst.opencodeSessionId, opencodeDataId: inst.opencodeDataId });
+        seenSessionIds.add(identity);
+      }
+    }
 
     if (inst.config.agentProvider === 'codex' && inst.codexThreadId) {
       const identity = 'codex:' + inst.codexThreadId;

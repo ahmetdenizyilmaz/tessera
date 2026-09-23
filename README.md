@@ -29,6 +29,7 @@ panels message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + 
 | --- | --- | --- |
 | **Claude Code** | Coding-agent chat or native terminal, with tools and MCP | Claude Code CLI and its configured login |
 | **Codex** | Coding-agent chat or native terminal, with model/effort selection, permissions, and MCP | Codex CLI and its configured login |
+| **OpenCode** | Independent coding-agent chat or native terminal using OpenRouter, cloud API keys, Ollama, LM Studio, or a compatible endpoint | OpenCode CLI and a supported model/provider; no Claude Code wrapper |
 | **OpenRouter** | Route a Claude Code panel to a model selected from OpenRouter's catalog | Claude Code CLI and an OpenRouter API key |
 | **Anthropic, OpenAI, Gemini APIs** | Direct streaming chat panels | An API key for the selected provider |
 | **Ollama** | Direct local chat, or a model-backed Claude Code panel through its compatible endpoint | A running Ollama server and an available model; CLI required for the coding-agent route |
@@ -41,6 +42,9 @@ provider, endpoint, and model.
 
 See the [Codex guide](docs/codex-provider.md) for login discovery, session resume, permission
 defaults, and the separate Preview build.
+
+See the [OpenCode guide](docs/opencode-provider.md) for independent cloud/local coding
+agents, credentials, model discovery, permissions, and session storage.
 
 ---
 
@@ -92,6 +96,8 @@ Set up the connections you want to use:
 - **Codex:** install the Codex CLI and configure its login. Tessera reuses that login; the
   [Codex guide](docs/codex-provider.md) covers detection and executable overrides.
 - **Cloud API chat:** enter the provider's API key in **Settings → LLM Providers**.
+- **OpenCode:** install the OpenCode CLI, then configure **Settings → OpenCode**.
+  Create either a Chat or Terminal panel and choose OpenCode under Coding agents.
 - **Local chat:** start Ollama or LM Studio, make a model available, and configure its server URL
   in **Settings → LLM Providers**. Direct chat panels work independently of the coding-agent CLIs.
 

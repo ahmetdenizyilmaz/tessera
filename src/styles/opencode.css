@@ -1,0 +1,14 @@
+.opencode-options { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.opencode-options .form-row { gap: 8px; }
+.opencode-options > .form-row { align-items: flex-start; }
+.opencode-options .form-row > .form-group { flex: 1; min-width: 0; }
+.opencode-hint { color: var(--text-muted); font-size: 12px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.opencode-options details > summary { cursor: pointer; font-size: 12px; margin-bottom: 10px; }
+.opencode-options details > * { margin-bottom: 10px; }
+.opencode-setup { display: flex; flex-direction: column; gap: 12px; }
+.opencode-question { display: flex; flex-direction: column; gap: 8px; }
+.opencode-question fieldset { border: 0; padding: 0; margin: 0 0 12px; min-width: 0; }
+.opencode-question label { display: flex; align-items: baseline; gap: 6px; margin: 6px 0; }
+.opencode-question .form-input { width: 100%; }
+.opencode-panel .codex-requests { max-height: 45%; overflow-y: auto; flex-shrink: 0; }
+.opencode-panel .codex-request pre, .opencode-panel .codex-tool pre { white-space: pre-wrap; overflow-wrap: anywhere; }

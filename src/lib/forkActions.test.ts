@@ -51,6 +51,18 @@ it.each(['chat', 'terminal'] as const)('forks Codex into Claude %s with the same
   await vi.runAllTimersAsync();
   expect(invoke).not.toHaveBeenCalled();
 });
+it.each(['chat', 'terminal'] as const)('forks into OpenCode %s without writing Claude or Codex session files', async (panelView) => {
+  await startFork(sourceId);
+  vi.mocked(invoke).mockClear();
+  const target = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'opencode', panelView }, 'OpenCode');
+  await applyForkToInstance(target);
+  const instance = useInstanceStore.getState().instances.get(target)!;
+  expect(instance.config.fork).toMatchObject({ transcript, pending: true, sourceProvider: 'codex' });
+  expect(instance.claudeSessionId).toBeUndefined();
+  expect(instance.codexThreadId).toBeUndefined();
+  expect(takeForkOpeningMessage(target)).toBeNull();
+  expect(invoke).not.toHaveBeenCalled();
+});
 
 it('still sends a custom opening message once when the user chooses one', async () => {
   useSettingsStore.getState().updateSettings({ forkOpeningMessage: 'Review the remaining changes.' });

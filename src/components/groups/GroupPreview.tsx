@@ -3,7 +3,7 @@ import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore, type PanelType } from '../../store/layoutStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { usePluginStore } from '../../store/pluginStore';
-import { ProviderIcon, ClaudeIcon } from '../icons/ProviderIcons';
+import { ProviderIcon } from '../icons/ProviderIcons';
 import { closePanel } from '../../lib/panelCleanup';
 import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
@@ -71,7 +71,7 @@ function ChildTile({ childId }: { childId: string }) {
   } else {
     // terminal (Claude chat)
     color = instance?.color ?? '#4a9eff';
-    icon = <ClaudeIcon size={ICON_SIZE} />;
+    icon = <ProviderIcon provider={instance?.config.agentProvider === 'codex' ? 'openai' : instance?.config.agentProvider ?? 'claude'} size={ICON_SIZE} />;
     badge = <MessageSquare size={BADGE_SIZE} />;
     name = instance?.name ?? 'Chat';
   }

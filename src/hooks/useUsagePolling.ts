@@ -14,7 +14,7 @@ export function useUsagePolling() {
       const instances = useInstanceStore.getState().instances;
 
       for (const [id, instance] of instances) {
-        if (instance.config.agentProvider === 'codex') continue;
+        if (instance.config.agentProvider && instance.config.agentProvider !== 'claude') continue;
         if (instance.status !== 'running' || !instance.claudeSessionId) continue;
 
         try {

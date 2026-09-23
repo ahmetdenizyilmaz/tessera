@@ -22,11 +22,19 @@ beforeEach(() => {
   cleanup = initPanelBus();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
-const add = (name: string, view: 'terminal' | 'chat' = 'terminal', provider: 'claude' | 'codex' = 'claude') => {
+const add = (name: string, view: 'terminal' | 'chat' = 'terminal', provider: 'claude' | 'codex' | 'opencode' = 'claude') => {
   const id = useInstanceStore.getState().addInstance({ ...config, panelView: view, agentProvider: provider }, name);
   useLayoutStore.getState().addPanel(id);
   return id;
 };
+it('publishes OpenCode chat and terminal with their actual LAN view and own provider', () => {
+  const chat = add('OpenCode chat', 'chat', 'opencode');
+  const terminal = add('OpenCode TUI', 'terminal', 'opencode');
+  expect(snapshot()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: chat, provider: 'opencode', kind: 'chat' }),
+    expect.objectContaining({ id: terminal, provider: 'opencode', kind: 'terminal' }),
+  ]));
+});
 
 it('publishes every root and grouped panel with its true view while navigating nested groups', () => {
   const root = add('Root terminal');

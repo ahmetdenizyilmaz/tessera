@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppSettings } from '../types/session';
+import { DEFAULT_OPENCODE_OPTIONS } from '../lib/opencodeConfig';
 
 interface SettingsState {
   settings: AppSettings;
@@ -11,6 +12,7 @@ interface SettingsState {
 const LEGACY_FORK_OPENING_MESSAGE = 'Summarize the current situation in short, then wait for my next instruction.';
 
 const DEFAULT_SETTINGS: AppSettings = {
+  openCodeDefaults: { ...DEFAULT_OPENCODE_OPTIONS },
   defaultModel: 'opus',
   // 'auto' is a real CLI permission mode (choices: acceptEdits, auto,
   // bypassPermissions, manual, dontAsk, plan). Previously this was 'default'

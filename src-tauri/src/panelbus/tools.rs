@@ -258,6 +258,10 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
     };
     let wait = wait_guard.is_some();
 
+    if target.provider.as_deref() == Some("opencode") {
+        bus.record_inbound_hop(&target.id, hop);
+        return crate::opencode::deliver(app, &target.id, &wrapped, wait, args.get("timeout_seconds").and_then(Value::as_u64).unwrap_or(DEFAULT_WAIT_SECS)).await;
+    }
     if target.provider.as_deref() == Some("codex") {
         bus.record_inbound_hop(&target.id, hop);
         return crate::codex::deliver(
@@ -425,6 +429,9 @@ pub async fn deliver_inbound(
     if !target.reachable() {
         return Err(format!("panel \"{}\" cannot receive messages", target.name));
     }
+    if target.provider.as_deref() == Some("opencode") {
+        return crate::opencode::deliver(app, &target.id, wrapped, false, DEFAULT_WAIT_SECS).await;
+    }
     if target.provider.as_deref() == Some("codex") {
         return crate::codex::deliver(app, &target.id, wrapped, false, DEFAULT_WAIT_SECS).await;
     }
@@ -454,6 +461,10 @@ pub async fn read_local(app: &AppHandle, target_id: &str, limit: usize) -> Resul
         return Err("Transitive LAN panel reads are not allowed".into());
     }
 
+    if target.provider.as_deref() == Some("opencode") {
+        let messages = crate::opencode::read_recent(app, &target.id, limit).await?;
+        return Ok(json!({"panel":target.name,"messages":messages}));
+    }
     if target.provider.as_deref() == Some("codex") {
         let messages = crate::codex::read_recent(app, &target.id, limit).await?;
         return Ok(json!({"panel":target.name,"messages":messages}));

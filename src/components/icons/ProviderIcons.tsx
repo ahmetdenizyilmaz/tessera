@@ -71,6 +71,7 @@ export function OpenRouterIcon({ size = 36, className, style }: IconProps) {
 }
 
 const PROVIDER_ICON_MAP: Record<string, React.FC<IconProps>> = {
+  opencode: ({ size = 24, className, style }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}><rect x="2" y="3" width="20" height="18" rx="3" /><path d="m6 8 4 4-4 4m7 0h5" /></svg>,
   claude: ClaudeIcon,
   anthropic: ClaudeIcon,
   openai: OpenAiIcon,

@@ -1,4 +1,5 @@
 import { ensureCodex } from '../lib/codexBridge';
+import { ensureOpenCode } from '../lib/opencodeBridge';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useInstanceStore } from '../store/instanceStore';
@@ -67,6 +68,19 @@ export function usePty(instanceId: string) {
     // Register one-time exit listener to auto-clean on PTY death
     registerExitListener(instanceId);
 
+    if (instance.config.agentProvider === 'opencode') {
+      try {
+        await ensureOpenCode(instanceId);
+        await invoke('opencode_terminal_spawn', { id: instanceId, cols, rows });
+        spawnedPtys.set(instanceId, 'running');
+        useInstanceStore.getState().setStatus(instanceId, 'running');
+      } catch (err) {
+        spawnedPtys.delete(instanceId);
+        useInstanceStore.getState().setStatus(instanceId, 'error');
+        throw err;
+      }
+      return;
+    }
     if (instance.config.agentProvider === 'codex') {
       try {
         await ensureCodex(instanceId);

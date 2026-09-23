@@ -20,7 +20,7 @@ import { notify } from './toast';
 
 function panelKind(instanceId: string): 'chat' | 'terminal' | null {
   const inst = useInstanceStore.getState().instances.get(instanceId);
-  if (!inst || inst.config.llmConfig || inst.config.agentProvider === 'codex') return null;
+  if (!inst || inst.config.llmConfig || (inst.config.agentProvider && inst.config.agentProvider !== 'claude')) return null;
   return inst.config.panelView === 'terminal' ? 'terminal' : 'chat';
 }
 

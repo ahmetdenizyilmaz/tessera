@@ -1,4 +1,5 @@
 import { useCodexStore } from '../store/codexStore';
+import { stopOpenCodeWatch } from './opencodeBridge';
 import { useLayoutStore } from '../store/layoutStore';
 import { captureGroupSnapshot, removePanelsFromWorkspace, useGroupStore } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
@@ -48,6 +49,10 @@ async function closePanelContents(id: string): Promise<void> {
     for (const childId of snapshot.groups.get(id)?.childIds ?? []) await closePanel(childId);
     removePanelsFromWorkspace([id]);
     return;
+  }
+  if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'opencode') {
+    stopOpenCodeWatch(id);
+    await invoke('opencode_close', { id }).catch(() => {});
   }
   if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'codex') {
     await invoke('codex_close', { id }).catch(() => {});

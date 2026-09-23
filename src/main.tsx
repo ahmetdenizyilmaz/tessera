@@ -1,5 +1,7 @@
 import './styles/codex.css';
+import './styles/opencode.css';
 import { initCodexBridge } from './lib/codexBridge';
+import { initOpenCodeBridge } from './lib/opencodeBridge';
 import './lib/brandMigration'; // must run before any store hydrates
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -21,6 +23,7 @@ import './styles/mosaic.css';
 initStreamBridge();
 initPanelBus();
 void initCodexBridge();
+initOpenCodeBridge();
 initLaunchBridge();
 initThemeManager();
 void initLanBridge();

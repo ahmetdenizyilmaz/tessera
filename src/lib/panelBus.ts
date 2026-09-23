@@ -1,4 +1,5 @@
 import { useCodexStore } from '../store/codexStore';
+import { useOpenCodeStore } from '../store/opencodeStore';
 import { codexConfig } from './codexBridge';
 import type { CodexConfig } from '../types/codex';
 /**
@@ -30,7 +31,7 @@ declare global {
 }
 
 interface PanelInfoPayload {
-  provider?: 'claude' | 'codex';
+  provider?: 'claude' | 'codex' | 'opencode';
   codex_config?: CodexConfig;
   id: string;
   name: string;
@@ -74,6 +75,7 @@ export function snapshot(): PanelInfoPayload[] {
         ? 'terminal'
         : 'chat';
     const codex = inst.config.agentProvider === 'codex' ? useCodexStore.getState().sessions[inst.id] : undefined;
+    const opencode = inst.config.agentProvider === 'opencode' ? useOpenCodeStore.getState().sessions[inst.id] : undefined;
     out.push({
       provider: inst.config.agentProvider ?? 'claude',
       codex_config: inst.config.agentProvider === 'codex' ? codexConfig(inst.config) : undefined,
@@ -82,10 +84,10 @@ export function snapshot(): PanelInfoPayload[] {
       cwd: inst.config.cwd,
       kind,
       status: inst.status,
-      busy: codex?.busy ?? session?.isStreaming ?? false,
-      awaiting_user: (codex?.requests.length ?? session?.controlRequests?.length ?? 0) > 0,
+      busy: opencode ? opencode.status.type !== 'idle' : codex?.busy ?? session?.isStreaming ?? false,
+      awaiting_user: opencode ? opencode.permissions.length + opencode.questions.length > 0 : (codex?.requests.length ?? session?.controlRequests?.length ?? 0) > 0,
       model: inst.config.model || null,
-      session_id: (inst.config.agentProvider === 'codex' ? inst.codexThreadId : inst.claudeSessionId) || null,
+      session_id: (inst.config.agentProvider === 'opencode' ? inst.opencodeSessionId : inst.config.agentProvider === 'codex' ? inst.codexThreadId : inst.claudeSessionId) || null,
     });
   }
   return out;
@@ -160,6 +162,7 @@ export function initPanelBus() {
     useGroupStore.subscribe(() => scheduleSync()),
     useChatStore.subscribe(() => scheduleSync()),
     useCodexStore.subscribe(() => scheduleSync()),
+    useOpenCodeStore.subscribe(() => scheduleSync()),
   ];
   scheduleSync();
   return () => {

@@ -9,6 +9,7 @@ import { useLayoutStore } from "../store/layoutStore";
 import { useGroupStore } from "../store/groupStore";
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import type { InstanceConfig } from "../types/instance";
+import { DEFAULT_OPENCODE_OPTIONS } from './opencodeConfig';
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => true) }));
 vi.mock("../store/llmChatStore", () => ({
@@ -64,6 +65,20 @@ it("restores an unsent Codex panel without an unresumable thread ID", () => {
     config: { agentProvider: "codex" },
   });
   expect(serializeWorkspace().instances[0].codexThreadId).toBeUndefined();
+});
+it('round-trips OpenCode view, endpoint, permissions, storage and conversation without Claude IDs', () => {
+  const options = { ...DEFAULT_OPENCODE_OPTIONS, provider: 'ollama' as const, model: 'local-coder', baseUrl: 'http://localhost:11434/v1' };
+  const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'opencode', panelView: 'terminal', model: options.model, opencode: options });
+  useInstanceStore.getState().updateInstance(id, { opencodeDataId: 'data-identity', opencodeSessionId: 'ses_opencode' });
+  useLayoutStore.getState().addPanel(id);
+  const saved = JSON.parse(JSON.stringify(serializeWorkspace()));
+  deserializeWorkspace(saved);
+  const restored = serializeWorkspace().instances[0];
+  expect(restored.id).not.toBe(id);
+  expect(restored).toMatchObject({ opencodeDataId: 'data-identity', opencodeSessionId: 'ses_opencode', config: { agentProvider: 'opencode', panelView: 'terminal', opencode: options } });
+  expect(restored.claudeSessionId).toBeUndefined();
+  expect(restored.codexThreadId).toBeUndefined();
+  expect(JSON.stringify(restored)).not.toContain('apiKey');
 });
 it("round-trips a mixed group with independent Claude and Codex identities", () => {
   const store = useInstanceStore.getState();

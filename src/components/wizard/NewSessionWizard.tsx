@@ -1,4 +1,5 @@
 import { CodexSetup } from '../codex/CodexSetup';
+import { OpenCodeSetup } from '../opencode/OpenCodeSetup';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -33,7 +34,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   lmstudio: '#9B59B6',
 };
 
-const TERMINAL_ROUTES: WizardRoute[] = ['claude-sub', 'codex', 'gw-openrouter', 'gw-ollama', 'gw-custom'];
+const TERMINAL_ROUTES: WizardRoute[] = ['claude-sub', 'codex', 'opencode', 'gw-openrouter', 'gw-ollama', 'gw-custom'];
 const CHAT_ROUTES: WizardRoute[] = [
   ...TERMINAL_ROUTES,
   'api-anthropic', 'api-openai', 'api-gemini', 'api-lmstudio', 'api-ollama',
@@ -43,7 +44,7 @@ const CHAT_ROUTES: WizardRoute[] = [
  *  everything else its provider's logo. */
 function routeIconProvider(route: WizardRoute): string {
   const meta = routeMeta(route);
-  return route === 'codex' ? 'openai' : meta.provider ?? 'claude';
+  return route === 'opencode' ? 'opencode' : route === 'codex' ? 'openai' : meta.provider ?? 'claude';
 }
 
 interface NewSessionWizardProps {
@@ -184,6 +185,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   const applyPreset = async (preset: LastSessionPreset) => {
     s.set({ lanMode: false });
+    if (preset.kind === 'opencode') {
+      s.set({ panelView: preset.panelView, route: 'opencode', cwd: preset.cwd, opencode: preset.opencode ?? settings.openCodeDefaults });
+      return;
+    }
     if (preset.kind === 'codex') {
       s.set({ panelView: preset.panelView, route: 'codex', cwd: preset.cwd });
       return;
@@ -300,7 +305,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       {preset && !s.fork && (() => {
         const authVariant =
           (preset.kind === 'codex' || (preset.kind === 'claude' && preset.gateway === 'anthropic')) ? 'subscription' as const
-          : ((preset.kind === 'llm' && ['anthropic', 'openai', 'gemini'].includes(preset.llmProvider!)) || preset.gateway === 'openrouter') ? 'apikey' as const
+          : ((preset.kind === 'llm' && ['anthropic', 'openai', 'gemini'].includes(preset.llmProvider!)) || preset.gateway === 'openrouter' || (preset.kind === 'opencode' && !['ollama', 'lmstudio', 'custom'].includes(preset.opencode?.provider ?? 'openrouter'))) ? 'apikey' as const
           : 'local' as const;
         const authTitle = authVariant === 'subscription' ? 'Subscription login'
           : authVariant === 'apikey' ? 'API key' : 'Local / keyless';
@@ -311,7 +316,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               <span className="nsw-quick__badges">
                 <AuthBadgePreview variant={authVariant} size={32} />
                 {(() => {
-                  const p = preset.kind === 'codex' ? 'openai' : preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
+                  const p = preset.kind === 'opencode' ? 'opencode' : preset.kind === 'codex' ? 'openai' : preset.kind === 'llm' ? preset.llmProvider! : preset.gateway === 'anthropic' ? 'claude' : preset.gateway === 'custom' ? 'claude' : preset.gateway!;
                   return <ProviderIcon provider={p} size={17} style={{ color: PROVIDER_COLORS[p] ?? 'currentColor' }} />;
                 })()}
               </span>
@@ -367,9 +372,15 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       {/* Step 2: provider / route */}
       {s.panelView && (
         <div className="nsw-step">
-          <div className="nsw-step__label">2 · Provider</div>
+          <div className="nsw-step__label">2 · Agent or API chat</div>
+          {[
+            { title: 'Coding agents', routes: visibleRoutes.filter(r => r === 'claude-sub' || r === 'codex' || r === 'opencode') },
+            { title: 'Claude Code gateways · uses the existing Claude wrapper', routes: visibleRoutes.filter(r => r.startsWith('gw-')) },
+            { title: 'Plain API chat · no coding tools', routes: visibleRoutes.filter(r => r.startsWith('api-')) },
+          ].filter(group => group.routes.length).map(group => <div key={group.title} style={{ marginBottom: 10 }}>
+          <p className="opencode-hint" style={{ marginBottom: 6 }}>{group.title}</p>
           <div className="nsw-tiles">
-            {visibleRoutes.map((route) => {
+            {group.routes.map((route) => {
               const m = routeMeta(route);
               const noKey = !!m.keyProvider && s.keys[m.keyProvider] === '';
               return (
@@ -396,6 +407,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
               );
             })}
           </div>
+          </div>)}
 
           {/* Inline API key entry */}
           {s.keyEntryFor && (
@@ -422,9 +434,10 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       )}
 
       {s.route === 'codex' && <CodexSetup wizardId={instanceId} />}
+      {s.route === 'opencode' && <OpenCodeSetup wizardId={instanceId} />}
 
       {/* Step 3: model */}
-      {s.route && meta && meta.branch !== 'codex' && (
+      {s.route && meta && meta.branch !== 'codex' && meta.branch !== 'opencode' && (
         <div className="nsw-step">
           <div className="nsw-step__label">3 · Model</div>
           {s.route === 'claude-sub' ? (
@@ -542,7 +555,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
       )}
 
       {/* Footer: Advanced + Add */}
-      {s.route && meta && meta.branch !== 'codex' && (
+      {s.route && meta && meta.branch !== 'codex' && meta.branch !== 'opencode' && (
         <div className="nsw-step">
           <button
             className="btn btn-secondary btn-sm"

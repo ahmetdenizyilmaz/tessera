@@ -4,6 +4,7 @@ pub mod app_paths;
 pub mod auth;
 pub mod checkpoints;
 pub mod codex;
+pub mod opencode;
 pub mod computer;
 pub mod db;
 pub mod lan;
@@ -108,6 +109,7 @@ pub fn run() {
         .manage(RelayClient::new())
         .manage(StreamJsonManager::new())
         .manage(codex::CodexManager::default())
+        .manage(opencode::OpenCodeManager::default())
         .manage(database)
         .manage(llm::manager::LlmManager::new())
         .manage(PostHogTracker::new())
@@ -121,6 +123,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // Codex commands
             codex::codex_discover,
+            opencode::opencode_discover,
+            opencode::opencode_models,
+            opencode::opencode_configure,
+            opencode::opencode_snapshot,
+            opencode::opencode_send,
+            opencode::opencode_seed,
+            opencode::opencode_interrupt,
+            opencode::opencode_respond,
+            opencode::opencode_close,
+            opencode::opencode_terminal_spawn,
             codex::codex_history,
             codex::codex_read_thread,
             codex::codex_configure,
@@ -275,6 +287,7 @@ pub fn run() {
                 app.state::<PtyManager>().kill_all();
                 app.state::<StreamJsonManager>().kill_all();
                 app.state::<codex::CodexManager>().kill_all();
+                app.state::<opencode::OpenCodeManager>().kill_all();
             }
         });
 }
