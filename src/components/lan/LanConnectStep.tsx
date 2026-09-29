@@ -46,9 +46,12 @@ export function LanConnectStep({ onConnected }: LanConnectStepProps) {
     setBusyPeer(deviceId);
     setError(null);
     try {
-      useLanStore.getState().setStatus(await invoke<LanStatus>('lan_connect', { deviceId }));
-      // The subgroup sync is debounced; give it a beat before revealing.
-      setTimeout(() => open(deviceId), 120);
+      const next = await invoke<LanStatus>('lan_connect', { deviceId });
+      useLanStore.getState().setStatus(next);
+      if (!next.peers.some(peer => peer.deviceId === deviceId && peer.connected)) {
+        throw new Error('The computer is not connected. Check that Tessera is open there, then try again.');
+      }
+      open(deviceId);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -91,7 +94,7 @@ export function LanConnectStep({ onConnected }: LanConnectStepProps) {
           {status?.fingerprint && <> Your fingerprint: <code>{status.fingerprint}</code></>}
         </div>
       )}
-      {error && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--error, #ff6b6b)', lineHeight: 1.5 }}>{error}</div>}
+      {error && <div role="alert" style={{ marginTop: 8, fontSize: 11, color: 'var(--error, #ff6b6b)', lineHeight: 1.5 }}>{error}</div>}
       {status && (
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
           This computer: {ownAddresses.length ? ownAddresses.join(', ') : 'no private IPv4 address found'} · {status.name}
@@ -114,17 +117,20 @@ export function LanConnectStep({ onConnected }: LanConnectStepProps) {
                   {peer.address.split(':')[0]} · {peer.connected ? 'online' : 'offline'}
                 </span>
               </div>
-              {peer.connected || hasGroup(peer.deviceId) ? (
+              {peer.connected ? (
                 <button className="btn btn-secondary btn-sm" onClick={() => open(peer.deviceId)}>Open</button>
               ) : (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  disabled={busyPeer === peer.deviceId}
-                  onClick={() => void reconnect(peer.deviceId)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  <RefreshCw size={12} className={busyPeer === peer.deviceId ? 'spin' : ''} /> Reconnect
-                </button>
+                <>
+                  {hasGroup(peer.deviceId) && <button className="btn btn-secondary btn-sm" onClick={() => open(peer.deviceId)}>View offline</button>}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={busyPeer === peer.deviceId}
+                    onClick={() => void reconnect(peer.deviceId)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <RefreshCw size={12} className={busyPeer === peer.deviceId ? 'spin' : ''} /> Reconnect
+                  </button>
+                </>
               )}
             </div>
           ))}

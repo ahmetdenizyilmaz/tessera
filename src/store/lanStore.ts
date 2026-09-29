@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ensurePanelAtLevel, removePanelsFromWorkspace, useGroupStore } from './groupStore';
 import { computeRects, getDefaultConfig, useLayoutStore } from './layoutStore';
+import { focusShortcutPanel } from '../lib/panelShortcuts';
 
 export interface RemotePanelInfo {
   id: string;
@@ -112,7 +113,12 @@ export const useLanStore = create<LanStoreState>()(
           // Build the subgroup now so the caller can reveal it immediately.
           flushWorkspaceSync();
           const ip = trimmed.split(':')[0];
-          return status.peers.find((p) => p.address.split(':')[0] === ip)?.deviceId ?? null;
+          const peer = status.peers.find((p) => p.address.split(':')[0] === ip && p.connected);
+          if (!peer) {
+            set({ error: 'The computer is not connected. Check that Tessera is open there, then try again.' });
+            return null;
+          }
+          return peer.deviceId;
         } catch (err) {
           set({ error: String(err) });
           return null;
@@ -207,12 +213,16 @@ function removeRemoteGroup(deviceId: string) {
   if (ids.size) removePanelsFromWorkspace(ids);
 }
 
-/** Bring a paired computer's subgroup tab to the front if it is on this level. */
+/** Explicitly opening a computer restores its group and navigates to its level. */
 export function revealRemoteGroup(deviceId: string) {
+  if (!useLanStore.getState().status?.peers.some(peer => peer.deviceId === deviceId)) return false;
+  useLanStore.setState(state => state.hiddenPeerIds.includes(deviceId)
+    ? { hiddenPeerIds: state.hiddenPeerIds.filter(id => id !== deviceId) } : state);
+  // A successful reconnect may still have a debounced roster update pending.
+  // Rebuild before navigating, while preserving individually closed panels.
+  flushWorkspaceSync();
   const group = [...useGroupStore.getState().groups.values()].find((g) => g.remotePeerId === deviceId);
-  if (!group) return;
-  const layout = useLayoutStore.getState();
-  if (layout.tabOrder.includes(group.id)) layout.setActiveTab(group.id);
+  return group ? focusShortcutPanel(group.id) : false;
 }
 
 export function syncRemoteGroups() {

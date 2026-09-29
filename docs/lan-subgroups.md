@@ -64,6 +64,11 @@ ungrouping them; any remote groups inside it are only hidden locally.
    silence rejects the request.
 4. If Windows Firewall asks, allow Tessera on **Private networks** only.
 
+After a successful connection, Tessera brings that computer's group into focus, including when
+the picker was opened inside another group or the computer's group was closed locally. Panels
+closed individually remain hidden until you restore them. Offline saved computers offer both
+**Reconnect** and **View offline**; failed connections keep the picker open with an error.
+
 **Share on local network** is on by default and is what lets a computer receive requests. It is
 turned on automatically on the requesting side too, because the two computers reconnect to each
 other later. Turning it off stops the listener and disconnects paired computers.

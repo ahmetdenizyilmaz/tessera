@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { closeRemoteGroup, closeRemotePanel, restoreRemotePanels, syncRemoteGroups, useLanStore, type LanStatus, type RemotePanelInfo } from './lanStore';
+import { closeRemoteGroup, closeRemotePanel, restoreRemotePanels, revealRemoteGroup, syncRemoteGroups, useLanStore, type LanStatus, type RemotePanelInfo } from './lanStore';
 import { useGroupStore } from './groupStore';
 import { useLayoutStore } from './layoutStore';
 
@@ -26,10 +26,70 @@ beforeEach(() => {
   useLayoutStore.setState({ tabOrder: [], panelTypes: {}, panelRects: new Map(), layoutConfig: null, focusedId: null, activeTabId: null, maximizedId: null });
   useGroupStore.getState().restoreGroups(new Map());
   useGroupStore.setState({ groups: new Map() });
-  useLanStore.setState({ status: null, hiddenPanelIds: [], hiddenPeerIds: [] });
+  useLanStore.setState({ status: null, hiddenPanelIds: [], hiddenPeerIds: [], outgoing: null, error: null });
 });
 afterEach(async () => { await vi.runOnlyPendingTimersAsync(); vi.useRealTimers(); });
 const remoteGroup = () => [...useGroupStore.getState().groups.values()].find(g => g.remotePeerId === 'peer')!;
+
+it('reveals a successful connection from a wizard inside nested groups', async () => {
+  const outer = useGroupStore.getState().createGroup(null, 'Local');
+  useLayoutStore.getState().addPanel(outer, 'group');
+  useGroupStore.getState().enterGroup(outer);
+  useGroupStore.getState().commitEnterGroup();
+  const inner = useGroupStore.getState().createGroup(outer, 'Nested');
+  useLayoutStore.getState().addPanel(inner, 'group');
+  useGroupStore.getState().enterGroup(inner);
+  useGroupStore.getState().commitEnterGroup();
+  const wizard = useLayoutStore.getState().addWidgetPanel('new-session');
+  vi.mocked(invoke).mockResolvedValueOnce(status([panel]));
+  const deviceId = await useLanStore.getState().requestPair('192.168.1.2');
+  expect(deviceId).toBe('peer');
+  useLayoutStore.getState().removePanel(wizard);
+  revealRemoteGroup(deviceId!);
+  expect(useGroupStore.getState().groupStack).toEqual([]);
+  expect(useLayoutStore.getState()).toMatchObject({ focusedId: remoteGroup().id, activeTabId: remoteGroup().id });
+  expect(useLayoutStore.getState().tabOrder).toEqual([outer, remoteGroup().id]);
+  expect(useGroupStore.getState().groups.get(inner)?.childIds).toEqual([]);
+});
+
+it('restores a locally hidden computer and reveals it through maximized panels', async () => {
+  useLanStore.getState().setStatus(status([panel]));
+  syncRemoteGroups();
+  closeRemoteGroup('peer');
+  useLayoutStore.getState().addPanel('local', 'terminal');
+  useLayoutStore.getState().toggleMaximized('local');
+  vi.mocked(invoke).mockResolvedValueOnce(status([panel]));
+  await useLanStore.getState().requestPair('192.168.1.2');
+  revealRemoteGroup('peer');
+  expect(useLanStore.getState().hiddenPeerIds).toEqual([]);
+  expect(remoteGroup()).toBeDefined();
+  expect(useLayoutStore.getState()).toMatchObject({ focusedId: remoteGroup().id, activeTabId: remoteGroup().id, maximizedId: remoteGroup().id });
+});
+
+it('synchronizes the connected group immediately when it is explicitly opened', () => {
+  useLanStore.getState().setStatus(status([panel]));
+  revealRemoteGroup('peer');
+  expect(remoteGroup()).toBeDefined();
+  expect(useLayoutStore.getState().focusedId).toBe(remoteGroup().id);
+});
+
+it('opening a hidden computer preserves panels that were closed individually', () => {
+  useLanStore.getState().setStatus(status([panel]));
+  syncRemoteGroups();
+  closeRemotePanel('lan:peer:terminal-1');
+  closeRemoteGroup('peer');
+  revealRemoteGroup('peer');
+  expect(remoteGroup()).toBeDefined();
+  expect(remoteGroup().childIds).toEqual([]);
+  expect(useLanStore.getState().hiddenPanelIds).toEqual(['lan:peer:terminal-1']);
+});
+
+it('keeps an unsuccessful connection open instead of accepting an offline saved peer', async () => {
+  vi.mocked(invoke).mockResolvedValueOnce(status([], false));
+  expect(await useLanStore.getState().requestPair('192.168.1.2')).toBeNull();
+  expect(useLanStore.getState().error).toContain('not connected');
+  expect(useLanStore.getState().outgoing).toBeNull();
+});
 
 it('reattaches an unchanged remote group after workspace restore overwrites the layout', () => {
   useLanStore.getState().setStatus(status([panel]));
