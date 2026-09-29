@@ -3,6 +3,7 @@ import { X, Puzzle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { usePluginStore } from '../../store/pluginStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
@@ -172,6 +173,7 @@ export function PluginPanel({ instanceId }: PluginPanelProps) {
             Plugin Not Found
             <PanelShortcutBadge panelId={instanceId} />
           </span>
+          <MovePanelButton panelId={instanceId} />
           <button
             onClick={handleClose}
             style={{
@@ -281,6 +283,7 @@ export function PluginPanel({ instanceId }: PluginPanelProps) {
         )}
 
         {/* Custom title buttons from manifest */}
+        <MovePanelButton panelId={instanceId} />
         {titleButtons.map((btn) => (
           <button
             key={btn.id}

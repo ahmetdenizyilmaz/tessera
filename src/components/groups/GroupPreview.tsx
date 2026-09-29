@@ -7,6 +7,7 @@ import { ProviderIcon } from '../icons/ProviderIcons';
 import { closePanel } from '../../lib/panelCleanup';
 import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { AddExistingPanelButton, MovePanelButton } from './GroupPanelPicker';
 
 interface GroupPreviewProps {
   groupId: string;
@@ -215,6 +216,8 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
             </span>
           )}
         </span>
+        <AddExistingPanelButton groupId={groupId} compact />
+        <MovePanelButton panelId={groupId} />
         <button
           onClick={(e) => { e.stopPropagation(); handleEnter(); }}
           style={{
@@ -309,6 +312,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
             ))}
           </div>
         )}
+        <AddExistingPanelButton groupId={groupId} />
       </div>
     </div>
   );

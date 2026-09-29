@@ -4,6 +4,7 @@ import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { useLlmChatStore } from '../../store/llmChatStore';
 import { invoke } from '@tauri-apps/api/core';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
@@ -266,6 +267,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
         </div>
 
         <div className="toolbar-actions">
+          <MovePanelButton panelId={instanceId} />
           <button
             className="toolbar-btn"
             onClick={(e) => { e.stopPropagation(); void startFork(instanceId); }}

@@ -3,6 +3,7 @@ import { ArrowLeft, Folder, ChevronRight } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { useGroupStore, EMPTY_GROUP_STACK } from '../../store/groupStore';
 import type { BreadcrumbSegment } from '../../store/groupStore';
+import { AddExistingPanelButton } from './GroupPanelPicker';
 
 // ─── Individual Breadcrumb Segment (droppable) ──────────────────────────────
 
@@ -150,7 +151,7 @@ export function GroupBreadcrumb() {
         overflow: 'hidden',
         flexShrink: 0,
         position: 'relative',
-        maxWidth: isVisible ? 500 : 0,
+        maxWidth: isVisible ? 700 : 0,
         opacity: isVisible ? 1 : 0,
         paddingLeft: isVisible ? 4 : 0,
         paddingRight: isVisible ? 8 : 0,
@@ -222,6 +223,7 @@ export function GroupBreadcrumb() {
       </div>
 
       {/* Separator line */}
+      {isVisible && <AddExistingPanelButton groupId={groupStack[groupStack.length - 1]} />}
       <div
         style={{
           width: 1,

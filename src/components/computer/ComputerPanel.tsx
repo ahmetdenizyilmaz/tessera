@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useComputerStore } from '../../store/computerStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { MovePanelButton } from '../groups/GroupPanelPicker';
 
 interface ComputerPanelProps {
   instanceId: string;
@@ -97,6 +98,7 @@ export const ComputerPanel: React.FC<ComputerPanelProps> = ({ instanceId }) => {
         />
         <span className="instance-name">Computer Use</span>
         <PanelShortcutBadge panelId={instanceId} />
+        <MovePanelButton panelId={instanceId} />
         <button
           className={`btn ${session?.isActive ? 'btn-danger' : 'btn-primary'}`}
           onClick={toggleActive}

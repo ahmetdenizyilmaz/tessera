@@ -8,6 +8,7 @@ const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import NewSessionWizard from '../wizard/NewSessionWizard';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
@@ -99,6 +100,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
           {info.label}
           <PanelShortcutBadge panelId={instanceId} />
         </span>
+        <MovePanelButton panelId={instanceId} />
         <button
           onClick={(e) => {
             e.stopPropagation();

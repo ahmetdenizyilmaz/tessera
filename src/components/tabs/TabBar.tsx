@@ -223,16 +223,7 @@ export function TabBar() {
       // --- Cross-group: Drop on group tab ---
       const overPanelType = useLayoutStore.getState().panelTypes[overId];
       if (overPanelType === 'group') {
-        const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-
-        // Remove from current level
-        if (currentGroupId !== null) {
-          useGroupStore.getState().removeFromGroup(currentGroupId, activeId);
-        }
-        useLayoutStore.getState().removePanel(activeId);
-
-        // Add to the target group
-        useGroupStore.getState().addToGroup(overId, activeId);
+        useGroupStore.getState().movePanelToLevel(activeId, overId);
         return;
       }
 

@@ -56,6 +56,9 @@ agents, credentials, model discovery, permissions, and session storage.
   panels, with image attachments. Direct LLM panels offer streaming chat with markdown and syntax highlighting.
 - **Panel groups & tabs** — collapse related panels into a tabbed group; maximize one to fill the
   area and reach the rest with `Ctrl+Tab` / `Ctrl+Shift+Tab`.
+  Use the **Move to group** folder button in a panel's header to choose a destination.
+  From a group preview or its open view, **Add existing panel** lets you search and select
+  multiple panels from Main or other groups. Moving panels keeps their running sessions.
 - **Assigned panel shortcuts** — focus a panel and press `Alt+0–9` to assign its number, then
   `Ctrl+0–9` to focus it, even inside another group. Hold `Ctrl` to show compact blue `Ctrl + 1`
   labels beside panel names. Hold `Alt` for red assignment labels (`Ctrl + ?` only for the

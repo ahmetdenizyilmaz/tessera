@@ -187,6 +187,43 @@ export function captureGroupSnapshot(): {
   return { groups, rootLayout };
 }
 
+/** All panels, including those in closed groups and saved ancestor layouts. */
+export function getPanelLocations(snapshot = captureGroupSnapshot()): Map<string, string | null> {
+  const locations = new Map<string, string | null>();
+  for (const id of snapshot.rootLayout?.tabOrder ?? useLayoutStore.getState().tabOrder) {
+    locations.set(id, null);
+  }
+  for (const group of snapshot.groups.values()) {
+    for (const id of group.childIds) locations.set(id, group.id);
+  }
+  return locations;
+}
+
+export function canMovePanelToLevel(
+  panelId: string,
+  targetGroupId: string | null,
+  snapshot = captureGroupSnapshot(),
+): boolean {
+  const source = getPanelLocations(snapshot).get(panelId);
+  if (source === undefined || source === targetGroupId) return false;
+  const { groups } = snapshot;
+  // LAN groups mirror another computer's workspace; local moves cannot edit it.
+  if (useLayoutStore.getState().panelTypes[panelId] === 'remote'
+    || groups.get(panelId)?.remotePeerId
+    || (source !== null && groups.get(source)?.remotePeerId)) return false;
+  if (targetGroupId !== null && (!groups.has(targetGroupId) || groups.get(targetGroupId)?.remotePeerId)) return false;
+  // Moving an open ancestor would invalidate the navigation stack.
+  if (useGroupStore.getState().groupStack.includes(panelId)) return false;
+  const visited = new Set<string>();
+  let ancestor = targetGroupId;
+  while (ancestor !== null) {
+    if (ancestor === panelId || visited.has(ancestor)) return false;
+    visited.add(ancestor);
+    ancestor = groups.get(ancestor)?.parentId ?? null;
+  }
+  return true;
+}
+
 /** Attach a discovered panel without changing the user's navigation level. */
 export function ensurePanelAtLevel(panelId: string, parentId: string | null, type: PanelType) {
   const store = useGroupStore.getState();
@@ -567,62 +604,58 @@ export const useGroupStore = create<GroupStoreState>((set, get) => ({
   },
 
   movePanelToLevel: (panelId: string, targetGroupId: string | null) => {
-    const state = get();
-    const currentGroupId = state.groupStack.length > 0
-      ? state.groupStack[state.groupStack.length - 1]
-      : null;
-    if (currentGroupId === targetGroupId) return;
-
-    // removePanel drops the panel's type/kind mapping — capture it first so
-    // the panel doesn't render as a plain terminal at its new level
+    const snapshot = captureGroupSnapshot();
+    if (!canMovePanelToLevel(panelId, targetGroupId, snapshot)) return;
+    const sourceGroupId = getPanelLocations(snapshot).get(panelId)!;
+    const currentGroupId = get().getCurrentGroupId();
     const ls = useLayoutStore.getState();
-    const panelType = ls.panelTypes[panelId];
+    const panelType = ls.panelTypes[panelId] ?? 'terminal';
     const widgetKind = ls.widgetKinds[panelId];
-
-    // Remove from the current group and the live tabOrder (visible level)
-    if (currentGroupId !== null) {
-      get().removeFromGroup(currentGroupId, panelId);
-    }
-    ls.removePanel(panelId);
-
-    if (panelType !== undefined) {
-      const cur = useLayoutStore.getState();
-      useLayoutStore.setState({
-        panelTypes: { ...cur.panelTypes, [panelId]: panelType },
-        widgetKinds: widgetKind !== undefined
-          ? { ...cur.widgetKinds, [panelId]: widgetKind }
-          : cur.widgetKinds,
+    const groups = new Map(snapshot.groups);
+    for (const groupId of [sourceGroupId, targetGroupId]) {
+      if (groupId === null) continue;
+      const group = groups.get(groupId)!;
+      const childIds = groupId === sourceGroupId
+        ? group.childIds.filter(id => id !== panelId)
+        : [...group.childIds, panelId];
+      groups.set(groupId, {
+        ...group, childIds, layoutConfig: null, panelRects: new Map(),
+        focusedChildId: childIds.includes(group.focusedChildId ?? '') ? group.focusedChildId : (childIds[0] ?? null),
+        activeChildId: childIds.includes(group.activeChildId ?? '') ? group.activeChildId : (childIds[0] ?? null),
       });
     }
+    const movedGroup = groups.get(panelId);
+    if (movedGroup) groups.set(panelId, { ...movedGroup, parentId: targetGroupId });
 
-    if (targetGroupId !== null) {
-      // Append to the target group's childIds
-      get().addToGroup(targetGroupId, panelId);
+    // Update every saved ancestor so entering/exiting cannot resurrect the old
+    // membership or discard a panel pulled into the currently open group.
+    savedLayoutStack.forEach((saved, index) => {
+      const levelId = index === 0 ? null : get().groupStack[index - 1];
+      if (levelId !== sourceGroupId && levelId !== targetGroupId) return;
+      const tabOrder = levelId === sourceGroupId
+        ? saved.tabOrder.filter(id => id !== panelId)
+        : [...saved.tabOrder.filter(id => id !== panelId), panelId];
+      savedLayoutStack[index] = {
+        ...saved, tabOrder, layoutConfig: null, panelRects: new Map(),
+        focusedId: tabOrder.includes(saved.focusedId ?? '') ? saved.focusedId : (tabOrder[0] ?? null),
+        activeTabId: tabOrder.includes(saved.activeTabId ?? '') ? saved.activeTabId : (tabOrder[0] ?? null),
+      };
+    });
 
-      // If the target is an ancestor on the navigation stack, the layout that
-      // gets restored on the way back is its savedLayoutStack snapshot — the
-      // panel must be appended there too or it would be lost on return.
-      // savedLayoutStack[i + 1] is the live layout of groupStack[i].
-      const stackIdx = get().groupStack.indexOf(targetGroupId);
-      const savedIdx = stackIdx + 1;
-      if (stackIdx !== -1 && savedIdx < savedLayoutStack.length) {
-        const saved = savedLayoutStack[savedIdx];
-        if (!saved.tabOrder.includes(panelId)) {
-          savedLayoutStack[savedIdx] = { ...saved, tabOrder: [...saved.tabOrder, panelId] };
-        }
-      }
-    } else if (savedLayoutStack.length > 0) {
-      // Root level: append to the root layout at the bottom of the saved
-      // stack — restoreLayoutFromSaved recomputes the layout on return
-      // because the saved config/rects no longer match the tab count
-      const saved = savedLayoutStack[0];
-      if (!saved.tabOrder.includes(panelId)) {
-        savedLayoutStack[0] = { ...saved, tabOrder: [...saved.tabOrder, panelId] };
-      }
-    } else {
-      // Already at root with no saved stack: add straight to the live layout
-      useLayoutStore.getState().addPanel(panelId, panelType ?? 'terminal');
+    if (sourceGroupId === currentGroupId) {
+      ls.removePanel(panelId);
+      // Removing from a layout must not erase the type of a moved panel.
+      useLayoutStore.setState(state => ({
+        panelTypes: { ...state.panelTypes, [panelId]: panelType },
+        widgetKinds: widgetKind === undefined ? state.widgetKinds : { ...state.widgetKinds, [panelId]: widgetKind },
+      }));
     }
+    if (targetGroupId === currentGroupId) {
+      // This panel already exists; the new-panel limit must not strand it.
+      useLayoutStore.getState().addPanel(panelId, panelType, true);
+      useLayoutStore.getState().setActiveTab(panelId);
+    }
+    set({ groups });
   },
 
   // ─── Group Layout State ──────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
 import { ProviderIcon } from "../icons/ProviderIcons";
 import { GitFork } from "lucide-react";
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { MovePanelButton } from '../groups/GroupPanelPicker';
 
 /** Shared panel chrome. Provider-specific controls stay inside the same menu. */
 export function AgentPanelHeader({
@@ -171,6 +172,7 @@ export function AgentPanelHeader({
           <span className="status-label">{status}</span>
         </span>
         <div className="toolbar-actions">
+          <MovePanelButton panelId={instanceId} />
           {controls && (
             <div style={{ position: "relative" }}>
               <button

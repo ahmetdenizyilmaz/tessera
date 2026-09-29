@@ -3,7 +3,7 @@ import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { Folder, ChevronRight } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { getGroupMoveOptions } from '../../lib/groupPanelOptions';
 import { isClaudePanel } from '../../lib/sessionActions';
 
 interface TabContextMenuProps {
@@ -26,56 +26,17 @@ interface MoveToItem {
   depth: number;
 }
 
-function buildMoveToList(
-  tabId: string,
-  currentGroupId: string | null,
-): MoveToItem[] {
-  const { groups } = useGroupStore.getState();
-  const { tabOrder, panelTypes } = useLayoutStore.getState();
-
-  const items: MoveToItem[] = [];
-
-  // "Main" (root level) - always first
-  items.push({ id: null, name: 'Main', depth: 0 });
-
-  // Collect all groups that are valid move targets
-  // A group is at root level if it's in the root tabOrder and panelType is 'group'
-  // Or if it exists in groups map with parentId = null
-  const rootGroupIds = tabOrder.filter((id) => panelTypes[id] === 'group');
-
-  // Recursively add groups and sub-groups
-  function addGroup(groupId: string, depth: number) {
-    const group = groups.get(groupId);
-    if (!group) return;
-
-    // Don't list the tab itself as a move target (if it's a group)
-    if (groupId === tabId) return;
-
-    items.push({ id: groupId, name: group.name, depth });
-
-    // Add child groups recursively
-    for (const childId of group.childIds) {
-      const childType = panelTypes[childId];
-      if (childType === 'group' || groups.has(childId)) {
-        addGroup(childId, depth + 1);
-      }
-    }
-  }
-
-  // Start with root-level groups
-  for (const gid of rootGroupIds) {
-    addGroup(gid, 1);
-  }
-
-  // Also include groups that are nested but not in root tabOrder
-  // (they'll be covered by the recursive addGroup above)
-
-  return items;
+function buildMoveToList(tabId: string): MoveToItem[] {
+  return getGroupMoveOptions(tabId).map(option => ({
+    id: option.id,
+    name: option.id === null ? option.name : `${option.location} / ${option.name}`,
+    depth: option.id === null ? 0 : 1,
+  }));
 }
 
 function MoveToSubmenu({ tabId, onDismiss }: { tabId: string; onDismiss: () => void }) {
   const currentGroupId = useGroupStore((s) => s.getCurrentGroupId());
-  const items = buildMoveToList(tabId, currentGroupId);
+  const items = buildMoveToList(tabId);
 
   const handleMoveTo = (targetGroupId: string | null) => {
     // movePanelToLevel is the same primitive the breadcrumb-drop uses. The old
@@ -87,7 +48,7 @@ function MoveToSubmenu({ tabId, onDismiss }: { tabId: string; onDismiss: () => v
   };
 
   // Don't show if no groups exist at all and we're at root (nothing to move to)
-  if (items.length <= 1) return null;
+  if (items.length === 0) return null;
 
   return (
     <div
@@ -168,9 +129,7 @@ export function TabContextMenu({
 
   // Determine if "Move to..." should be shown
   // Show when: groups exist OR panel is inside a group
-  const currentGroupId = useGroupStore((s) => s.getCurrentGroupId());
-  const hasGroups = groups.size > 0;
-  const showMoveToOption = hasGroups || currentGroupId !== null;
+  const showMoveToOption = getGroupMoveOptions(tabId).length > 0;
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
