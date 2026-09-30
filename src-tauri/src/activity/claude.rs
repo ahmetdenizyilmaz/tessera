@@ -140,6 +140,19 @@ impl Transcript {
             record.actor.model = Some(model.into());
         }
         record.updated_at = at;
+        record.current_tool = None;
+        if let Some(blocks) = v["message"]["content"].as_array() {
+            for block in blocks {
+                if block["type"] == "tool_use" {
+                    if let Some(name) = block["name"].as_str() {
+                        record.current_tool = Some(name.into());
+                        if !record.tools.iter().any(|tool| tool == name) {
+                            record.tools.push(name.into());
+                        }
+                    }
+                }
+            }
+        }
         record.response = self
             .parts
             .iter()

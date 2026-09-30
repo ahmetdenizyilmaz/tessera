@@ -107,6 +107,11 @@ pub struct Record {
     pub origin: String,
     #[serde(default)]
     pub prompt_parts: Vec<Prompt>,
+    /// Tool names only: used to animate the office and reward different work categories.
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub current_tool: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Prompt {
@@ -133,6 +138,8 @@ impl Record {
             response_parts: vec![],
             origin: "user".into(),
             prompt_parts: vec![],
+            tools: vec![],
+            current_tool: None,
         }
     }
     pub fn set_prompt(&mut self, text: String) {

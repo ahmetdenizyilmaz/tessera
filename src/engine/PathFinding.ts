@@ -1,5 +1,5 @@
 import type { GridPosition, OfficeLayout } from '../types/office';
-import { FURNITURE_SIZES } from './SpriteManager';
+import { blockedCells, insideOffice } from '../lib/officeSpace';
 
 interface Node {
   x: number;
@@ -11,22 +11,11 @@ interface Node {
 }
 
 function heuristic(a: GridPosition, b: GridPosition): number {
-  return Math.abs(a.gridX - b.gridX) + Math.abs(a.gridY - b.gridY);
+  const dx = Math.abs(a.gridX - b.gridX), dy = Math.abs(a.gridY - b.gridY);
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
 }
 
 // Build blocked cell set from furniture
-function getBlockedCells(layout: OfficeLayout): Set<string> {
-  const blocked = new Set<string>();
-  for (const f of layout.furniture) {
-    const size = FURNITURE_SIZES[f.type] ?? { w: 1, h: 1 };
-    for (let dx = 0; dx < size.w; dx++) {
-      for (let dy = 0; dy < size.h; dy++) {
-        blocked.add(`${f.position.gridX + dx},${f.position.gridY + dy}`);
-      }
-    }
-  }
-  return blocked;
-}
 
 // 8-directional neighbors
 const DIRS = [
@@ -40,14 +29,15 @@ export function findPath(
   end: GridPosition,
   extraBlocked?: Set<string>,
 ): GridPosition[] {
-  const blocked = getBlockedCells(layout);
+  if (!insideOffice(layout, start) || !insideOffice(layout, end)) return [];
+  const blocked = blockedCells(layout);
   if (extraBlocked) {
     for (const cell of extraBlocked) blocked.add(cell);
   }
 
-  // Don't block start or end
+  // Let an agent leave a tile whose furniture was moved during its walk.
   blocked.delete(`${start.gridX},${start.gridY}`);
-  blocked.delete(`${end.gridX},${end.gridY}`);
+  if (blocked.has(`${end.gridX},${end.gridY}`)) return [];
 
   const open: Node[] = [];
   const closed = new Set<string>();
@@ -88,6 +78,7 @@ export function findPath(
       if (nx < 0 || ny < 0 || nx >= layout.width || ny >= layout.height) continue;
       if (closed.has(key)) continue;
       if (blocked.has(key)) continue;
+      if (dx && dy && (blocked.has(`${current.x + dx},${current.y}`) || blocked.has(`${current.x},${current.y + dy}`))) continue;
 
       // Diagonal cost is sqrt(2), cardinal is 1
       const moveCost = (dx !== 0 && dy !== 0) ? 1.414 : 1;
@@ -107,6 +98,6 @@ export function findPath(
     }
   }
 
-  // No path found - return direct line (fallback)
-  return [start, end];
+  // Stay put when unreachable; never walk through furniture as a fallback.
+  return [];
 }

@@ -5,6 +5,7 @@ import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/g
 import { usePluginStore } from '../store/pluginStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useCodexStore } from '../store/codexStore';
+import { useOfficeGameStore } from '../store/officeGameStore';
 import { stopOpenCodeWatch } from './opencodeBridge';
 import { normalizePanelShortcuts, usePanelShortcutStore, type PanelShortcutBindings } from '../store/panelShortcutStore';
 import type { InstanceConfig } from '../types/instance';
@@ -500,6 +501,7 @@ export function deserializeWorkspace(raw: unknown): void {
   // that no longer map to a live instance.
   const liveIds = new Set(useInstanceStore.getState().instances.keys());
   useLlmChatStore.getState().remapConversations(idMap, liveIds);
+  useOfficeGameStore.getState().remapPanels(idMap);
   const openPanels = new Set([...useLayoutStore.getState().tabOrder, ...[...newGroups.values()].flatMap(group => group.childIds)]);
   usePanelShortcutStore.getState().restore(Object.fromEntries(
     Object.entries(snapshot.panelShortcuts ?? {}).map(([number, id]) => [number, remapId(id)])

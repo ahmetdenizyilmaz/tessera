@@ -9,6 +9,51 @@ fn actor() -> Actor {
         device: None,
     }
 }
+
+#[test]
+fn office_tools_are_distinct_and_do_not_create_extra_turns() {
+    let mut reader = claude::Transcript::default();
+    reader.consume(
+        &user("office-question", "Inspect and fix"),
+        &actor(),
+        "session",
+    );
+    let tool = json!({"type":"assistant","uuid":"tool-use","timestamp":"2026-09-30T10:00:02Z","message":{
+        "id":"api-tool","content":[{"type":"tool_use","name":"Read","input":{"file_path":"secret.txt"}}]}});
+    reader.consume(&tool, &actor(), "session");
+    let recorded = reader.consume(&tool, &actor(), "session").pop().unwrap();
+    assert_eq!(recorded.tools, vec!["Read"]);
+    assert_eq!(recorded.current_tool.as_deref(), Some("Read"));
+    assert!(!serde_json::to_string(&recorded)
+        .unwrap()
+        .contains("secret.txt"));
+    let completed = reader
+        .consume(
+            &reply("done", "api-end", "Fixed", 1, 2),
+            &actor(),
+            "session",
+        )
+        .pop()
+        .unwrap();
+    assert_eq!(completed.tools, vec!["Read"]);
+    assert!(completed.current_tool.is_none());
+    assert_eq!(completed.status, "completed");
+
+    let conn = database();
+    let mut active = HashMap::new();
+    for kind in ["commandExecution", "commandExecution", "fileChange"] {
+        codex_event(&conn, &mut active, actor(), &json!({"method":"item/started","params":{"threadId":"office-thread","turnId":"office-turn","item":{"id":kind,"type":kind,"command":"private command"}}}), 10).unwrap();
+    }
+    let recorded = get(&conn, "codex:office-thread:office-turn")
+        .unwrap()
+        .unwrap();
+    assert_eq!(recorded.tools, vec!["Bash", "Edit"]);
+    assert_eq!(recorded.current_tool.as_deref(), Some("Edit"));
+    assert!(!serde_json::to_string(&recorded)
+        .unwrap()
+        .contains("private command"));
+    assert_eq!(read_page(&conn, None, None, None).unwrap().0.len(), 1);
+}
 fn database() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
     create_tables(&conn).unwrap();

@@ -1,7 +1,7 @@
 export type WorkerActivity =
   | 'idle' | 'new' | 'thinking' | 'responding' | 'reading_file'
   | 'editing_file' | 'writing_file' | 'running_command' | 'searching_files'
-  | 'searching_web' | 'managing_todos' | 'awaiting_permission' | 'error' | 'using_tool';
+  | 'searching_web' | 'managing_todos' | 'awaiting_permission' | 'error' | 'using_tool' | 'unknown';
 
 export type OfficeFurnitureType =
   | 'desk' | 'chair' | 'filing_cabinet' | 'whiteboard'
@@ -23,6 +23,7 @@ export interface OfficeFurniture {
   position: GridPosition;
   rotation: 0 | 1 | 2 | 3;
   style?: string;
+  itemId?: string;
 }
 
 export interface OfficeWorker {
@@ -33,6 +34,8 @@ export interface OfficeWorker {
   assignedDesk: GridPosition;
   direction: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   isWalking: boolean;
+  task: string;
+  detail: string;
 }
 
 export interface OfficeRoom {
@@ -52,7 +55,7 @@ export interface OfficeLayout {
 export interface ShopItem {
   id: string;
   name: string;
-  category: 'floor' | 'wall' | 'furniture' | 'decoration' | 'room';
+  category: 'floor' | 'furniture' | 'decoration' | 'accessory';
   price: number;
   sprite: string;
   furnitureType?: OfficeFurnitureType;
@@ -73,4 +76,20 @@ export const ACTIVITY_LOCATIONS: Record<WorkerActivity, OfficeRoomType[]> = {
   awaiting_permission: ['manager_office'],
   error: ['maintenance', 'open_floor'],
   using_tool: ['open_floor'],
+  unknown: ['reception'],
 };
+
+export interface WorkerProfile {
+  appearanceId?: string;
+  coins: number;
+  tasks: number;
+  accessory: string;
+}
+export interface OfficeReward {
+  id: string;
+  panelId: string;
+  name: string;
+  task: string;
+  coins: number;
+  at: number;
+}

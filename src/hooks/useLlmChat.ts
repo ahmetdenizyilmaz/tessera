@@ -142,6 +142,7 @@ export function useLlmChat(instanceId: string) {
   );
 
   const cancelStream = useCallback(async () => {
+    store.getState().markCancelled(instanceId);
     try {
       await invoke('llm_cancel', { id: instanceId });
     } catch {

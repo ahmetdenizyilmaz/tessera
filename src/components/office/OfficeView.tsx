@@ -1,163 +1,99 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { Minus, Plus, Scan, Users } from 'lucide-react';
 import { IsometricEngine } from '../../engine/IsometricEngine';
 import { WorkerAnimator } from '../../engine/WorkerAnimator';
 import { getProviderColor } from '../../engine/SpriteManager';
-import { getDefaultLayout } from '../../engine/defaultOffice';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
-import { useSalaryEngine } from '../../store/salaryEngine';
+import { officeProvider, PROVIDER_NAMES } from '../../lib/officeActivity';
+import { focusShortcutPanel } from '../../lib/panelShortcuts';
 import { OfficeHUD } from './OfficeHUD';
 import { OfficeShop } from './OfficeShop';
-import { WorkerTooltip } from './WorkerTooltip';
+import { OfficeTeam } from './OfficeTeam';
 import { EditModeOverlay } from './EditModeOverlay';
 import '../../styles/office.css';
 
-interface OfficeViewProps {
-  onBack: () => void;
-}
-
-export function OfficeView({ onBack }: OfficeViewProps) {
+export function OfficeView({ onBack }: { onBack: () => void }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<IsometricEngine | null>(null);
-  const animatorRef = useRef(new WorkerAnimator());
-  const animFrameRef = useRef(0);
-  const lastTimeRef = useRef(0);
-
-  // Local positions — updated every frame WITHOUT touching Zustand
-  const localPositions = useRef(new Map<string, { x: number; y: number }>());
-
-  const [hoveredWorker, setHoveredWorker] = useState<{ id: string; x: number; y: number } | null>(null);
-
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [selected, setSelected] = useState<string | null>(null);
+  const [hover, setHover] = useState<string | null>(null);
   const layout = useOfficeGameStore(s => s.layout);
   const editMode = useOfficeGameStore(s => s.editMode);
   const shopOpen = useOfficeGameStore(s => s.shopOpen);
+  const count = useOfficeGameStore(s => Object.keys(s.workers).length);
+  const openPanel = useCallback((id: string) => { focusShortcutPanel(id); onBack(); }, [onBack]);
 
-  useSalaryEngine();
-
-  // Initialize engine
   useEffect(() => {
     if (!canvasRef.current) return;
-
-    const engine = new IsometricEngine();
+    let disposed = false, frameId = 0;
+    const engine = new IsometricEngine(), animator = new WorkerAnimator();
     engineRef.current = engine;
-
-    const store = useOfficeGameStore.getState();
-    if (store.layout.furniture.length === 0 && store.layout.rooms.length === 0) {
-      store.setLayout(getDefaultLayout());
-    }
-
-    engine.init(canvasRef.current).then(() => {
-      const currentLayout = useOfficeGameStore.getState().layout;
-      engine.drawFloor(currentLayout);
-      engine.drawWalls(currentLayout);
-      engine.drawFurniture(currentLayout.furniture);
-
-      engine.onWorkerHover((id, sx, sy) => {
-        setHoveredWorker(id ? { id, x: sx, y: sy } : null);
-      });
-
-      engine.onWorkerClick((instanceId) => {
-        onBack();
-        setTimeout(() => useLayoutStore.getState().setActiveTab(instanceId), 50);
-      });
-
-      // Track last known worker set to detect changes
-      let lastWorkerIds = '';
-      let lastActivities = '';
-      const lastTargets = new Map<string, string>();
-
-      lastTimeRef.current = performance.now();
+    engine.onWorkerClick(setSelected);
+    engine.onWorkerHover(id => setHover(id));
+    engine.onTileClick((gridX, gridY) => useOfficeGameStore.getState().placeAt({ gridX, gridY }));
+    void engine.init(canvasRef.current).then(() => {
+      if (disposed) return;
+      const initial = useOfficeGameStore.getState();
+      engine.drawFloor(initial.layout); engine.drawWalls(initial.layout); engine.drawFurniture(initial.layout.furniture);
+      engine.showGrid(initial.layout, initial.editMode); engine.centerCamera(); setReady(true);
+      let lastTime = performance.now();
+      let lastLayout = initial.layout;
+      const targets = new Map<string, string>();
       const loop = (time: number) => {
-        const dt = Math.min((time - lastTimeRef.current) / 1000, 0.1); // cap dt
-        lastTimeRef.current = time;
-
-        const workers = useOfficeGameStore.getState().workers;
-        const currentLayout = useOfficeGameStore.getState().layout;
-
-        // Detect worker add/remove (cheap string comparison)
-        const workerIds = Object.keys(workers);
-        const idsKey = workerIds.join(',');
-        if (idsKey !== lastWorkerIds) {
-          lastWorkerIds = idsKey;
-          engine.syncWorkers(workerIds);
+        if (disposed) return;
+        const dt = Math.min((time - lastTime) / 1000, .1); lastTime = time;
+        const state = useOfficeGameStore.getState(), ids = Object.keys(state.workers);
+        engine.syncWorkers(ids);
+        for (const id of targets.keys()) if (!state.workers[id]) { targets.delete(id); animator.removeWorker(id); }
+        for (const [id, worker] of Object.entries(state.workers)) {
+          const key = `${worker.targetPosition.gridX},${worker.targetPosition.gridY}`;
+          if (targets.get(id) !== key || lastLayout !== state.layout) { targets.set(id, key); animator.assignPath(id, worker, state.layout); }
         }
-
-        // Detect target changes and trigger pathfinding
-        for (const [id, worker] of Object.entries(workers)) {
-          const targetKey = `${worker.targetPosition.gridX},${worker.targetPosition.gridY}`;
-          if (lastTargets.get(id) !== targetKey) {
-            lastTargets.set(id, targetKey);
-            animatorRef.current.assignPath(id, worker, currentLayout);
-          }
+        lastLayout = state.layout;
+        const poses = animator.update(dt, state.workers);
+        engine.updateWorkerPositions(poses);
+        for (const [id, worker] of Object.entries(state.workers)) {
+          const instance = useInstanceStore.getState().instances.get(id); if (!instance) continue;
+          const provider = officeProvider(instance);
+          engine.updateWorkerGraphic(id, getProviderColor(provider), worker.activity, instance.name, PROVIDER_NAMES[provider] ?? provider,
+            state.profiles[id]?.accessory, poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId);
         }
-        // Clean up stale targets
-        for (const id of lastTargets.keys()) {
-          if (!workers[id]) lastTargets.delete(id);
-        }
-
-        // Run animator — returns positions without touching the store
-        const updates = animatorRef.current.update(dt, workers);
-
-        // Update local positions and push to engine
-        for (const [id, upd] of updates) {
-          localPositions.current.set(id, { x: upd.x, y: upd.y });
-        }
-        engine.updateWorkerPositions(localPositions.current);
-
-        // Only redraw worker graphics when activity changes (not every frame)
-        const activitiesKey = workerIds.map(id => workers[id]?.activity ?? '').join(',');
-        if (activitiesKey !== lastActivities) {
-          lastActivities = activitiesKey;
-          const instances = useInstanceStore.getState().instances;
-          for (const [id, worker] of Object.entries(workers)) {
-            const instance = instances.get(id);
-            if (instance) {
-              const provider = instance.config.llmConfig?.provider ?? 'claude';
-              engine.updateWorkerGraphic(id, getProviderColor(provider), worker.activity, instance.name);
-            }
-          }
-        }
-
-        animFrameRef.current = requestAnimationFrame(loop);
+        // Commit only after arrival; moving characters stay local to the renderer.
+        const settled = new Map([...poses].filter(([id, p]) => !p.isWalking && (state.workers[id].position.x !== p.x || state.workers[id].position.y !== p.y)));
+        if (settled.size) state.settleWorkers(settled);
+        frameId = requestAnimationFrame(loop);
       };
-      animFrameRef.current = requestAnimationFrame(loop);
-    });
-
-    return () => {
-      cancelAnimationFrame(animFrameRef.current);
-      engine.destroy();
-      engineRef.current = null;
+      frameId = requestAnimationFrame(loop);
+    }).catch(e => { if (!disposed) setError(`The office renderer could not start: ${String(e)}`); });
+    return () => { disposed = true; cancelAnimationFrame(frameId); engine.destroy(); engineRef.current = null; };
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    const engine = engineRef.current!;
+    engine.drawFloor(layout); engine.drawWalls(layout); engine.drawFurniture(layout.furniture); engine.showGrid(layout, editMode);
+  }, [layout, editMode, ready]);
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { const s = useOfficeGameStore.getState(); s.setShopOpen(false); s.setEditMode(false); setSelected(null); }
+      if (e.key.toLowerCase() === 'r' && useOfficeGameStore.getState().editMode && !(e.target instanceof HTMLInputElement)) useOfficeGameStore.setState(s => ({ rotation: ((s.rotation + 1) % 4) as 0 | 1 | 2 | 3 }));
     };
-  }, [onBack]);
-
-  // Sync layout changes (furniture/tiles edited)
-  useEffect(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    engine.drawFloor(layout);
-    engine.drawWalls(layout);
-    engine.drawFurniture(layout.furniture);
-  }, [layout]);
-
-  // Toggle edit grid
-  useEffect(() => {
-    engineRef.current?.showGrid(layout, editMode);
-  }, [editMode, layout]);
-
-  return (
-    <div className="office-view">
-      <div ref={canvasRef} className="office-canvas" />
-      <OfficeHUD onBack={onBack} />
-      {shopOpen && <OfficeShop />}
-      {hoveredWorker && (
-        <WorkerTooltip
-          instanceId={hoveredWorker.id}
-          screenX={hoveredWorker.x}
-          screenY={hoveredWorker.y}
-        />
-      )}
-      {editMode && <EditModeOverlay engine={engineRef.current} />}
+    window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+  return <div className="office-view">
+    <OfficeHUD onBack={onBack} />
+    <div className="office-stage">
+      <div ref={canvasRef} className="office-canvas" aria-label="Animated agent office" />
+      {!ready && !error && <div className="office-loading">Opening your office…</div>}
+      {error && <div className="office-loading" role="alert">{error}</div>}
+      {ready && !count && <div className="office-empty"><Users size={25} /><h3>Your team starts here</h3><p>Open an agent panel and its character will join the office.</p><button onClick={onBack}>Go to panels</button></div>}
+      <div className="office-camera"><button aria-label="Zoom out" onClick={() => engineRef.current?.zoomBy(-.15)}><Minus size={16} /></button><button aria-label="Fit office" onClick={() => engineRef.current?.centerCamera()}><Scan size={16} /></button><button aria-label="Zoom in" onClick={() => engineRef.current?.zoomBy(.15)}><Plus size={16} /></button></div>
+      <div className="office-map-caption"><span className="office-live-dot" /> LIVE OFFICE <span>{editMode ? 'Click a tile to decorate · R to rotate · Shift + drag to pan' : 'Drag to explore · Scroll to zoom · Select an agent'}</span></div>
     </div>
-  );
+    <OfficeTeam selected={selected ?? hover} onSelect={setSelected} onOpen={openPanel} />
+    {shopOpen && <OfficeShop />}
+    {editMode && <EditModeOverlay />}
+  </div>;
 }

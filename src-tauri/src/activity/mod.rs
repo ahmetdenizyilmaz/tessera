@@ -227,7 +227,16 @@ pub fn observe_codex(app: &AppHandle, id: &str, message: &Value) {
     if method.starts_with("item/")
         && !matches!(
             message["params"]["item"]["type"].as_str(),
-            Some("userMessage" | "agentMessage")
+            Some(
+                "userMessage"
+                    | "agentMessage"
+                    | "commandExecution"
+                    | "fileChange"
+                    | "webSearch"
+                    | "mcpToolCall"
+                    | "dynamicToolCall"
+                    | "plan"
+            )
         )
     {
         return;
@@ -385,6 +394,20 @@ fn codex_event(
         }
         "item/started" | "item/completed" => {
             let item = &p["item"];
+            let tool = match item["type"].as_str() {
+                Some("commandExecution") => Some("Bash"),
+                Some("fileChange") => Some("Edit"),
+                Some("webSearch") => Some("WebSearch"),
+                Some("plan") => Some("TodoWrite"),
+                Some("mcpToolCall" | "dynamicToolCall") => item["tool"].as_str().or(Some("Tool")),
+                _ => None,
+            };
+            record.current_tool = tool.map(String::from);
+            if let Some(tool) = tool {
+                if !record.tools.iter().any(|name| name == tool) {
+                    record.tools.push(tool.into());
+                }
+            }
             if item["type"] == "userMessage" {
                 let text = text_content(&item["content"]);
                 if !text.is_empty() {

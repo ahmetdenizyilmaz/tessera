@@ -13,6 +13,7 @@ interface ConversationState {
   messages: LlmChatMessage[];
   isStreaming: boolean;
   error: string | null;
+  cancelled?: boolean;
 }
 
 interface LlmChatState {
@@ -23,6 +24,7 @@ interface LlmChatState {
   startStreaming: (id: string) => void;
   appendChunk: (id: string, content: string) => void;
   finishStreaming: (id: string) => void;
+  markCancelled: (id: string) => void;
   setError: (id: string, error: string) => void;
   clearConversation: (id: string) => void;
   removeConversation: (id: string) => void;
@@ -80,6 +82,7 @@ export const useLlmChatStore = create<LlmChatState>()(
                 ...conv,
                 isStreaming: true,
                 error: null,
+                cancelled: false,
                 messages: [
                   ...conv.messages,
                   {
@@ -136,6 +139,11 @@ export const useLlmChatStore = create<LlmChatState>()(
           };
         });
       },
+
+      markCancelled: (id: string) => set(state => {
+        const conv = state.conversations[id];
+        return conv?.isStreaming ? { conversations: { ...state.conversations, [id]: { ...conv, cancelled: true } } } : state;
+      }),
 
       setError: (id: string, error: string) => {
         set((state) => {

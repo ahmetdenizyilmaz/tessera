@@ -1,79 +1,16 @@
-import { Coins, Pencil, ShoppingCart, ArrowLeft, Users } from 'lucide-react';
+import { ArrowLeft, Coins, Pencil, ShoppingBag, Sparkles } from 'lucide-react';
 import { useOfficeGameStore } from '../../store/officeGameStore';
-import { isWorking, getSalaryRate } from '../../store/salaryEngine';
-import { useInstanceStore } from '../../store/instanceStore';
+import { isWorking } from '../../store/salaryEngine';
 
-interface OfficeHUDProps {
-  onBack: () => void;
-}
-
-export function OfficeHUD({ onBack }: OfficeHUDProps) {
-  const currency = useOfficeGameStore(s => s.currency);
-  const totalEarned = useOfficeGameStore(s => s.totalEarned);
-  const workers = useOfficeGameStore(s => s.workers);
-  const editMode = useOfficeGameStore(s => s.editMode);
-  const shopOpen = useOfficeGameStore(s => s.shopOpen);
-  const setEditMode = useOfficeGameStore(s => s.setEditMode);
-  const setShopOpen = useOfficeGameStore(s => s.setShopOpen);
-
-  const workerCount = Object.keys(workers).length;
-  const activeCount = Object.values(workers).filter(w => isWorking(w.activity)).length;
-
-  // Calculate current earning rate
-  const instances = useInstanceStore(s => s.instances);
-  let earningRate = 0;
-  for (const [id, worker] of Object.entries(workers)) {
-    if (isWorking(worker.activity)) {
-      const instance = instances.get(id);
-      if (instance) {
-        const provider = instance.config.llmConfig?.provider ?? 'claude';
-        const model = instance.config.llmConfig?.model ?? instance.config.model;
-        earningRate += getSalaryRate(provider, model);
-      }
-    }
-  }
-
-  return (
-    <div className="office-hud">
-      <div className="office-hud__left">
-        <button className="office-hud__btn" onClick={onBack} title="Back to panels">
-          <ArrowLeft size={18} />
-          <span>Panels</span>
-        </button>
-      </div>
-
-      <div className="office-hud__center">
-        <div className="office-hud__workers">
-          <Users size={16} />
-          <span>{activeCount}/{workerCount} working</span>
-        </div>
-      </div>
-
-      <div className="office-hud__right">
-        <div className="office-hud__currency">
-          <Coins size={18} className="office-hud__coin-icon" />
-          <span className="office-hud__balance">{Math.floor(currency)}</span>
-          {earningRate > 0 && (
-            <span className="office-hud__rate">+{earningRate.toFixed(1)}/min</span>
-          )}
-        </div>
-
-        <button
-          className={`office-hud__btn ${editMode ? 'office-hud__btn--active' : ''}`}
-          onClick={() => setEditMode(!editMode)}
-          title="Edit mode"
-        >
-          <Pencil size={18} />
-        </button>
-
-        <button
-          className={`office-hud__btn ${shopOpen ? 'office-hud__btn--active' : ''}`}
-          onClick={() => setShopOpen(!shopOpen)}
-          title="Shop"
-        >
-          <ShoppingCart size={18} />
-        </button>
-      </div>
-    </div>
-  );
+export function OfficeHUD({ onBack }: { onBack: () => void }) {
+  const state = useOfficeGameStore();
+  const working = Object.values(state.workers).filter(w => isWorking(w.activity)).length;
+  const level = 1 + Math.floor(state.completedTasks / 10);
+  return <header className="office-hud">
+    <div className="office-hud__identity"><button className="office-back" onClick={onBack} aria-label="Back to panels"><ArrowLeft size={18} /></button><div><span className="office-eyebrow">YOUR AGENT STUDIO</span><h2>The office <span>Level {level}</span></h2></div></div>
+    <div className="office-hud__progress"><Sparkles size={17} /><div><strong>{working} agents at work</strong><span>{state.completedTasks} completed turns · {10 - state.completedTasks % 10} to next level</span></div><div className="office-level-track"><i style={{ width: `${state.completedTasks % 10 * 10}%` }} /></div></div>
+    <div className="office-hud__actions"><div className="office-wallet" title="Game coins earned by completed work"><Coins size={20} /><strong data-testid="office-balance">{Math.floor(state.currency).toLocaleString()}</strong><span>coins</span></div>
+      <button className={state.editMode ? 'active' : ''} onClick={() => state.setEditMode(!state.editMode)}><Pencil size={16} />Decorate</button>
+      <button className={`office-shop-toggle ${state.shopOpen ? 'active' : ''}`} onClick={() => state.setShopOpen(!state.shopOpen)}><ShoppingBag size={16} />Shop</button></div>
+  </header>;
 }

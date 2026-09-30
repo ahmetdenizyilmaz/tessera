@@ -51,6 +51,7 @@ export default function App() {
   // Stable identity — an inline closure would reset SplashScreen's timers on every App render
   const hideSplash = useCallback(() => setShowSplash(false), []);
   const [viewMode, setViewMode] = useState<'panels' | 'office'>('panels');
+  const showPanels = useCallback(() => setViewMode('panels'), []);
   const [showNewInstance, setShowNewInstance] = useState(false);
   const [showResumeSession, setShowResumeSession] = useState(false);
   const [showSaveLoad, setShowSaveLoad] = useState<'save' | 'load' | null>(null);
@@ -257,8 +258,9 @@ export default function App() {
           onNewTimer={() => handleNewPlugin('timer')}
         />
 
-        {viewMode === 'panels' ? (
-          <>
+        <div style={{ display: 'grid', flex: 1, minHeight: 0, minWidth: 0, gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' }}>
+        {/* Preserve terminal dimensions and live streams while the office covers the panels. */}
+        <div style={{ gridArea: '1 / 1', display: 'flex', flexDirection: 'column', minHeight: 0, opacity: viewMode === 'panels' ? 1 : 0, pointerEvents: viewMode === 'panels' ? undefined : 'none' }} aria-hidden={viewMode !== 'panels'} inert={viewMode !== 'panels'}>
             <TabBar />
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
               <Sidebar />
@@ -266,12 +268,15 @@ export default function App() {
                 <MosaicLayout />
               </div>
             </div>
-          </>
-        ) : (
+        </div>
+        {viewMode === 'office' && (
+          <div style={{ gridArea: '1 / 1', display: 'flex', minHeight: 0, minWidth: 0, zIndex: 1 }}>
           <Suspense fallback={null}>
-            <OfficeView onBack={() => setViewMode('panels')} />
+            <OfficeView onBack={showPanels} />
           </Suspense>
+          </div>
         )}
+        </div>
 
         <StatusBar
           onNewInstance={openNewSessionWizard}

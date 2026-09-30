@@ -29,6 +29,8 @@ export interface ActivityRecord {
   usageNote: string | null;
   origin: string;
   promptParts?: Array<{ id: string; text: string; at: number }>;
+  tools?: string[];
+  currentTool?: string | null;
 }
 export interface ActivityPage {
   records: ActivityRecord[];

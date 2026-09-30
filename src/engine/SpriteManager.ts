@@ -1,8 +1,9 @@
 import type { WorkerActivity, OfficeFurnitureType } from '../types/office';
-import type { LlmProvider } from '../types/instance';
 
 // Provider color coding
-export const PROVIDER_COLORS: Record<LlmProvider, number> = {
+export const PROVIDER_COLORS: Record<string, number> = {
+  codex: 0x6cdbb1,
+  opencode: 0x9a9cff,
   claude: 0xFF8C00,    // orange
   anthropic: 0xD97757, // terracotta
   openai: 0x10A37F,    // green
@@ -14,6 +15,7 @@ export const PROVIDER_COLORS: Record<LlmProvider, number> = {
 
 // Activity emoji/symbol for indicator
 export const ACTIVITY_ICONS: Record<WorkerActivity, string> = {
+  unknown: '?',
   idle: 'zzz',
   new: 'star',
   thinking: 'thought',
@@ -32,6 +34,7 @@ export const ACTIVITY_ICONS: Record<WorkerActivity, string> = {
 
 // Activity display names
 export const ACTIVITY_LABELS: Record<WorkerActivity, string> = {
+  unknown: 'Waiting for activity',
   idle: 'Taking a break',
   new: 'Just arrived',
   thinking: 'Thinking...',
@@ -67,6 +70,6 @@ export const FURNITURE_SIZES: Record<OfficeFurnitureType, { w: number; h: number
   poster: { w: 1, h: 1 },
 };
 
-export function getProviderColor(provider: LlmProvider): number {
+export function getProviderColor(provider: string): number {
   return PROVIDER_COLORS[provider] ?? 0x888888;
 }

@@ -1,214 +1,136 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
-import { useLayoutStore } from '../store/layoutStore';
-import { useLlmChatStore } from '../store/llmChatStore';
 import { useChatStore } from '../store/chatStore';
+import { useCodexStore } from '../store/codexStore';
+import { useOpenCodeStore } from '../store/opencodeStore';
+import { useLlmChatStore } from '../store/llmChatStore';
 import { useOfficeGameStore } from '../store/officeGameStore';
-import { getDeskPositions, getActivityLocation } from '../engine/defaultOffice';
-import type { WorkerActivity } from '../types/office';
-import type { StreamEvent, StreamAssistantMessage, ChatMessage } from '../types/stream';
+import { useLayoutStore } from '../store/layoutStore';
+import { workerDestination } from '../lib/officeSpace';
+import { claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, rewardForTools, type WorkSignal } from '../lib/officeActivity';
+import type { ActivityPage, ActivityRecord } from '../types/activity';
 
-/** Derive activity from a stream event (granular streaming format) */
-function deriveFromStreamEvent(event: StreamEvent): WorkerActivity | null {
-  switch (event.type) {
-    case 'content_block_start': {
-      const block = (event as any).content_block;
-      if (block?.type === 'thinking') return 'thinking';
-      if (block?.type === 'text') return 'responding';
-      if (block?.type === 'tool_use') return mapToolName(block.name);
-      return null;
-    }
-    case 'content_block_delta': {
-      const delta = (event as any).delta;
-      if (delta?.type === 'thinking_delta') return 'thinking';
-      if (delta?.type === 'text_delta') return 'responding';
-      return null;
-    }
-    case 'assistant':
-      return deriveFromAssistantMessage(event as StreamAssistantMessage);
-    case 'permission':
-      return 'awaiting_permission';
-    case 'error':
-      return 'error';
-    case 'result': {
-      const result = event as any;
-      if (result.is_error || (result.subtype && result.subtype !== 'success')) return 'error';
-      return 'idle';
-    }
-    case 'message_stop':
-      return 'idle';
-    default:
-      return null;
+/** Stable record IDs make polling, replay, and reopening the office idempotent. */
+export function ingestOfficeRecords(records: ActivityRecord[]) {
+  for (const r of records) {
+    const store = useOfficeGameStore.getState();
+    if (r.kind !== 'turn' || r.status !== 'completed' || r.startedAt < store.startedAt || r.actor.device) continue;
+    store.claimReward({ id: r.id, panelId: r.actor.id, name: r.actor.name, task: cleanTask(r.prompt),
+      coins: rewardForTools(r.tools ?? []), at: r.updatedAt });
   }
 }
 
-/** Derive activity from a complete assistant message (Claude CLI format) */
-function deriveFromAssistantMessage(event: StreamAssistantMessage): WorkerActivity {
-  const content = event.message.content;
-  if (!content || content.length === 0) return 'responding';
-
-  // Use the last content block to determine current activity
-  const lastBlock = content[content.length - 1];
-  if (lastBlock.type === 'thinking') return 'thinking';
-  if (lastBlock.type === 'tool_use') return mapToolName(lastBlock.name ?? '');
-  return 'responding';
-}
-
-/** Map tool name to worker activity */
-function mapToolName(name: string): WorkerActivity {
-  switch (name) {
-    case 'Read': return 'reading_file';
-    case 'Edit': return 'editing_file';
-    case 'Write': return 'writing_file';
-    case 'Bash': return 'running_command';
-    case 'Glob': case 'Grep': return 'searching_files';
-    case 'WebSearch': case 'WebFetch': return 'searching_web';
-    case 'TodoRead': case 'TodoWrite': return 'managing_todos';
-    case 'ToolSearch': return 'searching_files';
-    default: return 'using_tool';
-  }
-}
-
-/** Determine if a desk-bound activity (worker stays at their desk) */
-function isDeskActivity(activity: WorkerActivity): boolean {
-  return activity === 'responding' || activity === 'editing_file' ||
-         activity === 'writing_file' || activity === 'using_tool';
-}
-
-/** Derive activity from accumulated messages (for chatStore subscription) */
-function deriveFromMessages(messages: ChatMessage[], isStreaming: boolean): WorkerActivity {
-  if (!isStreaming && messages.length === 0) return 'new';
-  if (!isStreaming) return 'idle';
-
-  // Look at the last assistant message
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if ('blocks' in msg && msg.role === 'assistant') {
-      const lastBlock = msg.blocks[msg.blocks.length - 1];
-      if (!lastBlock) return 'responding';
-      if (lastBlock.type === 'thinking') return 'thinking';
-      if (lastBlock.type === 'tool_use') return mapToolName(lastBlock.name);
-      return 'responding';
-    }
-  }
-  return 'responding';
-}
-
-// Derive activity from LLM chat state
-function deriveLlmActivity(
-  isStreaming: boolean,
-  messageCount: number,
-  error: string | null,
-): WorkerActivity {
-  if (error) return 'error';
-  if (isStreaming) return 'responding';
-  if (messageCount === 0) return 'new';
-  return 'idle';
-}
-
+/** App-wide: characters and rewards keep updating while panels are visible. */
 export function useWorkerActivity(): void {
-  const deskIndexRef = useRef(0);
-  const lastActivityRef = useRef(new Map<string, WorkerActivity>());
-
   useEffect(() => {
-    const deskPositions = getDeskPositions();
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastFullScan = 0;
+    let since = useOfficeGameStore.getState().startedAt;
+    const latest = new Map<string, ActivityRecord>();
+    const inFlight = new Map<string, { id: string; task: string; tools: Set<string> }>();
 
-    // Immediate sync: add workers for existing instances, remove stale workers
-    {
-      const instances = useInstanceStore.getState().instances;
-      const officeStore = useOfficeGameStore.getState();
-      // Remove stale workers (survives HMR)
-      for (const id of Object.keys(officeStore.workers)) {
-        if (!instances.has(id)) {
-          officeStore.removeWorker(id);
-        }
+    function sync() {
+      timer = undefined;
+      if (disposed) return;
+      const panelTypes = useLayoutStore.getState().panelTypes;
+      const instances = new Map([...useInstanceStore.getState().instances].filter(([id]) => !['computer', 'widget', 'plugin', 'group', 'remote'].includes(panelTypes[id])));
+      for (const id of Object.keys(useOfficeGameStore.getState().workers)) {
+        if (!instances.has(id)) { useOfficeGameStore.getState().removeWorker(id); inFlight.delete(id); }
       }
-      // Add workers for instances that already exist
-      for (const id of instances.keys()) {
-        if (!officeStore.workers[id]) {
-          const deskPos = deskPositions[deskIndexRef.current % deskPositions.length];
-          deskIndexRef.current++;
-          officeStore.addWorker(id, deskPos);
+      const occupied = new Set<string>();
+      let index = 0;
+      for (const [id, instance] of instances) {
+        const store = useOfficeGameStore.getState();
+        let state: WorkSignal;
+        // LLM and OpenCode do not yet enter native Activity history. Award only
+        // a turn whose running state was observed, never imported old messages.
+        let supplemental: { running: boolean; completed: boolean; key: string; tools: string[] } | undefined;
+        if (instance.config.llmConfig) {
+          const conv = useLlmChatStore.getState().conversations[id];
+          const question = conv?.messages.filter(m => m.role === 'user').at(-1);
+          state = { activity: conv?.error ? 'error' : conv?.isStreaming ? 'responding' : 'idle', task: cleanTask(question?.content ?? ''), detail: conv?.error ?? '' };
+          supplemental = { running: !!conv?.isStreaming, completed: !!conv && !conv.isStreaming && !conv.error && !conv.cancelled && conv.messages.at(-1)?.role === 'assistant' && !!conv.messages.at(-1)?.content.trim(), key: `llm:${question?.id ?? ''}`, tools: [] };
+        } else if (instance.config.agentProvider === 'codex') {
+          state = codexSignal(useCodexStore.getState().sessions[id]);
+        } else if (instance.config.agentProvider === 'opencode') {
+          const session = useOpenCodeStore.getState().sessions[id];
+          state = openCodeSignal(session);
+          const question = session?.messages.filter(m => m.info.role === 'user').at(-1);
+          const answer = session?.messages.at(-1);
+          supplemental = { running: session?.status.type === 'busy', completed: !!session?.connected && session.status.type === 'idle' && !session.error && answer?.info.role === 'assistant' && !answer.info.error,
+            key: `opencode:${session?.sessionId}:${question?.info.id}`, tools: session?.messages.filter(m => m.info.id > (question?.info.id ?? '')).flatMap(m => m.parts.filter(p => p.type === 'tool').map(p => p.tool ?? 'Tool')) ?? [] };
+        } else if (instance.config.panelView === 'terminal') {
+          state = instance.status === 'stopped' ? { activity: 'unknown', task: '', detail: 'Session stopped' } : recordedSignal(latest.get(id));
+        } else {
+          state = claudeSignal(useChatStore.getState().sessions.get(id));
         }
+        if (supplemental?.running) {
+          const previous = inFlight.get(id);
+          inFlight.set(id, { id: supplemental.key, task: state.task, tools: new Set([...(previous?.id === supplemental.key ? previous.tools : []), ...supplemental.tools]) });
+        } else if (supplemental && inFlight.has(id)) {
+          const turn = inFlight.get(id)!;
+          inFlight.delete(id);
+          if (supplemental.completed && supplemental.key === turn.id) store.claimReward({ id: turn.id, panelId: id, name: instance.name, task: turn.task, coins: rewardForTools([...turn.tools]), at: Date.now() });
+        }
+        let worker = useOfficeGameStore.getState().workers[id];
+        if (!worker) {
+          store.addWorker(id, workerDestination(store.layout, 'new', index, occupied));
+          worker = useOfficeGameStore.getState().workers[id];
+        }
+        const target = workerDestination(store.layout, state.activity, index++, occupied);
+        occupied.add(`${target.gridX},${target.gridY}`);
+        // Avoid writing persistent storage on every streamed token.
+        if (worker.activity !== state.activity || worker.task !== state.task || worker.detail !== state.detail || worker.targetPosition.gridX !== target.gridX || worker.targetPosition.gridY !== target.gridY)
+          store.updateWorker(id, state.activity, state.task, state.detail, target);
       }
     }
-
-    function moveWorker(id: string, activity: WorkerActivity) {
-      const officeStore = useOfficeGameStore.getState();
-      const worker = officeStore.workers[id];
-      if (!worker) return;
-
-      // Skip if activity hasn't changed
-      const lastActivity = lastActivityRef.current.get(id);
-      if (lastActivity === activity) return;
-      lastActivityRef.current.set(id, activity);
-
-      officeStore.updateWorkerActivity(id, activity);
-
-      // Determine target position
-      if (isDeskActivity(activity)) {
-        officeStore.setWorkerTarget(id, worker.assignedDesk);
-      } else if (activity !== 'idle' || !worker.isWalking) {
-        const target = getActivityLocation(activity, officeStore.layout.rooms);
-        officeStore.setWorkerTarget(id, target);
-      }
+    function schedule() { if (!timer && !disposed) timer = setTimeout(sync, 60); }
+    async function poll() {
+      if (disposed) return;
+      try {
+        const store = useOfficeGameStore.getState();
+        const full = Date.now() - lastFullScan > 300000;
+        const scanSince = full ? store.startedAt : Math.max(store.startedAt, since - 60000);
+        const records = new Map<string, ActivityRecord>();
+        let before: { at: number; id: string } | null = null;
+        const pending = store.pendingRecords;
+        let refreshOffset = 0;
+        do {
+          const refreshIds = pending.slice(refreshOffset, refreshOffset + 1000);
+          const page: ActivityPage = await invoke('activity_list', { since: scanSince, before, limit: 500, refreshIds });
+          if (disposed) return;
+          if (page.health.error) throw new Error(page.health.error);
+          for (const r of page.records) records.set(r.id, r);
+          // Native pagination puts the 500 page rows first, then appends
+          // refreshed records. A refreshed old turn must not skip a page.
+          const last: ActivityRecord | undefined = page.hasMore ? page.records[499] : undefined;
+          before = page.hasMore && last ? { at: last.startedAt, id: last.id } : null;
+          refreshOffset += 1000;
+        } while (!disposed && (before || refreshOffset < pending.length));
+        const collected = [...records.values()];
+        ingestOfficeRecords(collected);
+        const waiting = new Set(store.pendingRecords);
+        for (const r of collected) {
+          if (r.kind !== 'turn') continue;
+          if (['completed', 'failed', 'interrupted'].includes(r.status)) waiting.delete(r.id); else waiting.add(r.id);
+          const previous = latest.get(r.actor.id);
+          if (!previous || r.startedAt >= previous.startedAt) latest.set(r.actor.id, r);
+          since = Math.max(since, r.startedAt);
+        }
+        useOfficeGameStore.setState({ syncError: null, pendingRecords: [...waiting] });
+        if (full) lastFullScan = Date.now();
+        sync();
+      } catch (error) {
+        if (!disposed) useOfficeGameStore.setState({ syncError: `Rewards will catch up when activity reconnects. ${String(error)}` });
+      } finally { if (!disposed) pollTimer = setTimeout(poll, 5000); }
     }
-
-    // Watch for instance changes — add/remove workers
-    const unsubInstances = useInstanceStore.subscribe((state) => {
-      const instances = state.instances;
-      const officeStore = useOfficeGameStore.getState();
-
-      for (const id of instances.keys()) {
-        if (!officeStore.workers[id]) {
-          const deskPos = deskPositions[deskIndexRef.current % deskPositions.length];
-          deskIndexRef.current++;
-          officeStore.addWorker(id, deskPos);
-        }
-      }
-
-      for (const id of Object.keys(officeStore.workers)) {
-        if (!instances.has(id)) {
-          officeStore.removeWorker(id);
-          lastActivityRef.current.delete(id);
-        }
-      }
-    });
-
-    // Watch chatStore for Claude activity updates (replaces broken Tauri listen())
-    const unsubChat = useChatStore.subscribe((state) => {
-      const instances = useInstanceStore.getState().instances;
-      const panelTypes = useLayoutStore.getState().panelTypes;
-
-      for (const [id, session] of state.sessions) {
-        // Skip LLM instances (handled below)
-        if ((panelTypes[id] as string) === 'llm') continue;
-        if (!instances.has(id)) continue;
-
-        const activity = deriveFromMessages(
-          session.messages,
-          session.isStreaming,
-        );
-        moveWorker(id, activity);
-      }
-    });
-
-    // Watch LLM chat store for LLM instance activity
-    const unsubLlm = useLlmChatStore.subscribe((state) => {
-      const panelTypes = useLayoutStore.getState().panelTypes;
-
-      for (const [id, conv] of Object.entries(state.conversations)) {
-        if ((panelTypes[id] as string) === 'llm') {
-          const activity = deriveLlmActivity(conv.isStreaming, conv.messages.length, conv.error);
-          moveWorker(id, activity);
-        }
-      }
-    });
-
-    return () => {
-      unsubInstances();
-      unsubChat();
-      unsubLlm();
-    };
+    const unsubscribe = [useInstanceStore.subscribe(schedule), useLayoutStore.subscribe((s, old) => { if (s.panelTypes !== old.panelTypes) schedule(); }), useChatStore.subscribe(schedule), useCodexStore.subscribe(schedule), useOpenCodeStore.subscribe(schedule), useLlmChatStore.subscribe(schedule),
+      useOfficeGameStore.subscribe((s, old) => { if (s.layout !== old.layout) schedule(); })];
+    sync();
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); clearTimeout(pollTimer); unsubscribe.forEach(unsub => unsub()); };
   }, []);
 }
