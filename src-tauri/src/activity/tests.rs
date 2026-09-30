@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::json;
 fn actor() -> Actor {
     Actor {
         id: "panel-a".into(),
@@ -171,6 +172,12 @@ fn resumed_codex_does_not_charge_historical_total_to_the_new_question() {
     event(
         &conn,
         &mut active,
+        "turn/started",
+        json!({"threadId":"s","turn":{"id":"t"}}),
+    );
+    event(
+        &conn,
+        &mut active,
         "thread/tokenUsage/updated",
         json!({"threadId":"s","turnId":"t","tokenUsage":{"total":tokens(90000,40000,10000,2000),"last":tokens(100,60,20,8)}}),
     );
@@ -272,6 +279,12 @@ fn saved_history_and_usage_baselines_survive_database_reopen() {
         let conn = Connection::open(&path).unwrap();
         create_tables(&conn).unwrap();
         let mut active = HashMap::new();
+        event(
+            &conn,
+            &mut active,
+            "turn/started",
+            json!({"threadId":"s","turn":{"id":"t"}}),
+        );
         event(
             &conn,
             &mut active,
@@ -381,5 +394,39 @@ fn date_and_cursor_pagination_do_not_skip_records_with_identical_timestamps() {
     assert_eq!(
         second.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
         ["a"]
+    );
+}
+
+#[test]
+fn resume_usage_seeds_a_baseline_without_inventing_a_new_turn() {
+    let conn = database();
+    let mut active = HashMap::new();
+    event(
+        &conn,
+        &mut active,
+        "thread/tokenUsage/updated",
+        json!({"threadId":"s","turnId":"old","tokenUsage":{"total":tokens(90000,40000,10000,2000),"last":tokens(100,60,20,8)}}),
+    );
+    assert!(get(&conn, "codex:s:old").unwrap().is_none());
+    event(
+        &conn,
+        &mut active,
+        "turn/started",
+        json!({"threadId":"s","turn":{"id":"new"}}),
+    );
+    event(
+        &conn,
+        &mut active,
+        "thread/tokenUsage/updated",
+        json!({"threadId":"s","turnId":"new","tokenUsage":{"total":tokens(90100,40060,10020,2008),"last":tokens(100,60,20,8)}}),
+    );
+    assert_eq!(
+        get(&conn, "codex:s:new")
+            .unwrap()
+            .unwrap()
+            .usage
+            .unwrap()
+            .total(),
+        120
     );
 }

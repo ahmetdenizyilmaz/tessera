@@ -12,7 +12,7 @@ use crate::{
 use model::*;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -353,10 +353,20 @@ fn codex_event(
     let Some(turn) = turn else {
         return Ok(());
     };
-    active.insert(session.into(), turn.clone());
     let id = format!("codex:{session}:{turn}");
+    let existing = get(conn, &id)?;
+    // A resume can report counters for an old turn before any new activity.
+    // Seed the baseline without inventing a question at the time of reconnect.
+    if method == "thread/tokenUsage/updated" && existing.is_none() {
+        if let Some(total) = Usage::codex(&p["tokenUsage"]["total"]) {
+            conn.execute("INSERT INTO activity_counters(id,data) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+                rusqlite::params![session, serde_json::to_string(&total).unwrap()]).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    active.insert(session.into(), turn.clone());
     let mut record =
-        get(conn, &id)?.unwrap_or_else(|| Record::turn(id, actor.clone(), session.into(), at));
+        existing.unwrap_or_else(|| Record::turn(id, actor.clone(), session.into(), at));
     record.actor = actor;
     record.updated_at = at;
     match method {
