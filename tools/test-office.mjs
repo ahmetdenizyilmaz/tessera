@@ -153,11 +153,28 @@ try {
     ];
     window.instances.setState(s => ({ instances: new Map([...s.instances, ...extras.map(i => [i.id, i])]) }));
     window.officeHistory['terminal-history'] = [{ role: 'user', content: 'Please inspect the terminal project.' }, { role: 'assistant', content: 'I found the terminal transcript.' }];
+    window.officeRecords.push({ ...window.officeRecords[0], id: 'pre-office-task', actor: { ...window.officeRecords[0].actor, id: 'before-workspace-restore', name: 'Terminal Claude' },
+      sessionId: 'terminal-history', startedAt: window.office.getState().startedAt - 60000, updatedAt: Date.now() - 60000, status: 'running', currentTool: 'Bash' });
     window.llm.getState().addUserMessage('api', 'Draft a project update.');
     window.llm.getState().startStreaming('api');
     window.llm.getState().appendChunk('api', 'API conversation is live.');
     window.opencode.setState({ sessions: { automation: { generation: 'oc', sessionId: 'oc-session', connected: true, status: { type: 'busy' }, messages: [{ info: { id: 'oc-answer', role: 'assistant' }, parts: [{ id: 'text', type: 'text', text: 'OpenCode is building the project.' }] }], permissions: [], questions: [] } } });
   });
+  await expect(page.locator('[data-office-agent="terminal"]')).toContainText('Running command', { timeout: 10000 });
+  const beforeCompletionCoins = await page.evaluate(() => window.office.getState().currency);
+  await page.evaluate(() => { window.officeRecords.find(r => r.id === 'pre-office-task').status = 'completed'; });
+  await expect(page.locator('[data-office-agent="terminal"]')).toContainText('Taking a break', { timeout: 10000 });
+  expect(await page.evaluate(() => window.office.getState().currency)).toBe(beforeCompletionCoins);
+  await page.evaluate(() => {
+    const chat = window.chat.getState();
+    chat.processEvent('architect', { type: 'message_start', message: { id: 'partial', role: 'assistant', model: 'claude' } });
+    chat.processEvent('architect', { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'slow-tool', name: 'Bash' } });
+    chat.processEvent('architect', { type: 'message_stop' });
+  });
+  await expect(page.locator('[data-office-agent="architect"]')).toContainText('Running command');
+  await page.evaluate(() => { window.chat.getState().processEvent('architect', { type: 'result', subtype: 'success' }); });
+  await expect(page.locator('[data-office-agent="architect"]')).toContainText('Taking a break');
+  console.log('PASS quiet Claude terminal work before office creation, restored panel identity, explicit completion without old rewards, and streamed tool boundaries');
   await page.locator('[data-office-agent="terminal"]').click();
   await expect(page.locator('.office-chat-messages')).toContainText('I found the terminal transcript.');
   await page.evaluate(() => { window.officeHistory['terminal-history'].push({ role: 'assistant', content: 'A newly saved terminal answer.' }); });

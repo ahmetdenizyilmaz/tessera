@@ -59,6 +59,62 @@ fn database() -> Connection {
     create_tables(&conn).unwrap();
     conn
 }
+#[test]
+fn terminal_activity_stays_running_through_tools_and_finishes_explicitly() {
+    let mut reader = claude::Transcript::default();
+    let first = reader.consume(&user("q", "Run the long task"), &actor(), "session").pop().unwrap();
+    assert_eq!(first.status, "running");
+    reader.consume(&json!({"type":"assistant","uuid":"tool","timestamp":"2026-09-30T10:00:01Z","message":{
+        "id":"m1","stop_reason":"tool_use","content":[{"type":"tool_use","id":"call","name":"Bash"}]}}), &actor(), "session");
+    let continued = reader.consume(&json!({"type":"user","timestamp":"2026-09-30T10:05:01Z","message":{
+        "content":[{"type":"tool_result","tool_use_id":"call","content":"done"}]}}), &actor(), "session").pop().unwrap();
+    assert_eq!(continued.id, first.id);
+    assert_eq!(continued.prompt, first.prompt);
+    assert_eq!(continued.status, "running");
+    assert!(continued.updated_at > first.updated_at);
+    assert!(continued.current_tool.is_none());
+    assert_eq!(continued.tools, ["Bash"]);
+    let done = reader.consume(&json!({"type":"system","subtype":"turn_duration","timestamp":"2026-09-30T10:06:00Z"}), &actor(), "session").pop().unwrap();
+    assert_eq!(done.status, "completed");
+    assert_eq!(done.id, first.id);
+}
+
+#[test]
+fn interrupted_terminal_turns_do_not_create_prompts_or_earn_completion_rewards() {
+    let mut reader = claude::Transcript::default();
+    let first = reader.consume(&user("q", "Inspect the project"), &actor(), "session").pop().unwrap();
+    let stopped = reader.consume(&user("interrupted", "[Request interrupted by user]"), &actor(), "session").pop().unwrap();
+    assert_eq!(stopped.id, first.id);
+    assert_eq!(stopped.prompt, first.prompt);
+    assert_eq!(stopped.status, "interrupted");
+    assert!(reader.consume(&json!({"type":"system","subtype":"turn_duration","timestamp":"2026-09-30T10:06:00Z"}), &actor(), "session").is_empty());
+}
+
+#[test]
+fn current_sessions_can_recover_turns_before_the_office_start_and_after_panel_restore() {
+    let conn = database();
+    let mut previous = Record::turn("old-question".into(), actor(), "same-session".into(), 1);
+    previous.status = "completed".into();
+    save(&conn, &previous).unwrap();
+    let mut running = Record::turn("current-question".into(), actor(), "same-session".into(), 2);
+    running.status = "running".into();
+    running.current_tool = Some("Bash".into());
+    save(&conn, &running).unwrap();
+    let mut another_provider = running.clone();
+    another_provider.id = "other-provider".into();
+    another_provider.started_at = 3;
+    another_provider.actor.provider = "codex".into();
+    save(&conn, &another_provider).unwrap();
+    assert!(read_page(&conn, None, Some(1000), Some(500)).unwrap().0.is_empty());
+    let session = LiveSession { provider: "claude".into(), session_id: "same-session".into() };
+    let found = latest_session_turn(&conn, &session).unwrap().unwrap();
+    assert_eq!(found.id, running.id);
+    assert_eq!(found.actor.id, "panel-a"); // Caller can now have a different panel ID.
+    running.status = "completed".into();
+    save(&conn, &running).unwrap();
+    assert_eq!(latest_session_turn(&conn, &session).unwrap().unwrap().status, "completed");
+    assert!(latest_session_turn(&conn, &LiveSession { provider: "claude".into(), session_id: "missing".into() }).unwrap().is_none());
+}
 fn user(id: &str, text: &str) -> Value {
     json!({"type":"user","uuid":id,"timestamp":"2026-09-30T10:00:00Z","message":{"content":text}})
 }

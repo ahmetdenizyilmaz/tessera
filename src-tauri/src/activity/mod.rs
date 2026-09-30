@@ -23,6 +23,7 @@ pub fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
         id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, panel_id TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_activity_time ON activity_records(started_at, id);
         CREATE INDEX IF NOT EXISTS idx_activity_panel ON activity_records(panel_id, started_at);
+        CREATE INDEX IF NOT EXISTS idx_activity_session ON activity_records(json_extract(data,'$.actor.provider'), json_extract(data,'$.sessionId'), kind, started_at DESC, id DESC);
         CREATE TABLE IF NOT EXISTS activity_counters (id TEXT PRIMARY KEY, data TEXT NOT NULL);")
 }
 fn save(conn: &Connection, record: &Record) -> Result<(), String> {
@@ -505,12 +506,26 @@ pub struct Page {
     pub has_more: bool,
     pub health: Health,
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveSession {
+    provider: String,
+    session_id: String,
+}
+fn latest_session_turn(conn: &Connection, session: &LiveSession) -> Result<Option<Record>, String> {
+    let raw: Option<String> = conn.query_row(
+        "SELECT data FROM activity_records WHERE json_extract(data,'$.actor.provider')=?1 AND json_extract(data,'$.sessionId')=?2 AND kind='turn' ORDER BY started_at DESC,id DESC LIMIT 1",
+        rusqlite::params![session.provider, session.session_id], |r| r.get(0))
+        .optional().map_err(|e| e.to_string())?;
+    raw.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string())).transpose()
+}
 #[tauri::command]
 pub async fn activity_list(
     before: Option<Cursor>,
     since: Option<i64>,
     limit: Option<usize>,
     refresh_ids: Option<Vec<String>>,
+    live_sessions: Option<Vec<LiveSession>>,
     app: AppHandle,
     db: tauri::State<'_, Database>,
 ) -> Result<Page, String> {
@@ -523,6 +538,13 @@ pub async fn activity_list(
             if let Some(record) = get(&conn, &id)? {
                 records.push(record);
             }
+        }
+    }
+    // Keep these outside the paginated rows. Office activity follows the real
+    // session identity and must not be limited by its coin-earning start date.
+    for session in live_sessions.unwrap_or_default().into_iter().take(1000) {
+        if let Some(record) = latest_session_turn(&conn, &session)? {
+            if !records.iter().any(|r| r.id == record.id) { records.push(record); }
         }
     }
     let health = app

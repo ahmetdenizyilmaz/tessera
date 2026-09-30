@@ -172,6 +172,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Claude CLI sends complete assistant messages (not granular
           // streaming events). With a persistent process the `result` event
           // is the authoritative turn terminator, so streaming stays on here.
+          session.isStreaming = true;
           session.accumulator.addCompleteMessage(event as StreamAssistantMessage);
           session.messages = rebuildMessages(session);
           break;
@@ -185,10 +186,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         case 'message_stop':
           session.accumulator.processEvent(event);
           session.messages = rebuildMessages(session);
-          // If the accumulator has no active streaming message, clear session streaming
-          if (!session.accumulator.getCurrentMessage()) {
-            session.isStreaming = false;
-          }
+          // This ends one API message, often just before a tool starts. The
+          // agent remains busy until the CLI's turn-level result or an exit.
           break;
 
         default:

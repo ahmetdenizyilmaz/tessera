@@ -42,6 +42,10 @@ mockIPC(async (command, args) => {
     const all = window.officeRecords.filter(r => r.startedAt >= args.since && (!args.before || r.startedAt < args.before.at || (r.startedAt === args.before.at && r.id < args.before.id))).sort((a, b) => b.startedAt - a.startedAt || b.id.localeCompare(a.id));
     const records = all.slice(0, args.limit);
     for (const id of args.refreshIds ?? []) { const r = window.officeRecords.find(r => r.id === id); if (r && !records.some(x => x.id === id)) records.push(r); }
+    for (const s of args.liveSessions ?? []) {
+      const r = window.officeRecords.filter(r => r.kind === 'turn' && r.sessionId === s.sessionId && r.actor.provider === s.provider).sort((a, b) => b.startedAt - a.startedAt)[0];
+      if (r && !records.some(x => x.id === r.id)) records.push(r);
+    }
     return { records, hasMore: all.length > args.limit, health: { error: null, lastScan: Date.now() } };
   }
   return null;

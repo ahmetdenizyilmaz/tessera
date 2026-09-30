@@ -66,8 +66,15 @@ describe('office work and rewards', () => {
   });
   it('does not reuse the previous Claude turn tool while a new question starts', () => {
     expect(claudeSignal({ messages: [{ id: 'old', role: 'assistant', isStreaming: false, blocks: [{ type: 'tool_use', id: 'x', name: 'Bash', input: {} }] }, { id: 'new', role: 'user', text: 'New task', timestamp: 1 }], isStreaming: true, error: null, controlRequests: [], result: null }).activity).toBe('thinking');
-    expect(recordedSignal({ ...record(), status: 'recorded', currentTool: 'Read' }, 201).activity).toBe('reading_file');
-    expect(recordedSignal({ ...record(), status: 'recorded', currentTool: 'Read' }, 40000).activity).toBe('unknown');
+    expect(recordedSignal({ ...record(), status: 'recorded', currentTool: 'Read' }).activity).toBe('reading_file');
+  });
+  it('keeps quiet terminal work active until an explicit completion or failure', () => {
+    const active = { ...record(), status: 'running', updatedAt: Date.now() - 60 * 60 * 1000, currentTool: 'Bash' };
+    expect(recordedSignal(active).activity).toBe('running_command');
+    expect(recordedSignal({ ...active, currentTool: null }).activity).toBe('thinking');
+    expect(recordedSignal({ ...active, status: 'completed' }).activity).toBe('idle');
+    expect(recordedSignal({ ...active, status: 'interrupted' }).activity).toBe('error');
+    expect(recordedSignal(undefined).activity).toBe('unknown');
   });
 });
 describe('office purchases and movement', () => {

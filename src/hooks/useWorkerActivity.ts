@@ -30,6 +30,7 @@ export function useWorkerActivity(): void {
     let lastFullScan = 0;
     let since = useOfficeGameStore.getState().startedAt;
     const latest = new Map<string, ActivityRecord>();
+    const latestBySession = new Map<string, ActivityRecord>();
     const inFlight = new Map<string, { id: string; task: string; tools: Set<string> }>();
 
     function sync() {
@@ -63,7 +64,10 @@ export function useWorkerActivity(): void {
           supplemental = { running: session?.status.type === 'busy', completed: !!session?.connected && session.status.type === 'idle' && !session.error && answer?.info.role === 'assistant' && !answer.info.error,
             key: `opencode:${session?.sessionId}:${question?.info.id}`, tools: session?.messages.filter(m => m.info.id > (question?.info.id ?? '')).flatMap(m => m.parts.filter(p => p.type === 'tool').map(p => p.tool ?? 'Tool')) ?? [] };
         } else if (instance.config.panelView === 'terminal') {
-          state = instance.status === 'stopped' ? { activity: 'unknown', task: '', detail: 'Session stopped' } : recordedSignal(latest.get(id));
+          const record = instance.claudeSessionId ? latestBySession.get(`claude:${instance.claudeSessionId}`) : latest.get(id);
+          state = instance.status === 'stopped' || instance.status === 'error'
+            ? { activity: instance.status === 'error' ? 'error' : 'unknown', task: record?.prompt ?? '', detail: 'Session stopped' }
+            : recordedSignal(record);
         } else {
           state = claudeSignal(useChatStore.getState().sessions.get(id));
         }
@@ -97,10 +101,15 @@ export function useWorkerActivity(): void {
         const records = new Map<string, ActivityRecord>();
         let before: { at: number; id: string } | null = null;
         const pending = store.pendingRecords;
+        // Activity must include an already-running terminal turn, even if it
+        // predates the game or its panel got a new ID during workspace restore.
+        const liveSessions = [...useInstanceStore.getState().instances.values()]
+          .filter(i => !i.config.llmConfig && (i.config.agentProvider ?? 'claude') === 'claude' && i.config.panelView === 'terminal' && i.claudeSessionId)
+          .map(i => ({ provider: 'claude', sessionId: i.claudeSessionId! }));
         let refreshOffset = 0;
         do {
           const refreshIds = pending.slice(refreshOffset, refreshOffset + 1000);
-          const page: ActivityPage = await invoke('activity_list', { since: scanSince, before, limit: 500, refreshIds });
+          const page: ActivityPage = await invoke('activity_list', { since: scanSince, before, limit: 500, refreshIds, liveSessions: before === null ? liveSessions : [] });
           if (disposed) return;
           if (page.health.error) throw new Error(page.health.error);
           for (const r of page.records) records.set(r.id, r);
@@ -118,6 +127,8 @@ export function useWorkerActivity(): void {
           if (['completed', 'failed', 'interrupted'].includes(r.status)) waiting.delete(r.id); else waiting.add(r.id);
           const previous = latest.get(r.actor.id);
           if (!previous || r.startedAt >= previous.startedAt) latest.set(r.actor.id, r);
+          const key = `${r.actor.provider}:${r.sessionId}`, previousSession = latestBySession.get(key);
+          if (!previousSession || r.startedAt > previousSession.startedAt || (r.startedAt === previousSession.startedAt && r.updatedAt >= previousSession.updatedAt)) latestBySession.set(key, r);
           since = Math.max(since, r.startedAt);
         }
         useOfficeGameStore.setState({ syncError: null, pendingRecords: [...waiting] });

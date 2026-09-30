@@ -75,6 +75,17 @@ impl Transcript {
             return vec![];
         }
         let kind = v["type"].as_str().unwrap_or("");
+        if kind == "system" && v["subtype"] == "turn_duration" {
+            if let (Some(record), Some(at)) = (self.current.as_mut(), timestamp(&v["timestamp"])) {
+                if record.status != "interrupted" && record.status != "failed" {
+                    record.status = "completed".into();
+                    record.updated_at = at;
+                    record.current_tool = None;
+                    return vec![record.clone()];
+                }
+            }
+            return vec![];
+        }
         if kind != "user" && kind != "assistant" {
             return vec![];
         }
@@ -83,17 +94,30 @@ impl Transcript {
         };
         let text = text_content(&v["message"]["content"]);
         if kind == "user" {
+            // Tool results continue the current human turn. They can be the
+            // only new record for minutes while the next model call thinks.
+            if v["message"]["content"].as_array().is_some_and(|a| a.iter().any(|b| b["type"] == "tool_result")) {
+                if let Some(record) = self.current.as_mut() {
+                    record.updated_at = at;
+                    record.status = "running".into();
+                    record.current_tool = None;
+                    return vec![record.clone()];
+                }
+                return vec![];
+            }
+            if text == "[Request interrupted by user]" || text == "[Request interrupted by user for tool use]" {
+                if let Some(record) = self.current.as_mut() {
+                    record.status = "interrupted".into();
+                    record.updated_at = at;
+                    record.current_tool = None;
+                    return vec![record.clone()];
+                }
+                return vec![];
+            }
             if text.is_empty()
                 || text.starts_with("<command-")
                 || text.starts_with("<local-command-")
                 || text.starts_with("<task-notification>")
-            {
-                return vec![];
-            }
-            // Tool results carry the user role, but do not begin a human turn.
-            if v["message"]["content"]
-                .as_array()
-                .is_some_and(|a| a.iter().any(|b| b["type"] == "tool_result"))
             {
                 return vec![];
             }
@@ -109,6 +133,7 @@ impl Transcript {
                 previous.push(record);
             }
             let mut record = Record::turn(id, actor.clone(), session.into(), at);
+            record.status = "running".into();
             record.set_prompt(text);
             self.current = Some(record.clone());
             self.usage.clear();
@@ -140,6 +165,7 @@ impl Transcript {
             record.actor.model = Some(model.into());
         }
         record.updated_at = at;
+        record.status = "running".into();
         record.current_tool = None;
         if let Some(blocks) = v["message"]["content"].as_array() {
             for block in blocks {

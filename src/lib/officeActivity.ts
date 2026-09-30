@@ -75,10 +75,11 @@ export function openCodeSignal(session?: OpenCodeSnapshot): WorkSignal {
   const part = session.messages.at(-1)?.parts.at(-1);
   return signal(part?.type === 'tool' ? mapOfficeTool(part.tool ?? '') : part?.type === 'reasoning' ? 'thinking' : 'responding', task, part?.state?.title ?? part?.tool);
 }
-export function recordedSignal(record: ActivityRecord | undefined, now = Date.now()): WorkSignal {
+export function recordedSignal(record: ActivityRecord | undefined): WorkSignal {
   if (!record) return signal('unknown', '', 'No structured activity has been reported');
   if (record.status === 'completed') return signal('idle', record.prompt);
   if (record.status === 'failed' || record.status === 'interrupted') return signal('error', record.prompt, record.status);
-  if (now - record.updatedAt > 30000) return signal('unknown', record.prompt, 'Waiting for the next reported action');
+  // A quiet transcript is normal during thinking, long commands, and subagents.
+  // Only an explicit turn ending (or a stopped process in the caller) ends work.
   return signal(record.currentTool ? mapOfficeTool(record.currentTool) : 'thinking', record.prompt, record.currentTool ?? 'Latest reported activity');
 }
