@@ -8,13 +8,21 @@ import { useOfficeGameStore } from '../src/store/officeGameStore';
 import { useInstanceStore } from '../src/store/instanceStore';
 import { useChatStore } from '../src/store/chatStore';
 import { useCodexStore } from '../src/store/codexStore';
+import { useOpenCodeStore } from '../src/store/opencodeStore';
+import { useLlmChatStore } from '../src/store/llmChatStore';
 import { useLayoutStore } from '../src/store/layoutStore';
 import '../src/styles/global.css';
+import '../src/styles/chat.css';
+import '../src/styles/codex.css';
 mockWindows('main');
 window.office = useOfficeGameStore;
 window.instances = useInstanceStore;
 window.codex = useCodexStore;
 window.chat = useChatStore;
+window.opencode = useOpenCodeStore;
+window.llm = useLlmChatStore;
+window.officeHistory = {};
+window.officeHistoryDelay = 0;
 window.officeCalls = [];
 window.officeFail = false;
 const start = useOfficeGameStore.getState().startedAt;
@@ -22,6 +30,13 @@ const makeRecord = (id, actorId, name, provider, tools) => ({ id, kind: 'turn', 
 window.officeRecords = [makeRecord('done-a', 'architect', 'Backend architect', 'claude', ['Read', 'Edit', 'Bash']), makeRecord('done-b', 'tester', 'Test engineer', 'codex', ['Bash', 'Edit']), makeRecord('done-c', 'research', 'Research assistant', 'codex', ['WebSearch'])];
 mockIPC(async (command, args) => {
   window.officeCalls.push({ command, args });
+  if (command === 'session_load_history') {
+    const messages = window.officeHistory[args.sessionId] ?? [];
+    await new Promise(resolve => setTimeout(resolve, window.officeHistoryDelay));
+    if (window.officeHistoryFail) throw new Error('History temporarily unavailable');
+    return messages;
+  }
+  if (command === 'codex_read_thread') return { thread: { id: args.threadId, turns: [{ id: 'saved', items: [{ id: 'saved-answer', type: 'agentMessage', text: 'Saved Codex thread restored in office.' }] }] } };
   if (command === 'activity_list') {
     if (window.officeFail) throw new Error('Test connection unavailable');
     const all = window.officeRecords.filter(r => r.startedAt >= args.since && (!args.before || r.startedAt < args.before.at || (r.startedAt === args.before.at && r.id < args.before.id))).sort((a, b) => b.startedAt - a.startedAt || b.id.localeCompare(a.id));

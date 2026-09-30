@@ -1,4 +1,4 @@
-import { ArrowUpRight, Coins, Check, X } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Coins, Check, Users, X } from 'lucide-react';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { ACTIVITY_LABELS, getProviderColor } from '../../engine/SpriteManager';
@@ -11,7 +11,7 @@ export function CharacterPortrait({ id, color, accessory = '' }: { id: string; c
   const seed = characterSeed(id), skin = ['#f1c29c', '#bd8968', '#966747', '#e3af81'][seed % 4];
   return <svg viewBox="0 0 40 44" className="office-portrait" aria-hidden="true" shapeRendering="crispEdges"><rect x="8" y="24" width="24" height="20" rx="3" fill={color} /><rect x="11" y="9" width="18" height="19" rx="2" fill={skin} /><path d="M10 9H30V15H14V19H10Z" fill={['#423632', '#b6804d', '#302e39', '#8a6751'][seed % 4]} /><path d="M15 19h2v2h-2zM23 19h2v2h-2z" fill="#24343d" />{accessory === 'headphones' && <path d="M8 18v-5Q20 0 32 13v5M8 17v9M32 17v9" fill="none" stroke="#f0bb77" strokeWidth="4" />}{accessory === 'cap' && <path d="M8 12L12 4H27L31 12H35V15H8Z" fill="#e7bb76" />}{accessory === 'crown' && <path d="M10 12L8 2L15 6L20 0L25 6L32 2L30 12Z" fill="#f3ce75" />}</svg>;
 }
-export function OfficeTeam({ selected, onSelect, onOpen }: { selected: string | null; onSelect: (id: string | null) => void; onOpen: (id: string) => void }) {
+export function OfficeTeam({ selected, onSelect, onOpen, collapsed = false, onExpand }: { selected: string | null; onSelect: (id: string | null) => void; onOpen: (id: string) => void; collapsed?: boolean; onExpand?: () => void }) {
   const s = useOfficeGameStore();
   const instances = useInstanceStore(state => state.instances);
   const instance = selected ? instances.get(selected) : undefined;
@@ -19,6 +19,9 @@ export function OfficeTeam({ selected, onSelect, onOpen }: { selected: string | 
   const profile = selected ? s.profiles[selected] : undefined;
   const level = 1 + Math.floor((profile?.tasks ?? 0) / 5);
   const lastReward = s.rewards[0];
+  if (collapsed) return <aside className="office-team office-team--collapsed" aria-label="Office team">
+    <button onClick={onExpand} aria-expanded={false} aria-label="Show office team"><Users size={15} /><strong>Your team</strong><span>{Object.keys(s.workers).length} agents</span><ChevronDown size={15} /></button>
+  </aside>;
   return <aside className="office-team" aria-label="Office team">
     <div className="office-team-heading"><div><span className="office-eyebrow">AGENTS IN YOUR WORKSPACE</span><h3>Your team <span>{Object.keys(s.workers).length}</span></h3></div><span className="office-live-badge">Live</span></div>
     <div className="office-roster">{Object.values(s.workers).map(w => {

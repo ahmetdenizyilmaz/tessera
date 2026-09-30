@@ -10,6 +10,7 @@ import { focusShortcutPanel } from '../../lib/panelShortcuts';
 import { OfficeHUD } from './OfficeHUD';
 import { OfficeShop } from './OfficeShop';
 import { OfficeTeam } from './OfficeTeam';
+import { OfficeChat } from './OfficeChat';
 import { EditModeOverlay } from './EditModeOverlay';
 import '../../styles/office.css';
 
@@ -24,6 +25,11 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
   const editMode = useOfficeGameStore(s => s.editMode);
   const shopOpen = useOfficeGameStore(s => s.shopOpen);
   const count = useOfficeGameStore(s => Object.keys(s.workers).length);
+  const selectedInstance = useInstanceStore(s => selected ? s.instances.get(selected) : undefined);
+  const selectAgent = useCallback((id: string | null) => {
+    setHover(null); setSelected(current => current === id ? null : id);
+  }, []);
+  const closeChat = useCallback(() => { setSelected(null); setHover(null); }, []);
   const openPanel = useCallback((id: string) => { focusShortcutPanel(id); onBack(); }, [onBack]);
 
   useEffect(() => {
@@ -31,7 +37,8 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
     let disposed = false, frameId = 0;
     const engine = new IsometricEngine(), animator = new WorkerAnimator();
     engineRef.current = engine;
-    engine.onWorkerClick(setSelected);
+    engine.onWorkerClick(selectAgent);
+    engine.onBackgroundClick(closeChat);
     engine.onWorkerHover(id => setHover(id));
     engine.onTileClick((gridX, gridY) => useOfficeGameStore.getState().placeAt({ gridX, gridY }));
     void engine.init(canvasRef.current).then(() => {
@@ -69,20 +76,21 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
       frameId = requestAnimationFrame(loop);
     }).catch(e => { if (!disposed) setError(`The office renderer could not start: ${String(e)}`); });
     return () => { disposed = true; cancelAnimationFrame(frameId); engine.destroy(); engineRef.current = null; };
-  }, []);
+  }, [selectAgent, closeChat]);
   useEffect(() => {
     if (!ready) return;
     const engine = engineRef.current!;
     engine.drawFloor(layout); engine.drawWalls(layout); engine.drawFurniture(layout.furniture); engine.showGrid(layout, editMode);
   }, [layout, editMode, ready]);
+  useEffect(() => { if (shopOpen || editMode || !selectedInstance) closeChat(); }, [shopOpen, editMode, selectedInstance?.id, closeChat]);
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { const s = useOfficeGameStore.getState(); s.setShopOpen(false); s.setEditMode(false); setSelected(null); }
+      if (e.key === 'Escape') { const s = useOfficeGameStore.getState(); s.setShopOpen(false); s.setEditMode(false); closeChat(); }
       if (e.key.toLowerCase() === 'r' && useOfficeGameStore.getState().editMode && !(e.target instanceof HTMLInputElement)) useOfficeGameStore.setState(s => ({ rotation: ((s.rotation + 1) % 4) as 0 | 1 | 2 | 3 }));
     };
     window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey);
-  }, []);
-  return <div className="office-view">
+  }, [closeChat]);
+  return <div className={`office-view${selectedInstance ? ' office-view--chat' : ''}`}>
     <OfficeHUD onBack={onBack} />
     <div className="office-stage">
       <div ref={canvasRef} className="office-canvas" aria-label="Animated agent office" />
@@ -92,7 +100,8 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
       <div className="office-camera"><button aria-label="Zoom out" onClick={() => engineRef.current?.zoomBy(-.15)}><Minus size={16} /></button><button aria-label="Fit office" onClick={() => engineRef.current?.centerCamera()}><Scan size={16} /></button><button aria-label="Zoom in" onClick={() => engineRef.current?.zoomBy(.15)}><Plus size={16} /></button></div>
       <div className="office-map-caption"><span className="office-live-dot" /> LIVE OFFICE <span>{editMode ? 'Click a tile to decorate · R to rotate · Shift + drag to pan' : 'Drag to explore · Scroll to zoom · Select an agent'}</span></div>
     </div>
-    <OfficeTeam selected={selected ?? hover} onSelect={setSelected} onOpen={openPanel} />
+    <OfficeTeam selected={selected ?? hover} onSelect={selectAgent} onOpen={openPanel} collapsed={!!selectedInstance} onExpand={closeChat} />
+    {selectedInstance && <OfficeChat key={`${selectedInstance.id}:${selectedInstance.claudeSessionId ?? selectedInstance.codexThreadId ?? selectedInstance.opencodeSessionId ?? ''}`} instance={selectedInstance} onClose={closeChat} onOpen={openPanel} />}
     {shopOpen && <OfficeShop />}
     {editMode && <EditModeOverlay />}
   </div>;
