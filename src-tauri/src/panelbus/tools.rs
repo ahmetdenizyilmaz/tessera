@@ -196,6 +196,16 @@ fn resolve_target(
 }
 
 async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, String> {
+    let target = resolve_target(&app.state::<PanelBus>(), caller_id, &args)?;
+    let message = args["message"].as_str().unwrap_or("").trim();
+    if message.is_empty() { return Err("`message` is required".into()); }
+    let trace = crate::activity::begin_handoff(app, caller_id, &target, message);
+    let result = send_to_panel_traced(app, caller_id, args, &trace).await;
+    crate::activity::finish_handoff(app, &trace, &result);
+    result
+}
+
+async fn send_to_panel_traced(app: &AppHandle, caller_id: &str, args: Value, trace: &str) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
     let target = resolve_target(&bus, caller_id, &args)?;
 
@@ -243,8 +253,8 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
     }
 
     let wrapped = format!(
-        "[panel-message from \"{}\" · hop {}]\n{}",
-        sender_name, hop, message
+        "[panel-message from \"{}\" · hop {} · activity {}]\n{}",
+        sender_name, hop, trace, message
     );
 
     let wait = args

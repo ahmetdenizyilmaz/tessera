@@ -25,6 +25,8 @@ impl Database {
 
         schema::create_tables(&conn)
             .map_err(|e| format!("Failed to create tables: {}", e))?;
+        crate::activity::create_tables(&conn)
+            .map_err(|e| format!("Failed to create activity tables: {}", e))?;
 
         Ok(Self {
             conn: Mutex::new(conn),

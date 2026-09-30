@@ -13,6 +13,7 @@ interface MenuBarProps {
   onSettings: () => void;
   onAbout: () => void;
   onOfficeView?: () => void;
+  onActivity?: () => void;
   onClaudeMd?: () => void;
   onNewNotepad?: () => void;
   onNewTimer?: () => void;
@@ -45,6 +46,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onSettings,
   onAbout,
   onOfficeView,
+  onActivity,
   onClaudeMd,
   onNewNotepad,
   onNewTimer,
@@ -73,6 +75,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   ];
 
   const viewItems: MenuEntry[] = [
+    { label: 'Activity & Token Flow', action: () => onActivity?.() },
     { label: 'Office View', shortcut: 'Ctrl+G', action: () => onOfficeView?.() },
     { separator: true },
     { label: 'CLAUDE.md Editor', shortcut: 'Ctrl+M', action: () => onClaudeMd?.() },

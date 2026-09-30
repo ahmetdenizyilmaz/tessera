@@ -360,6 +360,7 @@ impl Client {
             event
         };
         if let Some(app) = &self.app {
+            crate::activity::observe_codex(app, &self.id, &event["message"]);
             let _ = app.emit("codex-event", event);
         }
     }
@@ -374,7 +375,7 @@ impl Client {
             let _ = tx.send(Err(reason.into()));
         }
         let _ = self.outcomes.send(json!({"status":"process_ended"}));
-        self.publish(json!({"method":"tessera/disconnected","params":{"message":reason}}));
+        self.publish(json!({"method":"tessera/disconnected","params":{"message":reason,"threadId":self.thread.lock().unwrap().clone()}}));
         let _ = self.tx.send(Value::Null);
     }
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FolderOpen, Bot, Server, BarChart3, GitBranch, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { FolderOpen, Bot, Server, BarChart3, GitBranch, ChevronLeft, ChevronRight, ExternalLink, Activity } from 'lucide-react';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import { ClaudeMdEditor } from '../projects/ClaudeMdEditor';
 import AgentList from '../agents/AgentList';
@@ -7,17 +7,19 @@ import { McpManager } from '../mcp/McpManager';
 import { lazy, Suspense } from 'react';
 // Lazy: UsageDashboard drags in recharts — keep it out of the startup chunk
 const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
+const ActivityView = lazy(() => import('../activity/ActivityView'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import { useLayoutStore, sidebarDragState, detectSnapZone, MAX_PANELS } from '../../store/layoutStore';
 import type { ProjectInfo } from '../../store/projectStore';
 
-type SidebarTab = 'projects' | 'agents' | 'mcp' | 'analytics' | 'timeline';
+type SidebarTab = 'projects' | 'agents' | 'mcp' | 'analytics' | 'timeline' | 'activity';
 
 const SIDEBAR_TABS: { id: SidebarTab; icon: React.ReactNode; label: string }[] = [
   { id: 'projects', icon: <FolderOpen size={18} />, label: 'Projects' },
   { id: 'agents', icon: <Bot size={18} />, label: 'Agents' },
   { id: 'mcp', icon: <Server size={18} />, label: 'MCP' },
   { id: 'analytics', icon: <BarChart3 size={18} />, label: 'Analytics' },
+  { id: 'activity', icon: <Activity size={18} />, label: 'Activity' },
   { id: 'timeline', icon: <GitBranch size={18} />, label: 'Timeline' },
 ];
 
@@ -165,6 +167,8 @@ export function Sidebar() {
         return <McpManager />;
       case 'analytics':
         return <Suspense fallback={null}><UsageDashboard /></Suspense>;
+      case 'activity':
+        return <Suspense fallback={null}><ActivityView /></Suspense>;
       case 'timeline':
         return focusedId
           ? <CheckpointTimeline instanceId={focusedId} />

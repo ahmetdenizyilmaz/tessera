@@ -1,10 +1,11 @@
-import { X, FolderOpen, Bot, Server, BarChart3, GitBranch, Plus } from 'lucide-react';
+import { X, FolderOpen, Bot, Server, BarChart3, GitBranch, Plus, Activity } from 'lucide-react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import AgentList from '../agents/AgentList';
 import { McpManager } from '../mcp/McpManager';
 import { lazy, Suspense } from 'react';
 const UsageDashboard = lazy(() => import('../analytics/UsageDashboard'));
+const ActivityView = lazy(() => import('../activity/ActivityView'));
 import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import NewSessionWizard from '../wizard/NewSessionWizard';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
@@ -16,6 +17,7 @@ const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
   agents: { icon: <Bot size={14} />, label: 'Agents' },
   mcp: { icon: <Server size={14} />, label: 'MCP Servers' },
   analytics: { icon: <BarChart3 size={14} />, label: 'Analytics' },
+  activity: { icon: <Activity size={14} />, label: 'Activity' },
   timeline: { icon: <GitBranch size={14} />, label: 'Timeline' },
   'new-session': { icon: <Plus size={14} />, label: 'New Session' },
 };
@@ -41,6 +43,8 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
         return <McpManager />;
       case 'analytics':
         return <Suspense fallback={null}><UsageDashboard /></Suspense>;
+      case 'activity':
+        return <Suspense fallback={null}><ActivityView /></Suspense>;
       case 'new-session':
         return <NewSessionWizard instanceId={instanceId} />;
       case 'timeline': {

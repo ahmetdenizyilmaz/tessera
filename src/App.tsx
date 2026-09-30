@@ -35,7 +35,7 @@ import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
 import { registerBuiltins } from './lib/builtinPlugins';
 import { openNewSessionWizard, createPluginPanel } from './lib/newSessionActions';
-import { installPanelShortcuts } from './lib/panelShortcuts';
+import { focusShortcutPanel, installPanelShortcuts } from './lib/panelShortcuts';
 import type { LlmProvider } from './types/instance';
 
 // Register built-in plugins at module load (before any render)
@@ -241,6 +241,17 @@ export default function App() {
           onSettings={() => setShowSettings(true)}
           onAbout={() => setShowAbout(true)}
           onOfficeView={() => setViewMode(v => v === 'panels' ? 'office' : 'panels')}
+          onActivity={() => {
+            setViewMode('panels');
+            const existing = Object.entries(useLayoutStore.getState().widgetKinds).find(([, kind]) => kind === 'activity')?.[0];
+            if (existing && focusShortcutPanel(existing)) return;
+            const id = useLayoutStore.getState().addWidgetPanel('activity');
+            if (id) {
+              const group = useGroupStore.getState().getCurrentGroupId();
+              if (group) useGroupStore.getState().addToGroup(group, id);
+              useLayoutStore.getState().setFocused(id);
+            }
+          }}
           onClaudeMd={() => setShowClaudeMd(true)}
           onNewNotepad={() => handleNewPlugin('notepad')}
           onNewTimer={() => handleNewPlugin('timer')}

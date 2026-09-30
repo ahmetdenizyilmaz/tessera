@@ -434,6 +434,9 @@ pub async fn configure(
         }
     };
     *client.thread.lock().unwrap() = Some(sid.clone());
+    crate::activity::observe_codex(app, &id, &json!({"method":"activity/session", "params":{
+        "threadId":sid, "fresh":method == "thread/start"
+    }}));
     if config.terminal && method == "thread/start" {
         if let Err(e) = terminal_startup::persist_empty_terminal(&client, &config, &mut initial).await {
             client.stop();

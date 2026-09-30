@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod activity;
 pub mod analytics;
 pub mod app_paths;
 pub mod auth;
@@ -94,6 +95,7 @@ pub fn run() {
                 }
             };
             app.manage(panelbus::PanelBus::new(port, token));
+            app.manage(activity::Recorder::start(app.handle().clone()));
 
             // Skill + slash commands handed to every session via --plugin-dir.
             if panelbus::plugin::ensure_installed().is_none() {
@@ -240,6 +242,7 @@ pub fn run() {
             checkpoints::strategy::checkpoint_set_strategy,
             checkpoints::strategy::checkpoint_get_strategy,
             // Analytics commands
+            activity::activity_list,
             analytics::tracker::analytics_record,
             analytics::tracker::analytics_summary,
             analytics::tracker::analytics_export_csv,
@@ -289,6 +292,7 @@ pub fn run() {
                 app.state::<StreamJsonManager>().kill_all();
                 app.state::<codex::CodexManager>().kill_all();
                 app.state::<opencode::OpenCodeManager>().kill_all();
+                app.state::<activity::Recorder>().flush();
             }
         });
 }
