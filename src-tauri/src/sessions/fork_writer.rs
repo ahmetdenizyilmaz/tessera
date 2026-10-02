@@ -84,18 +84,32 @@ pub async fn session_write_fork(
     project_path: String,
     messages: Vec<ForkMessage>,
     model: Option<String>,
+    config_dir: Option<String>,
+) -> Result<String, String> {
+    let home = config_dir.filter(|dir| !dir.trim().is_empty()).map(PathBuf::from)
+        .unwrap_or_else(claude_paths::claude_home);
+    if !home.is_absolute() { return Err("Claude config directory must be absolute".into()); }
+    write_claude_fork(&home, project_path, messages, model, claude_version())
+}
+
+fn write_claude_fork(
+    home: &std::path::Path,
+    project_path: String,
+    messages: Vec<ForkMessage>,
+    model: Option<String>,
+    version: String,
 ) -> Result<String, String> {
     if messages.is_empty() {
         return Err("Nothing to write".into());
     }
     let cwd = claude_paths::resolve_work_dir(&project_path);
     let encoded = claude_paths::encode_project_path(&cwd);
-    let dir = claude_paths::find_project_dir(&encoded)
-        .unwrap_or_else(|| claude_paths::projects_dir().join(&encoded));
+    let projects = home.join("projects");
+    let dir = claude_paths::find_project_dir_in(&projects, &encoded)
+        .unwrap_or_else(|| projects.join(&encoded));
     std::fs::create_dir_all(&dir).map_err(|e| format!("Create session directory: {e}"))?;
 
     let session_id = uuid::Uuid::new_v4().to_string();
-    let version = claude_version();
     let model = model.filter(|m| !m.trim().is_empty()).unwrap_or_else(|| "claude".into());
     let base = Utc::now() - Duration::seconds(messages.len() as i64 + 1);
     let mut parent: Option<String> = None;
@@ -252,4 +266,40 @@ pub async fn codex_write_fork_thread(
     ));
     std::fs::write(&file, lines.join("\n") + "\n").map_err(|e| format!("Write rollout: {e}"))?;
     Ok(thread_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn claude_forks_stay_in_the_target_config_home_and_keep_other_histories_intact() {
+        let root = std::env::temp_dir().join(format!("tessera-fork-routing-{}", uuid::Uuid::new_v4()));
+        let shared = root.join("shared");
+        let routed = root.join("routed");
+        let cwd = root.join("project").to_string_lossy().into_owned();
+        let encoded = claude_paths::encode_project_path(&cwd);
+        let shared_project = shared.join("projects").join(&encoded);
+        std::fs::create_dir_all(&shared_project).unwrap();
+        std::fs::write(shared_project.join("existing.jsonl"), "keep this history").unwrap();
+        let messages = vec![
+            ForkMessage { role: "user".into(), content: "Original question".into(), timestamp: None },
+            ForkMessage { role: "assistant".into(), content: "Original answer".into(), timestamp: None },
+        ];
+        let fork = write_claude_fork(&routed, cwd.clone(), messages.clone(), None, "fixture".into()).unwrap();
+        let file = routed.join("projects").join(&encoded).join(format!("{fork}.jsonl"));
+        let rows: Vec<serde_json::Value> = std::fs::read_to_string(file).unwrap().lines()
+            .map(|line| serde_json::from_str(line).unwrap()).collect();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["sessionId"], fork);
+        assert_eq!(rows[1]["parentUuid"], rows[0]["uuid"]);
+        assert!(!shared_project.join(format!("{fork}.jsonl")).exists());
+        assert_eq!(std::fs::read_to_string(shared_project.join("existing.jsonl")).unwrap(), "keep this history");
+        let regular = write_claude_fork(&shared, cwd, messages, None, "fixture".into()).unwrap();
+        assert!(shared_project.join(format!("{regular}.jsonl")).exists());
+        assert!(!routed.join("projects").join(encoded).join(format!("{regular}.jsonl")).exists());
+        // Only remove the unique temporary directory created by this test.
+        assert!(root.starts_with(std::env::temp_dir()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

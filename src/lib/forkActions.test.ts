@@ -42,7 +42,7 @@ it.each(['chat', 'terminal'] as const)('forks Codex into Claude %s with the same
   expect(useWizardStore.getState().fork).toMatchObject({ openingMessage: '', messageCount: 2 });
   const target = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'claude', panelView }, 'Target Claude');
   await applyForkToInstance(target);
-  expect(invoke).toHaveBeenCalledWith('session_write_fork', { projectPath: 'C:/test', messages: transcript, model: 'test' });
+  expect(invoke).toHaveBeenCalledWith('session_write_fork', { projectPath: 'C:/test', messages: transcript, model: 'test', configDir: null });
   expect(useInstanceStore.getState().instances.get(target)).toMatchObject({ claudeSessionId: 'forked-claude-session',
     config: { fork: { sourceProvider: 'codex', transcript, pending: false } } });
   expect(takeForkOpeningMessage(target)).toBeNull();
@@ -50,6 +50,16 @@ it.each(['chat', 'terminal'] as const)('forks Codex into Claude %s with the same
   submitForkOpeningToTerminal(target);
   await vi.runAllTimersAsync();
   expect(invoke).not.toHaveBeenCalled();
+});
+it.each(['chat', 'terminal'] as const)('writes a routed Claude %s fork into the target gateway home', async (panelView) => {
+  await startFork(sourceId);
+  const target = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'claude', panelView,
+    routing: { gateway: 'custom', customBaseUrl: 'http://localhost:8080', model: 'local-model' } }, 'Routed Claude');
+  await vi.mocked(invoke).withImplementation(async command => command === 'claude_routed_config_dir' ? 'C:/config/gateway' : 'forked-claude-session', async () => {
+    await applyForkToInstance(target);
+    expect(invoke).toHaveBeenCalledWith('session_write_fork', { projectPath: 'C:/test', messages: transcript, model: 'test', configDir: 'C:/config/gateway' });
+    expect(useInstanceStore.getState().instances.get(target)?.config.fork?.pending).toBe(false);
+  });
 });
 it.each(['chat', 'terminal'] as const)('forks into OpenCode %s without writing Claude or Codex session files', async (panelView) => {
   await startFork(sourceId);

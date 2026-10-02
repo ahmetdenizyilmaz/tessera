@@ -163,18 +163,19 @@ pub fn encode_project_path(path: &str) -> String {
 /// exact-only match loses whichever one the caller didn't guess.
 pub fn find_project_dir(encoded: &str) -> Option<PathBuf> {
     for root in projects_dirs() {
-        let exact = root.join(encoded);
-        if exact.is_dir() {
-            return Some(exact);
-        }
-        let Ok(entries) = std::fs::read_dir(&root) else { continue };
-        for entry in entries.flatten() {
-            if entry.file_name().to_string_lossy().eq_ignore_ascii_case(encoded) {
-                let path = entry.path();
-                if path.is_dir() {
-                    return Some(path);
-                }
-            }
+        if let Some(dir) = find_project_dir_in(&root, encoded) { return Some(dir); }
+    }
+    None
+}
+
+/// Writers must use the target CLI's config home. A matching project in a
+/// different home is readable by Tessera, but cannot be resumed by that CLI.
+pub fn find_project_dir_in(root: &std::path::Path, encoded: &str) -> Option<PathBuf> {
+    let exact = root.join(encoded);
+    if exact.is_dir() { return Some(exact); }
+    for entry in std::fs::read_dir(root).ok()?.flatten() {
+        if entry.file_name().to_string_lossy().eq_ignore_ascii_case(encoded) && entry.path().is_dir() {
+            return Some(entry.path());
         }
     }
     None

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { buildRoutingEnv } from './routingEnv';
 import { useInstanceStore } from '../store/instanceStore';
 import { useWizardStore } from '../store/wizardStore';
 import { useChatStore } from '../store/chatStore';
@@ -153,10 +154,12 @@ export async function applyForkToInstance(newId: string): Promise<void> {
           config: { ...inst.config, fork: { sourceId: fork.sourceId, sourceName: fork.sourceName, sourceProvider: providerLabel(source), transcript, pending: false, openingMessage } },
         });
       } else {
+        const env = await buildRoutingEnv(inst.config.routing, inst.config.cwd);
         const sessionId = await invoke<string>('session_write_fork', {
           projectPath: inst.config.cwd,
           messages: wire,
           model: source?.config.model || null,
+          configDir: env?.CLAUDE_CONFIG_DIR ?? null,
         });
         store.updateInstance(newId, {
           name: `Fork of ${fork.sourceName}`,
