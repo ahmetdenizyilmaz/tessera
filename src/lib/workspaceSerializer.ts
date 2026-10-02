@@ -7,6 +7,7 @@ import { useLlmChatStore } from '../store/llmChatStore';
 import { useCodexStore } from '../store/codexStore';
 import { useOfficeGameStore } from '../store/officeGameStore';
 import { stopOpenCodeWatch } from './opencodeBridge';
+import { stopAntigravityWatch } from './antigravityBridge';
 import { normalizePanelShortcuts, usePanelShortcutStore, type PanelShortcutBindings } from '../store/panelShortcutStore';
 import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
@@ -32,6 +33,8 @@ export interface SavedInstance {
   codexHasTurns?: boolean;
   opencodeSessionId?: string;
   opencodeDataId?: string;
+  antigravityConversationId?: string;
+  antigravityDataId?: string;
 }
 
 export interface SerializedGroup {
@@ -135,6 +138,8 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
       codexHasTurns: inst.codexHasTurns,
       opencodeSessionId: inst.opencodeSessionId,
       opencodeDataId: inst.opencodeDataId,
+      antigravityConversationId: inst.antigravityConversationId,
+      antigravityDataId: inst.antigravityDataId,
     })),
     layout: {
       tabOrder: [...layoutSrc.tabOrder],
@@ -269,6 +274,8 @@ export function deserializeWorkspace(raw: unknown): void {
     for (const id of openIds) {
       stopOpenCodeWatch(id);
       invoke('opencode_close', { id }).catch(() => {});
+      stopAntigravityWatch(id);
+      invoke('antigravity_close', { id }).catch(() => {});
       invoke('codex_close', { id }).catch(() => {});
       invoke('stream_kill', { id }).catch(() => {});
       invoke('pty_kill', { id }).catch(() => {});
@@ -316,6 +323,18 @@ export function deserializeWorkspace(raw: unknown): void {
       if (!seenSessionIds.has(identity)) {
         useInstanceStore.getState().updateInstance(newId, { opencodeSessionId: inst.opencodeSessionId, opencodeDataId: inst.opencodeDataId });
         seenSessionIds.add(identity);
+      }
+    }
+
+    // Two panels must never share one agy conversation or transcript file: the
+    // second copy keeps its settings but starts fresh.
+    if (inst.config.agentProvider === 'antigravity' && inst.antigravityDataId) {
+      const identity = 'antigravity:' + inst.antigravityDataId;
+      const conversation = inst.antigravityConversationId ? 'antigravity-conversation:' + inst.antigravityConversationId : null;
+      if (!seenSessionIds.has(identity) && !(conversation && seenSessionIds.has(conversation))) {
+        useInstanceStore.getState().updateInstance(newId, { antigravityConversationId: inst.antigravityConversationId, antigravityDataId: inst.antigravityDataId });
+        seenSessionIds.add(identity);
+        if (conversation) seenSessionIds.add(conversation);
       }
     }
 

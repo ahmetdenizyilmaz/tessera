@@ -29,6 +29,13 @@ being mounted, and data remains after a panel closes or Tessera restarts.
   in one transaction and survive restarts. On a previously unobserved resumed
   thread, use only the last reported request and label the possible missing usage;
   never assign its whole lifetime usage to the current question.
+- **Antigravity chat:** record the structured turn events of each panel's own `agy` process:
+  your message, tool names, response text, status, and usage. agy reports usage as a counter for
+  the whole conversation (it keeps growing after a resume), so each turn stores the difference
+  from a baseline that commits with the turn. A conversation first observed mid-life uses only
+  that turn's own reported steps and is labeled; a stopped turn keeps only its completed steps;
+  a turn without any reported usage stays unavailable. Events repeated after a turn has ended
+  change nothing. Thinking tokens are part of output and are not added again.
 - **Between panels:** record sender and destination IDs, names, providers, message,
   delivery state, and time. Local deliveries carry a UUID in the existing
   `panel-message` header. The destination turn uses that UUID to link to the
@@ -43,10 +50,11 @@ cost: the turn includes the provider's reported processing of context and tools.
 
 ## Coverage
 
-This version records Claude and Codex panels on this computer. Codex recording
+This version records Claude, Codex and Antigravity chat panels on this computer. Codex recording
 begins when this build runs; earlier Codex turns are not backfilled. Closed Claude
 sessions that have never been opened in this build are not scanned. Internal
-subagent transcripts, independent CLI windows, direct LLM/OpenCode turns, and
+subagent transcripts, independent CLI windows, direct LLM/OpenCode turns, Antigravity
+terminal panels (the native TUI reports no structured events or usage), and
 remote PC token streams are not collected. Outgoing panel handoffs to those
 destinations can appear with unavailable receiver usage. Existing messages without
 an activity UUID retain their text but do not acquire invented historical links.
@@ -60,6 +68,6 @@ an external analytics service.
 `npm test -- src/lib/activityGraph.test.ts` checks graph causality, identical chat
 names, filtering boundaries, usage totals, and deduplication. Activity Rust tests
 cover provider parsing, cumulative usage, partial JSONL writes, persistent history,
-interruption, and trace IDs. On Windows run `tools/test-rust.ps1 -Stable` to embed
+interruption, trace IDs, and Antigravity's cumulative, resumed, interrupted, duplicated and missing usage. On Windows run `tools/test-rust.ps1 -Stable` to embed
 the manifest required by native test binaries. With `npm run dev` running,
 `node tools/test-activity.mjs` exercises the real React view with synthetic records.

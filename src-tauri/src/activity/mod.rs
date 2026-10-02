@@ -62,6 +62,11 @@ enum Command {
         message: Value,
         at: i64,
     },
+    Antigravity {
+        actor: Actor,
+        event: Value,
+        at: i64,
+    },
     Handoff(Record),
     Delivered {
         id: String,
@@ -130,6 +135,9 @@ impl Recorder {
                             .and_then(|conn| match command {
                                 Command::Codex { actor, message, at } => {
                                     codex_event(&conn, &mut active, actor, &message, at)
+                                }
+                                Command::Antigravity { actor, event, at } => {
+                                    antigravity_event(&conn, actor, &event, at)
                                 }
                                 Command::Handoff(mut record) => {
                                     record.parent_id = if record.actor.provider == "claude" {
@@ -250,6 +258,149 @@ pub fn observe_codex(app: &AppHandle, id: &str, message: &Value) {
         });
     }
 }
+/// Normalized turn events from an Antigravity chat panel's owned `agy` process.
+pub fn observe_antigravity(app: &AppHandle, id: &str, event: &Value) {
+    if let Some(recorder) = app.try_state::<Recorder>() {
+        recorder.send(Command::Antigravity {
+            actor: panel_actor(app, id, "antigravity"),
+            event: event.clone(),
+            at: now(),
+        });
+    }
+}
+
+fn antigravity_event(conn: &Connection, actor: Actor, event: &Value, at: i64) -> Result<(), String> {
+    let Some(session) = event["session"].as_str().filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    let counter = format!("antigravity:{session}");
+    let baseline = |conn: &Connection| -> Result<Option<Usage>, String> {
+        let raw: Option<String> = conn
+            .query_row("SELECT data FROM activity_counters WHERE id=?1", [&counter], |r| r.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        Ok(raw.and_then(|s| serde_json::from_str(&s).ok()))
+    };
+    let kind = event["type"].as_str().unwrap_or("");
+    if kind == "session" {
+        // A conversation created by this panel starts from zero. A resumed one has
+        // no baseline until its first observed result.
+        if event["fresh"] == true {
+            conn.execute(
+                "INSERT OR IGNORE INTO activity_counters(id,data) VALUES (?1,?2)",
+                rusqlite::params![counter, serde_json::to_string(&Usage::default()).unwrap()],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    let Some(turn) = event["turn"].as_str() else {
+        return Ok(());
+    };
+    let id = format!("antigravity:{session}:{turn}");
+    let existing = get(conn, &id)?;
+    // A repeated or late event must not reopen, re-count, or rewrite a closed turn.
+    if existing
+        .as_ref()
+        .is_some_and(|r| matches!(r.status.as_str(), "completed" | "failed" | "interrupted"))
+    {
+        return Ok(());
+    }
+    let mut record = match (existing, kind) {
+        (Some(record), _) => record,
+        (None, "turn_started") => Record::turn(id, actor.clone(), session.into(), at),
+        // Nothing may invent a turn without its question.
+        (None, _) => return Ok(()),
+    };
+    record.actor = actor;
+    record.updated_at = at;
+    match kind {
+        "turn_started" => {
+            record.status = "running".into();
+            if record.prompt.is_empty() {
+                record.set_prompt(event["prompt"].as_str().unwrap_or("").into());
+            }
+        }
+        "tool" => {
+            let Some(tool) = event["tool"].as_str() else {
+                return Ok(());
+            };
+            record.current_tool = (event["active"] == true).then(|| tool.to_string());
+            if !record.tools.iter().any(|name| name == tool) {
+                record.tools.push(tool.into());
+            }
+        }
+        "response" => {
+            let key = event["step"].to_string();
+            let text = event["text"].as_str().unwrap_or("").trim_end().to_string();
+            if let Some(part) = record.response_parts.iter_mut().find(|(k, _)| *k == key) {
+                part.1 = text;
+            } else {
+                record.response_parts.push((key, text));
+            }
+            record.current_tool = None;
+            record.response = record
+                .response_parts
+                .iter()
+                .map(|(_, text)| text.as_str())
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+        }
+        "turn_finished" => {
+            record.status = event["status"].as_str().unwrap_or("failed").into();
+            record.current_tool = None;
+            if record.response.is_empty() {
+                record.response = event["response"].as_str().unwrap_or("").into();
+            }
+            let cumulative = Usage::antigravity(&event["cumulative"]);
+            let steps = Usage::antigravity(&event["steps"]);
+            let previous = baseline(conn)?;
+            let (usage, next) = match (cumulative, previous) {
+                // The CLI's conversation counter is authoritative when its baseline is known.
+                (Some(total), Some(previous)) if total.total() >= previous.total() => {
+                    (Some(total.delta(&previous)), Some(total))
+                }
+                // Resumed without an observed baseline, or the counter restarted:
+                // use only what this turn reported, never the conversation's lifetime.
+                (Some(total), _) => {
+                    record.usage_note = Some(if steps.is_some() {
+                        "Counted from this turn's reported steps; the conversation's earlier usage was not observed.".into()
+                    } else {
+                        "Antigravity reported only a conversation total that Tessera had no baseline for, so this turn's usage is unavailable.".to_string()
+                    });
+                    (steps, Some(total))
+                }
+                // Stopped or crashed: no final counter. Keep what completed steps
+                // reported and move the baseline so the next turn is not charged for them.
+                (None, previous) => {
+                    record.usage_note = Some(if steps.is_some() {
+                        "The turn ended without a final usage report; only its completed steps are counted.".into()
+                    } else {
+                        "Antigravity did not report token usage for this turn.".to_string()
+                    });
+                    let next = previous.zip(steps.clone()).map(|(mut base, partial)| {
+                        base.add(&partial);
+                        base
+                    });
+                    (steps, next)
+                }
+            };
+            record.usage = usage;
+            // Record and baseline commit together, or a restart could count a delta twice.
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            save(&tx, &record)?;
+            if let Some(next) = next {
+                tx.execute("INSERT INTO activity_counters(id,data) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+                    rusqlite::params![counter, serde_json::to_string(&next).unwrap()]).map_err(|e| e.to_string())?;
+            }
+            return tx.commit().map_err(|e| e.to_string());
+        }
+        _ => return Ok(()),
+    }
+    save(conn, &record)
+}
+
 pub fn begin_handoff(app: &AppHandle, caller: &str, target: &PanelInfo, text: &str) -> String {
     let trace = uuid::Uuid::new_v4().to_string();
     if let Some(recorder) = app.try_state::<Recorder>() {

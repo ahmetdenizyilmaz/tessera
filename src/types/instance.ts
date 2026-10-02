@@ -1,5 +1,6 @@
 import type { AgentProvider, CodexConfig } from './codex';
 import type { OpenCodeOptions } from './opencode';
+import type { AntigravityOptions } from './antigravity';
 /** 'claude' is the Claude Code CLI (subscription login, tools, agentic).
  *  'anthropic' is the Messages API with your own key — plain chat only. */
 export type LlmProvider = 'claude' | 'anthropic' | 'openai' | 'openrouter' | 'gemini' | 'ollama' | 'lmstudio';
@@ -53,6 +54,7 @@ export interface ForkContext {
 export interface InstanceConfig {
   agentProvider?: AgentProvider;
   opencode?: OpenCodeOptions;
+  antigravity?: AntigravityOptions;
   codex?: Partial<Pick<CodexConfig, 'effort' | 'sandbox' | 'approvalPolicy' | 'approvalsReviewer' | 'executablePath'>>;
   cwd: string;
   model: string;
@@ -84,6 +86,10 @@ export interface ClaudeInstance {
   codexResumable?: boolean;
   opencodeSessionId?: string;
   opencodeDataId?: string;
+  /** agy's conversation ID, reported by its init event; resumed with --conversation. */
+  antigravityConversationId?: string;
+  /** Names this panel's transcript file in Tessera's data directory. */
+  antigravityDataId?: string;
 }
 
 export const INSTANCE_COLORS: string[] = [

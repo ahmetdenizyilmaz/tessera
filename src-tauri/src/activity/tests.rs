@@ -531,3 +531,167 @@ fn resume_usage_seeds_a_baseline_without_inventing_a_new_turn() {
         120
     );
 }
+
+fn agy(conn: &Connection, event: Value, at: i64) {
+    let actor = Actor {
+        id: "panel-g".into(),
+        name: "Gemini build".into(),
+        provider: "antigravity".into(),
+        model: Some("gemini-3.8-flash-low".into()),
+        device: None,
+    };
+    antigravity_event(conn, actor, &event, at).unwrap();
+}
+fn agy_usage(input: u64, output: u64, thinking: u64) -> Value {
+    json!({"input_tokens":input,"output_tokens":output,"thinking_tokens":thinking,"cache_read_tokens":0,"total_tokens":input+output})
+}
+fn agy_turn(conn: &Connection, turn: &str) -> Record {
+    get(conn, &format!("antigravity:conv:{turn}"))
+        .unwrap()
+        .unwrap()
+}
+
+/// Counter values recorded from agy 1.2.15: `result.usage` grows across turns
+/// and across a resumed process; per-step usage belongs to one model call.
+#[test]
+fn antigravity_cumulative_usage_becomes_per_turn_deltas_and_duplicates_change_nothing() {
+    let conn = database();
+    agy(&conn, json!({"type":"session","session":"conv","fresh":true}), 1);
+    // A tool event before its question is known must not invent a turn.
+    agy(&conn, json!({"type":"tool","session":"conv","turn":"t1","tool":"Bash","active":true}), 5);
+    assert!(get(&conn, "antigravity:conv:t1").unwrap().is_none());
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"t1","prompt":"Create the note and run the checks"}), 10);
+    agy(&conn, json!({"type":"tool","session":"conv","turn":"t1","tool":"Write","active":true}), 11);
+    agy(&conn, json!({"type":"tool","session":"conv","turn":"t1","tool":"Write","active":false}), 12);
+    agy(&conn, json!({"type":"tool","session":"conv","turn":"t1","tool":"Bash","active":true}), 13);
+    let running = agy_turn(&conn, "t1");
+    assert_eq!(
+        (running.status.as_str(), running.actor.provider.as_str()),
+        ("running", "antigravity")
+    );
+    assert_eq!(running.tools, ["Write", "Bash"]);
+    assert_eq!(running.current_tool.as_deref(), Some("Bash"));
+    assert_eq!((running.origin.as_str(), running.usage.is_none()), ("user", true));
+    agy(&conn, json!({"type":"response","session":"conv","turn":"t1","step":6,"text":"Created"}), 14);
+    agy(&conn, json!({"type":"response","session":"conv","turn":"t1","step":6,"text":"Created the note.\n"}), 15);
+    let finish = json!({"type":"turn_finished","session":"conv","turn":"t1","status":"completed","cumulative":agy_usage(12529,699,330),"steps":agy_usage(12529,699,330)});
+    agy(&conn, finish.clone(), 20);
+    let done = agy_turn(&conn, "t1");
+    assert_eq!(done.status, "completed");
+    assert_eq!(done.response, "Created the note.");
+    assert!(done.current_tool.is_none() && done.usage_note.is_none());
+    assert_eq!(
+        done.usage,
+        Some(Usage {
+            input: 12529,
+            output: 699,
+            reasoning: 330,
+            ..Usage::default()
+        })
+    );
+    assert_eq!(done.usage.as_ref().unwrap().total(), 13228);
+    // Duplicate end and late events: no second delta, no reopened turn.
+    agy(&conn, finish, 21);
+    agy(&conn, json!({"type":"tool","session":"conv","turn":"t1","tool":"Edit","active":true}), 22);
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"t1","prompt":"again"}), 23);
+    let same = agy_turn(&conn, "t1");
+    assert_eq!(
+        (same.usage, same.tools, same.status, same.updated_at),
+        (done.usage, done.tools, done.status, 20)
+    );
+
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"t2","prompt":"What was the word?"}), 30);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"t2","status":"completed","cumulative":agy_usage(26237,737,365),"steps":agy_usage(13708,38,35)}), 40);
+    assert_eq!(
+        agy_turn(&conn, "t2").usage,
+        Some(Usage {
+            input: 13708,
+            output: 38,
+            reasoning: 35,
+            ..Usage::default()
+        })
+    );
+    // The same conversation continues in a new process: the counter keeps growing.
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"t3","prompt":"Resumed"}), 50);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"t3","status":"completed","cumulative":agy_usage(40198,770,395),"steps":agy_usage(13961,33,30)}), 60);
+    assert_eq!(agy_turn(&conn, "t3").usage.unwrap().total(), 13994);
+    let all = read_page(&conn, None, None, None).unwrap().0;
+    assert_eq!(all.len(), 3);
+    assert_eq!(
+        all.iter()
+            .map(|r| r.usage.as_ref().unwrap().total())
+            .sum::<u64>(),
+        40198 + 770
+    );
+}
+
+#[test]
+fn antigravity_resumed_interrupted_and_missing_usage_is_never_inflated_or_invented() {
+    let conn = database();
+    // First seen mid-life (restored panel): the lifetime total is not this turn's cost.
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"r1","prompt":"Continue"}), 10);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"r1","status":"completed","cumulative":agy_usage(40198,770,395),"steps":agy_usage(13961,33,30)}), 20);
+    let first = agy_turn(&conn, "r1");
+    assert_eq!(first.usage.as_ref().unwrap().total(), 13994);
+    assert!(first
+        .usage_note
+        .unwrap()
+        .contains("earlier usage was not observed"));
+    // Without per-step numbers the only honest answer is "unavailable".
+    let other = database();
+    agy(&other, json!({"type":"turn_started","session":"conv","turn":"r1","prompt":"Continue"}), 10);
+    agy(&other, json!({"type":"turn_finished","session":"conv","turn":"r1","status":"completed","cumulative":agy_usage(40198,770,395),"steps":null}), 20);
+    let unknown = agy_turn(&other, "r1");
+    assert!(unknown.usage.is_none() && unknown.usage_note.unwrap().contains("unavailable"));
+
+    // Stopped after one completed step: counted once, and not again in the next turn.
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"r2","prompt":"Long task"}), 30);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"r2","status":"interrupted","cumulative":null,"steps":agy_usage(100,10,0)}), 40);
+    let stopped = agy_turn(&conn, "r2");
+    assert_eq!(
+        (stopped.status.as_str(), stopped.usage.as_ref().unwrap().total()),
+        ("interrupted", 110)
+    );
+    assert!(stopped.usage_note.unwrap().contains("completed steps"));
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"r3","prompt":"Next"}), 50);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"r3","status":"completed","cumulative":agy_usage(40198+100+500,770+10+50,395),"steps":agy_usage(500,50,0)}), 60);
+    assert_eq!(agy_turn(&conn, "r3").usage.unwrap().total(), 550);
+
+    // Stopped before anything was reported: unavailable, not zero.
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"r4","prompt":"Stopped early"}), 70);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"r4","status":"interrupted","cumulative":null,"steps":null}), 80);
+    let early = agy_turn(&conn, "r4");
+    assert!(early.usage.is_none() && early.usage_note.unwrap().contains("did not report"));
+
+    // The CLI's counter restarted below the baseline: fall back to the turn's own steps.
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"r5","prompt":"After reset"}), 90);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"r5","status":"completed","cumulative":agy_usage(12704,36,32),"steps":agy_usage(12704,36,32)}), 100);
+    assert_eq!(agy_turn(&conn, "r5").usage.unwrap().total(), 12740);
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"r6","prompt":"Then"}), 110);
+    agy(&conn, json!({"type":"turn_finished","session":"conv","turn":"r6","status":"failed","cumulative":agy_usage(12804,46,32),"steps":null}), 120);
+    let failed = agy_turn(&conn, "r6");
+    assert_eq!(
+        (failed.status.as_str(), failed.usage.unwrap().total()),
+        ("failed", 110)
+    );
+}
+
+#[test]
+fn antigravity_links_incoming_handoffs_and_normalizes_cached_input() {
+    let conn = database();
+    let trace = "6f1f5f0e-8a6d-4a55-9d7c-0a3c5a3c9b11";
+    agy(&conn, json!({"type":"turn_started","session":"conv","turn":"h1",
+        "prompt":format!("[panel-message from \"Claude review\" · hop 1 · activity {trace}]\nPlease run the build")}), 10);
+    let linked = agy_turn(&conn, "h1");
+    assert_eq!(linked.parent_id, Some(format!("handoff:{trace}")));
+    assert_eq!(
+        (linked.origin.as_str(), linked.prompt.as_str()),
+        ("panel", "Please run the build")
+    );
+    // total = input + output: cached input is inside input and must not count twice.
+    let inside = Usage::antigravity(&json!({"input_tokens":1000,"output_tokens":50,"thinking_tokens":20,"cache_read_tokens":400,"total_tokens":1050})).unwrap();
+    assert_eq!((inside.input, inside.cache_read, inside.total()), (600, 400, 1050));
+    let separate = Usage::antigravity(&json!({"input_tokens":1000,"output_tokens":50,"thinking_tokens":20,"cache_read_tokens":400,"total_tokens":1450})).unwrap();
+    assert_eq!((separate.input, separate.total()), (1000, 1450));
+    assert!(Usage::antigravity(&Value::Null).is_none());
+}

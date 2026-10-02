@@ -68,6 +68,44 @@ try {
   await expect(page.getByRole('button', { name: 'Load older', exact: true })).toHaveCount(0);
   console.log('PASS older pages merge without duplicating existing records');
 
+  // Antigravity turns: chat name, provider, model, tools, reported usage, an honest unavailable turn, and an incoming handoff link.
+  await page.setViewportSize({ width: 1500, height: 1050 });
+  await page.evaluate(() => {
+    const agy = { id: 'agy-build', name: 'Release build', provider: 'antigravity', model: 'gemini-3.8-flash-low', device: null };
+    const base = window.activityRecords[0], at = Date.now();
+    window.activityRecords.push(
+      { ...base, id: 'handoff:agy', target: agy, kind: 'handoff', origin: 'panel', status: 'delivered', prompt: 'Please run the release build.', response: '', usage: null, startedAt: at - 3000, updatedAt: at - 3000 },
+      { ...base, id: 'antigravity:conv:t1', actor: agy, sessionId: 'conv', origin: 'panel', parentId: 'handoff:agy', prompt: 'Please run the release build.', response: 'The release build passes.', tools: ['Bash', 'Write'],
+        usage: { input: 12529, output: 699, cacheRead: 0, cacheWrite: 0, reasoning: 330 }, startedAt: at - 2000, updatedAt: at - 1000 },
+      { ...base, id: 'antigravity:conv:t2', actor: agy, sessionId: 'conv', prompt: 'A question that was stopped', response: '', status: 'interrupted', tools: [], usage: null,
+        usageNote: 'Antigravity did not report token usage for this turn.', startedAt: at - 500, updatedAt: at - 400 });
+  });
+  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Filter provider' }).selectOption('antigravity');
+  await expect(page.locator('.activity-event')).toHaveCount(3);
+  await expect(page.locator('.activity-stats')).toContainText('13.2k');
+  await expect(page.locator('.activity-stats')).toContainText('1 turn has unavailable usage');
+  await page.locator('.activity-event').filter({ hasText: 'Please run the release build.' }).filter({ hasText: 'Release build' }).first().click();
+  const details = page.locator('.activity-details');
+  await expect(details).toContainText('Release build');
+  await expect(details.locator('.activity-provider--antigravity')).toHaveText('Antigravity');
+  await expect(details).toContainText('gemini-3.8-flash-low');
+  await expect(details).toContainText('Bash, Write');
+  await expect(details).toContainText('12,529');
+  await expect(details).toContainText('330 reasoning tokens included in output.');
+  await expect(details).toContainText('From Backend architect · Claude');
+  await expect(details).toContainText('Incoming message');
+  await expect(details).toContainText('The release build passes.');
+  await page.screenshot({ path: '.tmp/antigravity-integration/ui/activity.png', fullPage: true });
+  await page.getByRole('button', { name: 'Close activity details' }).click();
+  await page.locator('.activity-event').filter({ hasText: 'A question that was stopped' }).click();
+  await expect(details).toContainText('interrupted');
+  await expect(details).toContainText('Token usage has not been reported for this turn.');
+  await expect(details).toContainText('Antigravity did not report token usage for this turn.');
+  await page.getByRole('button', { name: 'Close activity details' }).click();
+  await page.getByRole('combobox', { name: 'Filter provider' }).selectOption('all');
+  console.log('PASS Antigravity records show chat name, provider, model, tools, reported and unavailable usage, and the incoming handoff link');
+
   await page.evaluate(() => { window.activityFail = true; });
   await expect(page.getByRole('alert')).toContainText('storage is unavailable', { timeout: 8000 });
   await page.evaluate(() => { window.activityFail = false; });

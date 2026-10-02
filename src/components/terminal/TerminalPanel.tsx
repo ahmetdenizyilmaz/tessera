@@ -1,5 +1,6 @@
 import { CodexPanel } from "../codex/CodexPanel";
 import { OpenCodePanel } from "../opencode/OpenCodePanel";
+import { AntigravityPanel } from "../antigravity/AntigravityPanel";
 import { useState, useEffect, useCallback } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useLayoutStore } from "../../store/layoutStore";
@@ -30,7 +31,7 @@ export function TerminalPanel({ instanceId }: { instanceId: string }) {
   const provider = useInstanceStore(
     (s) => s.instances.get(instanceId)?.config.agentProvider,
   );
-  return provider === 'opencode' ? <OpenCodePanel instanceId={instanceId} /> : provider === "codex" ? (
+  return provider === 'antigravity' ? <AntigravityPanel instanceId={instanceId} /> : provider === 'opencode' ? <OpenCodePanel instanceId={instanceId} /> : provider === "codex" ? (
     <CodexPanel instanceId={instanceId} />
   ) : (
     <ClaudeTerminalPanel instanceId={instanceId} />

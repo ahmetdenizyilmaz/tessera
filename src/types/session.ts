@@ -1,13 +1,15 @@
 import type { CodexConfig, CodexPermissionMode } from './codex';
 import type { OpenCodeOptions } from './opencode';
+import type { AntigravityOptions } from './antigravity';
 import type { InstanceConfig, LlmProvider } from './instance';
 import type { WorkspaceSnapshotV3 } from '../lib/workspaceSerializer';
 
 /** Everything the new-session wizard's "last used" quick tile needs to
  *  recreate the previous session in one click. */
 export interface LastSessionPreset {
-  kind: 'claude' | 'llm' | 'codex' | 'opencode';
+  kind: 'claude' | 'llm' | 'codex' | 'opencode' | 'antigravity';
   opencode?: OpenCodeOptions;
+  antigravity?: AntigravityOptions;
   codex?: CodexConfig;
   panelView: 'chat' | 'terminal';
   /** Claude branch: which gateway the CLI was routed through. */
@@ -63,6 +65,8 @@ export type SnapZone =
 
 export interface AppSettings {
   openCodeDefaults: OpenCodeOptions;
+  /** Only new Antigravity panels inherit these; existing panels keep their own. */
+  antigravityDefaults: AntigravityOptions;
   defaultModel: string;
   defaultPermissionMode: string;
   defaultSkipPermissions: boolean;

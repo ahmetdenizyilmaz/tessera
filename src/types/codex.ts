@@ -1,4 +1,4 @@
-export type AgentProvider = "claude" | "codex" | "opencode";
+export type AgentProvider = "claude" | "codex" | "opencode" | "antigravity";
 export type CodexPermissionMode =
   | "auto-review"
   | "workspace-write"

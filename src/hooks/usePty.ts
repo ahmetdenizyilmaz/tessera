@@ -1,5 +1,8 @@
 import { ensureCodex } from '../lib/codexBridge';
 import { ensureOpenCode } from '../lib/opencodeBridge';
+import { ensureAntigravity, refreshAntigravity } from '../lib/antigravityBridge';
+import { takeTerminalForkPrompt } from '../lib/antigravitySessions';
+import { useAntigravityStore } from '../store/antigravityStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useInstanceStore } from '../store/instanceStore';
@@ -77,6 +80,24 @@ export function usePty(instanceId: string) {
       } catch (err) {
         spawnedPtys.delete(instanceId);
         useInstanceStore.getState().setStatus(instanceId, 'error');
+        throw err;
+      }
+      return;
+    }
+    if (instance.config.agentProvider === 'antigravity') {
+      try {
+        await ensureAntigravity(instanceId);
+        // The backend pins (or verifies) the conversation ID, then starts the native TUI on it.
+        await invoke('antigravity_terminal_spawn', { id: instanceId, cols, rows, initialPrompt: takeTerminalForkPrompt(instanceId) });
+        spawnedPtys.set(instanceId, 'running');
+        useInstanceStore.getState().setStatus(instanceId, 'running');
+        await refreshAntigravity(instanceId, true).catch(() => {});
+      } catch (err) {
+        spawnedPtys.delete(instanceId);
+        useInstanceStore.getState().setStatus(instanceId, 'error');
+        // A missing conversation is reported by the backend; anything else is shown from here.
+        await refreshAntigravity(instanceId, true).catch(() => {});
+        if (!useAntigravityStore.getState().sessions[instanceId]?.error) useAntigravityStore.getState().error(instanceId, String(err));
         throw err;
       }
       return;

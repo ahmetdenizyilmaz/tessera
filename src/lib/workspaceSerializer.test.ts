@@ -10,6 +10,7 @@ import { useGroupStore } from "../store/groupStore";
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import type { InstanceConfig } from "../types/instance";
 import { DEFAULT_OPENCODE_OPTIONS } from './opencodeConfig';
+import { DEFAULT_ANTIGRAVITY_OPTIONS } from './antigravityConfig';
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => true) }));
 vi.mock("../store/llmChatStore", () => ({
@@ -94,6 +95,38 @@ it('round-trips OpenCode view, endpoint, permissions, storage and conversation w
   expect(restored.claudeSessionId).toBeUndefined();
   expect(restored.codexThreadId).toBeUndefined();
   expect(JSON.stringify(restored)).not.toContain('apiKey');
+});
+it('round-trips Antigravity view, model, permissions, storage and exact conversation without other provider IDs', () => {
+  const options = { ...DEFAULT_ANTIGRAVITY_OPTIONS, model: 'gemini-3.8-flash-low', permission: 'accept-edits' as const, sandbox: true };
+  const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'antigravity', panelView: 'terminal', model: options.model, antigravity: options }, 'Gemini build');
+  useInstanceStore.getState().updateInstance(id, { antigravityDataId: 'agy-data', antigravityConversationId: '74b2286b-bb93-41f1-9263-47fd8aa9c584' });
+  useLayoutStore.getState().addPanel(id);
+  const saved = JSON.parse(JSON.stringify(serializeWorkspace()));
+  deserializeWorkspace(saved);
+  // A mid-session load ends the old panel's agy process before restoring.
+  expect(invoke).toHaveBeenCalledWith('antigravity_close', { id });
+  const restored = serializeWorkspace().instances[0];
+  expect(restored.id).not.toBe(id);
+  expect(restored).toMatchObject({ name: 'Gemini build', antigravityDataId: 'agy-data', antigravityConversationId: '74b2286b-bb93-41f1-9263-47fd8aa9c584',
+    config: { agentProvider: 'antigravity', panelView: 'terminal', cwd: 'C:/project', model: 'gemini-3.8-flash-low', antigravity: options } });
+  expect([restored.claudeSessionId, restored.codexThreadId, restored.opencodeSessionId]).toEqual([undefined, undefined, undefined]);
+});
+it('never restores two panels onto one Antigravity conversation or transcript', () => {
+  const options = { ...DEFAULT_ANTIGRAVITY_OPTIONS };
+  const make = (name: string, dataId: string, conversation?: string) => {
+    const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'antigravity', panelView: 'chat', model: '', antigravity: options }, name);
+    useInstanceStore.getState().updateInstance(id, { antigravityDataId: dataId, antigravityConversationId: conversation });
+    useLayoutStore.getState().addPanel(id);
+  };
+  make('First', 'data-1', 'conv-shared');
+  make('Same conversation', 'data-2', 'conv-shared');
+  make('Same storage', 'data-1', 'conv-other');
+  make('Unsent', 'data-3');
+  make('Independent', 'data-4', 'conv-independent');
+  deserializeWorkspace(JSON.parse(JSON.stringify(serializeWorkspace())));
+  const restored = Object.fromEntries(serializeWorkspace().instances.map(i => [i.name, [i.antigravityDataId, i.antigravityConversationId]]));
+  expect(restored).toEqual({ First: ['data-1', 'conv-shared'], 'Same conversation': [undefined, undefined], 'Same storage': [undefined, undefined],
+    Unsent: ['data-3', undefined], Independent: ['data-4', 'conv-independent'] });
 });
 it("round-trips a mixed group with independent Claude and Codex identities", () => {
   const store = useInstanceStore.getState();

@@ -4,6 +4,7 @@ import type { WorkerActivity, OfficeFurnitureType } from '../types/office';
 export const PROVIDER_COLORS: Record<string, number> = {
   codex: 0x6cdbb1,
   opencode: 0x9a9cff,
+  antigravity: 0x5b8def,
   claude: 0xFF8C00,    // orange
   anthropic: 0xD97757, // terracotta
   openai: 0x10A37F,    // green

@@ -10,14 +10,14 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-4C6EF5?style=flat-square"></a>
 </p>
 
-<strong>One workspace for coding agents, cloud LLMs, and local models.<br>Claude Code, Codex, OpenRouter, Ollama, and more, side by side.</strong>
+<strong>One workspace for coding agents, cloud LLMs, and local models.<br>Claude Code, Codex, Antigravity, OpenRouter, Ollama, and more, side by side.</strong>
 
 </div>
 
 ---
 
-**Tessera** is a native desktop workspace for multiple AI providers. Run Claude Code and Codex
-coding sessions, chat with cloud models, or use models running on your own machine, all in a
+**Tessera** is a native desktop workspace for multiple AI providers. Run Claude Code, Codex and
+Antigravity coding sessions, chat with cloud models, or use models running on your own machine, all in a
 resizable mosaic. Mix providers in the same window, group related work, and let coding-agent
 panels message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + React 19.
 
@@ -30,6 +30,7 @@ panels message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + 
 | **Claude Code** | Coding-agent chat or native terminal, with tools and MCP | Claude Code CLI and its configured login |
 | **Codex** | Coding-agent chat or native terminal, with model/effort selection, permissions, and MCP | Codex CLI and its configured login |
 | **OpenCode** | Independent coding-agent chat or native terminal using OpenRouter, cloud API keys, Ollama, LM Studio, or a compatible endpoint | OpenCode CLI and a supported model/provider; no Claude Code wrapper |
+| **Antigravity** | Google's `agy` coding agent as rich chat or native terminal, with model selection, permission modes, and exact conversation resume | Antigravity CLI (`agy`) and its own Google sign-in |
 | **OpenRouter** | Route a Claude Code panel to a model selected from OpenRouter's catalog | Claude Code CLI and an OpenRouter API key |
 | **Anthropic, OpenAI, Gemini APIs** | Direct streaming chat panels | An API key for the selected provider |
 | **Ollama** | Direct local chat, or a model-backed Claude Code panel through its compatible endpoint | A running Ollama server and an available model; CLI required for the coding-agent route |
@@ -49,6 +50,9 @@ session list, history, and usage totals.
 
 See the [Codex guide](docs/codex-provider.md) for login discovery, session resume, permission
 defaults, and the separate Preview build.
+
+See the [Antigravity guide](docs/antigravity-provider.md) for installation, sign-in, what chat and
+terminal panels can and cannot do with the installed CLI, permissions, and usage accounting.
 
 See the [OpenCode guide](docs/opencode-provider.md) for independent cloud/local coding
 agents, credentials, model discovery, permissions, and session storage.
@@ -108,6 +112,9 @@ Set up the connections you want to use:
 - **Cloud API chat:** enter the provider's API key in **Settings → LLM Providers**.
 - **OpenCode:** install the OpenCode CLI, then configure **Settings → OpenCode**.
   Create either a Chat or Terminal panel and choose OpenCode under Coding agents.
+- **Antigravity:** install the Antigravity CLI (`irm https://antigravity.google/cli/install.ps1 | iex`)
+  and run `agy` once to sign in. Create a Chat or Terminal panel and choose
+  **Antigravity · Google sign-in** under Coding agents; the setup step reports the CLI and sign-in status.
 - **Local chat:** start Ollama or LM Studio, make a model available, and configure its server URL
   in **Settings → LLM Providers**. Direct chat panels work independently of the coding-agent CLIs.
 

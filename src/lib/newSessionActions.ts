@@ -56,7 +56,7 @@ export function replaceWizard(wizardId: string, fn: () => void): void {
 
 /** Which keyring provider (if any) a route needs, and its display identity. */
 export function routeMeta(route: WizardRoute): {
-  branch: 'claude' | 'llm' | 'codex' | 'opencode';
+  branch: 'claude' | 'llm' | 'codex' | 'opencode' | 'antigravity';
   provider: Exclude<LlmProvider, 'claude'> | null;
   keyProvider: string | null;
   gateway?: ClaudeRouting['gateway'];
@@ -64,6 +64,7 @@ export function routeMeta(route: WizardRoute): {
 } {
   switch (route) {
     case 'opencode': return { branch: 'opencode', provider: null, keyProvider: null, label: 'OpenCode · API & local models' };
+    case 'antigravity': return { branch: 'antigravity', provider: null, keyProvider: null, label: 'Antigravity · Google sign-in' };
     case 'codex': return { branch: 'codex', provider: null, keyProvider: null, label: 'Codex · CLI login' };
     case 'claude-sub': return { branch: 'claude', provider: null, keyProvider: null, gateway: 'anthropic', label: 'Claude · subscription' };
     case 'gw-openrouter': return { branch: 'claude', provider: 'openrouter', keyProvider: 'openrouter', gateway: 'openrouter', label: 'OpenRouter gateway' };
@@ -116,7 +117,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
   const s = useWizardStore.getState();
   if (!s.panelView || !s.route) return;
   const meta = routeMeta(s.route);
-  if (meta.branch === 'codex' || meta.branch === 'opencode') return;
+  if (meta.branch === 'codex' || meta.branch === 'opencode' || meta.branch === 'antigravity') return;
 
   const others = useLayoutStore.getState().tabOrder.filter((id) => id !== wizardPanelId);
   if (others.length >= MAX_PANELS) { notifyPanelLimit(); return; }

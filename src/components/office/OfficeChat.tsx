@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUpRight, ChevronDown, MessageSquare, X } from 'lucide-r
 import { useChatStore } from '../../store/chatStore';
 import { useCodexStore } from '../../store/codexStore';
 import { useOpenCodeStore } from '../../store/opencodeStore';
+import { useAntigravityStore } from '../../store/antigravityStore';
 import { useLlmChatStore } from '../../store/llmChatStore';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { officeProvider, PROVIDER_NAMES } from '../../lib/officeActivity';
@@ -15,13 +16,15 @@ import { ChatMessage } from '../chat/ChatMessage';
 import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { CodexItemView } from '../codex/CodexItemView';
 import { OpenCodeMessageView } from '../opencode/OpenCodeMessageView';
+import { AntigravityItemView } from '../antigravity/AntigravityItemView';
 import { CharacterPortrait } from './OfficeTeam';
 import type { ClaudeInstance } from '../../types/instance';
 import type { CodexItem, CodexThread } from '../../types/codex';
 import type { OpenCodeSnapshot } from '../../types/opencode';
+import type { AntigravitySnapshot } from '../../types/antigravity';
 
 interface HistoryMessage { role: string; content: string; timestamp?: string | null }
-interface History { claude?: HistoryMessage[]; codex?: CodexItem[]; opencode?: OpenCodeSnapshot }
+interface History { claude?: HistoryMessage[]; codex?: CodexItem[]; opencode?: OpenCodeSnapshot; antigravity?: AntigravitySnapshot }
 
 function TranscriptMessage({ role, text, provider }: { role: string; text: string; provider: string }) {
   return <article className={`msg msg--${role === 'user' ? 'user' : 'assistant'}`}>
@@ -39,6 +42,7 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
   const claude = useChatStore(s => s.sessions.get(id));
   const codex = useCodexStore(s => s.sessions[id]);
   const opencode = useOpenCodeStore(s => s.sessions[id]);
+  const antigravity = useAntigravityStore(s => s.sessions[id]);
   const llm = useLlmChatStore(s => s.conversations[id]);
   const worker = useOfficeGameStore(s => s.workers[id]);
   const profile = useOfficeGameStore(s => s.profiles[id]);
@@ -53,6 +57,7 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
   const claudeHistory = !isLlm && provider === 'claude' && (terminal || !claude?.messages.length);
   const codexHistory = !isLlm && provider === 'codex' && !codex?.items.length;
   const openCodeHistory = !isLlm && provider === 'opencode' && !opencode;
+  const antigravityHistory = !isLlm && provider === 'antigravity' && !antigravity;
   const sid = instance.claudeSessionId, threadId = instance.codexThreadId, cwd = instance.config.cwd;
   const executable = instance.config.codex?.executablePath;
   const read = useCallback(async (): Promise<History> => {
@@ -62,9 +67,10 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
       return { codex: result?.thread ? historyItems(result.thread) : [] };
     }
     if (openCodeHistory) return { opencode: await invoke<OpenCodeSnapshot>('opencode_snapshot', { id, knownRevision: null }) };
+    if (antigravityHistory) return { antigravity: (await invoke<AntigravitySnapshot | null>('antigravity_snapshot', { id, knownRevision: null })) ?? undefined };
     return {};
-  }, [id, claudeHistory, codexHistory, openCodeHistory, sid, threadId, cwd, executable]);
-  const needsHistory = (claudeHistory && !!sid) || (codexHistory && !!threadId) || openCodeHistory;
+  }, [id, claudeHistory, codexHistory, openCodeHistory, antigravityHistory, sid, threadId, cwd, executable]);
+  const needsHistory = (claudeHistory && !!sid) || (codexHistory && !!threadId) || openCodeHistory || antigravityHistory;
   useEffect(() => {
     let active = true, timer: ReturnType<typeof setTimeout>;
     setHistory({}); setReadError(''); setLoading(needsHistory);
@@ -93,10 +99,11 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
   const claudeMessages = terminal ? [] : claude?.messages ?? [];
   const codexItems = codex?.items.length ? codex.items : history.codex ?? [];
   const openCodeSession = opencode ?? history.opencode;
-  const count = isLlm ? llm?.messages.length ?? 0 : provider === 'codex' ? codexItems.length : provider === 'opencode' ? openCodeSession?.messages.length ?? 0 : claudeMessages.length || historicClaude.length;
-  const error = readError || (isLlm ? llm?.error : provider === 'codex' ? codex?.error : provider === 'opencode' ? openCodeSession?.error : claude?.error);
+  const antigravitySession = antigravity ?? history.antigravity;
+  const count = isLlm ? llm?.messages.length ?? 0 : provider === 'codex' ? codexItems.length : provider === 'antigravity' ? antigravitySession?.items.length ?? 0 : provider === 'opencode' ? openCodeSession?.messages.length ?? 0 : claudeMessages.length || historicClaude.length;
+  const error = readError || (isLlm ? llm?.error : provider === 'codex' ? codex?.error : provider === 'antigravity' ? antigravitySession?.error : provider === 'opencode' ? openCodeSession?.error : claude?.error);
   const needsYou = worker?.activity === 'awaiting_permission';
-  const busy = isLlm ? llm?.isStreaming : provider === 'codex' ? codex?.busy : provider === 'opencode' ? openCodeSession && openCodeSession.status.type !== 'idle' : claude?.isStreaming;
+  const busy = isLlm ? llm?.isStreaming : provider === 'codex' ? codex?.busy : provider === 'antigravity' ? antigravitySession?.busy : provider === 'opencode' ? openCodeSession && openCodeSession.status.type !== 'idle' : claude?.isStreaming;
 
   return <aside className="office-chat" aria-label={`Chat with ${instance.name}`}>
     <header className="office-chat-heading">
@@ -117,6 +124,7 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
       <div ref={content}>
         {isLlm ? llm?.messages.map(m => <TranscriptMessage key={m.id} role={m.role} text={m.content} provider={providerName} />)
           : provider === 'codex' ? codexItems.map(item => <CodexItemView key={item.id} item={item} />)
+          : provider === 'antigravity' ? antigravitySession?.items.map(item => <AntigravityItemView key={item.id} item={item} />)
           : provider === 'opencode' ? openCodeSession?.messages.map(message => <OpenCodeMessageView key={message.info.id} message={message} />)
           : claudeMessages.length ? claudeMessages.map((message, i) => <ChatMessage key={message.id} message={message} isContinuation={message.role === 'assistant' && claudeMessages[i - 1]?.role === 'assistant'} isGroupEnd={claudeMessages[i + 1]?.role !== 'assistant'} />)
           : historicClaude.map((m, i) => <TranscriptMessage key={i} role={m.role} text={m.content} provider={providerName} />)}

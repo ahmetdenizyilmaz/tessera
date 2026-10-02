@@ -1,5 +1,6 @@
 import { useCodexStore } from '../store/codexStore';
 import { stopOpenCodeWatch } from './opencodeBridge';
+import { stopAntigravityWatch } from './antigravityBridge';
 import { useLayoutStore } from '../store/layoutStore';
 import { captureGroupSnapshot, removePanelsFromWorkspace, useGroupStore } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
@@ -53,6 +54,10 @@ async function closePanelContents(id: string): Promise<void> {
   if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'opencode') {
     stopOpenCodeWatch(id);
     await invoke('opencode_close', { id }).catch(() => {});
+  }
+  if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'antigravity') {
+    stopAntigravityWatch(id);
+    await invoke('antigravity_close', { id }).catch(() => {});
   }
   if (useInstanceStore.getState().instances.get(id)?.config.agentProvider === 'codex') {
     await invoke('codex_close', { id }).catch(() => {});

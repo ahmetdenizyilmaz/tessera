@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod activity;
 pub mod analytics;
+pub mod antigravity;
 pub mod app_paths;
 pub mod auth;
 pub mod checkpoints;
@@ -112,6 +113,7 @@ pub fn run() {
         .manage(StreamJsonManager::new())
         .manage(codex::CodexManager::default())
         .manage(opencode::OpenCodeManager::default())
+        .manage(antigravity::AntigravityManager::default())
         .manage(database)
         .manage(llm::manager::LlmManager::new())
         .manage(PostHogTracker::new())
@@ -135,6 +137,14 @@ pub fn run() {
             opencode::opencode_respond,
             opencode::opencode_close,
             opencode::opencode_terminal_spawn,
+            antigravity::antigravity_discover,
+            antigravity::antigravity_configure,
+            antigravity::antigravity_snapshot,
+            antigravity::antigravity_send,
+            antigravity::antigravity_interrupt,
+            antigravity::antigravity_new_conversation,
+            antigravity::antigravity_close,
+            antigravity::antigravity_terminal_spawn,
             codex::codex_history,
             codex::codex_read_thread,
             codex::codex_configure,
@@ -293,6 +303,7 @@ pub fn run() {
                 app.state::<StreamJsonManager>().kill_all();
                 app.state::<codex::CodexManager>().kill_all();
                 app.state::<opencode::OpenCodeManager>().kill_all();
+                app.state::<antigravity::AntigravityManager>().kill_all();
                 app.state::<activity::Recorder>().flush();
             }
         });

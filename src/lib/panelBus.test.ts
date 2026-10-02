@@ -5,6 +5,7 @@ import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { useGroupStore } from '../store/groupStore';
 import { useChatStore } from '../store/chatStore';
+import { useAntigravityStore } from '../store/antigravityStore';
 import type { InstanceConfig } from '../types/instance';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => undefined) }));
@@ -22,7 +23,7 @@ beforeEach(() => {
   cleanup = initPanelBus();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
-const add = (name: string, view: 'terminal' | 'chat' = 'terminal', provider: 'claude' | 'codex' | 'opencode' = 'claude') => {
+const add = (name: string, view: 'terminal' | 'chat' = 'terminal', provider: 'claude' | 'codex' | 'opencode' | 'antigravity' = 'claude') => {
   const id = useInstanceStore.getState().addInstance({ ...config, panelView: view, agentProvider: provider }, name);
   useLayoutStore.getState().addPanel(id);
   return id;
@@ -34,6 +35,23 @@ it('publishes OpenCode chat and terminal with their actual LAN view and own prov
     expect.objectContaining({ id: chat, provider: 'opencode', kind: 'chat' }),
     expect.objectContaining({ id: terminal, provider: 'opencode', kind: 'terminal' }),
   ]));
+});
+
+it('publishes Antigravity panels with their provider, view, conversation and live working state', async () => {
+  const chat = add('Gemini chat', 'chat', 'antigravity');
+  const terminal = add('Gemini TUI', 'terminal', 'antigravity');
+  useInstanceStore.getState().updateInstance(chat, { antigravityConversationId: 'conv-chat' });
+  useAntigravityStore.getState().receive(chat, { generation: 'g', revision: 'g:1', configured: true, conversationId: 'conv-chat', processAlive: true, busy: true, items: [] });
+  expect(snapshot()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: chat, provider: 'antigravity', kind: 'chat', busy: true, awaiting_user: false, session_id: 'conv-chat' }),
+    expect.objectContaining({ id: terminal, provider: 'antigravity', kind: 'terminal', busy: false, session_id: null }),
+  ]));
+  // A finished turn reaches the roster without any other store changing.
+  await vi.advanceTimersByTimeAsync(300);
+  vi.mocked(invoke).mockClear();
+  useAntigravityStore.getState().receive(chat, { generation: 'g', revision: 'g:2', configured: true, conversationId: 'conv-chat', processAlive: true, busy: false, items: [] });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(invoke).toHaveBeenCalledWith('panel_registry_sync', { panels: expect.arrayContaining([expect.objectContaining({ id: chat, busy: false })]) });
 });
 
 it('publishes every root and grouped panel with its true view while navigating nested groups', () => {

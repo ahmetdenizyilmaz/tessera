@@ -49,6 +49,25 @@ impl Usage {
             ..Self::default()
         })
     }
+    /// agy reports `thinking_tokens` inside `output_tokens` (total = input + output).
+    /// Whether cached input is inside `input_tokens` is read from the same total.
+    pub fn antigravity(v: &Value) -> Option<Self> {
+        let reported_input = v["input_tokens"].as_u64()?;
+        let output = v["output_tokens"].as_u64().unwrap_or(0);
+        let cache = v["cache_read_tokens"].as_u64().unwrap_or(0);
+        let separate = v["total_tokens"].as_u64() == Some(reported_input + output + cache);
+        Some(Self {
+            input: if separate || cache == 0 {
+                reported_input
+            } else {
+                reported_input.saturating_sub(cache)
+            },
+            output,
+            cache_read: cache,
+            reasoning: v["thinking_tokens"].as_u64().unwrap_or(0).min(output),
+            ..Self::default()
+        })
+    }
     pub fn delta(&self, previous: &Self) -> Self {
         Self {
             input: self.input.saturating_sub(previous.input),

@@ -101,7 +101,7 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
       <div className="office-map-caption"><span className="office-live-dot" /> LIVE OFFICE <span>{editMode ? 'Click a tile to decorate · R to rotate · Shift + drag to pan' : 'Drag to explore · Scroll to zoom · Select an agent'}</span></div>
     </div>
     <OfficeTeam selected={selected ?? hover} onSelect={selectAgent} onOpen={openPanel} collapsed={!!selectedInstance} onExpand={closeChat} />
-    {selectedInstance && <OfficeChat key={`${selectedInstance.id}:${selectedInstance.claudeSessionId ?? selectedInstance.codexThreadId ?? selectedInstance.opencodeSessionId ?? ''}`} instance={selectedInstance} onClose={closeChat} onOpen={openPanel} />}
+    {selectedInstance && <OfficeChat key={`${selectedInstance.id}:${selectedInstance.claudeSessionId ?? selectedInstance.codexThreadId ?? selectedInstance.opencodeSessionId ?? selectedInstance.antigravityConversationId ?? ''}`} instance={selectedInstance} onClose={closeChat} onOpen={openPanel} />}
     {shopOpen && <OfficeShop />}
     {editMode && <EditModeOverlay />}
   </div>;

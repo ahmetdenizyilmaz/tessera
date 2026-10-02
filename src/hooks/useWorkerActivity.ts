@@ -4,11 +4,12 @@ import { useInstanceStore } from '../store/instanceStore';
 import { useChatStore } from '../store/chatStore';
 import { useCodexStore } from '../store/codexStore';
 import { useOpenCodeStore } from '../store/opencodeStore';
+import { useAntigravityStore } from '../store/antigravityStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useOfficeGameStore } from '../store/officeGameStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { workerDestination } from '../lib/officeSpace';
-import { claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, rewardForTools, type WorkSignal } from '../lib/officeActivity';
+import { antigravitySignal, claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, rewardForTools, type WorkSignal } from '../lib/officeActivity';
 import type { ActivityPage, ActivityRecord } from '../types/activity';
 
 /** Stable record IDs make polling, replay, and reopening the office idempotent. */
@@ -63,6 +64,11 @@ export function useWorkerActivity(): void {
           const answer = session?.messages.at(-1);
           supplemental = { running: session?.status.type === 'busy', completed: !!session?.connected && session.status.type === 'idle' && !session.error && answer?.info.role === 'assistant' && !answer.info.error,
             key: `opencode:${session?.sessionId}:${question?.info.id}`, tools: session?.messages.filter(m => m.info.id > (question?.info.id ?? '')).flatMap(m => m.parts.filter(p => p.type === 'tool').map(p => p.tool ?? 'Tool')) ?? [] };
+        } else if (instance.config.agentProvider === 'antigravity') {
+          // Chat turns are recorded natively in Activity (rewards come from those
+          // records, once per turn ID). The native TUI reports nothing structured.
+          state = instance.config.panelView !== 'terminal' ? antigravitySignal(useAntigravityStore.getState().sessions[id])
+            : { activity: instance.status === 'error' ? 'error' : 'unknown', task: '', detail: instance.status === 'stopped' ? 'Session stopped' : 'The Antigravity terminal reports no structured activity' };
         } else if (instance.config.panelView === 'terminal') {
           const record = instance.claudeSessionId ? latestBySession.get(`claude:${instance.claudeSessionId}`) : latest.get(id);
           state = instance.status === 'stopped' || instance.status === 'error'
@@ -138,7 +144,7 @@ export function useWorkerActivity(): void {
         if (!disposed) useOfficeGameStore.setState({ syncError: `Rewards will catch up when activity reconnects. ${String(error)}` });
       } finally { if (!disposed) pollTimer = setTimeout(poll, 5000); }
     }
-    const unsubscribe = [useInstanceStore.subscribe(schedule), useLayoutStore.subscribe((s, old) => { if (s.panelTypes !== old.panelTypes) schedule(); }), useChatStore.subscribe(schedule), useCodexStore.subscribe(schedule), useOpenCodeStore.subscribe(schedule), useLlmChatStore.subscribe(schedule),
+    const unsubscribe = [useInstanceStore.subscribe(schedule), useLayoutStore.subscribe((s, old) => { if (s.panelTypes !== old.panelTypes) schedule(); }), useChatStore.subscribe(schedule), useCodexStore.subscribe(schedule), useOpenCodeStore.subscribe(schedule), useAntigravityStore.subscribe(schedule), useLlmChatStore.subscribe(schedule),
       useOfficeGameStore.subscribe((s, old) => { if (s.layout !== old.layout) schedule(); })];
     sync();
     void poll();

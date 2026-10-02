@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppSettings } from '../types/session';
 import { DEFAULT_OPENCODE_OPTIONS } from '../lib/opencodeConfig';
+import { DEFAULT_ANTIGRAVITY_OPTIONS } from '../lib/antigravityConfig';
 
 interface SettingsState {
   settings: AppSettings;
@@ -13,6 +14,7 @@ const LEGACY_FORK_OPENING_MESSAGE = 'Summarize the current situation in short, t
 
 const DEFAULT_SETTINGS: AppSettings = {
   openCodeDefaults: { ...DEFAULT_OPENCODE_OPTIONS },
+  antigravityDefaults: { ...DEFAULT_ANTIGRAVITY_OPTIONS },
   defaultModel: 'opus',
   // 'auto' is a real CLI permission mode (choices: acceptEdits, auto,
   // bypassPermissions, manual, dontAsk, plan). Previously this was 'default'

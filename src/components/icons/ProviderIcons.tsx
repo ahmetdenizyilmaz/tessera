@@ -70,7 +70,18 @@ export function OpenRouterIcon({ size = 36, className, style }: IconProps) {
   );
 }
 
+// Antigravity: a neutral arch-and-orbit glyph (not Google's trademarked logo)
+export function AntigravityIcon({ size = 36, className, style }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+      <path d="M4 20c1.6-6.2 4.1-13 8-13s6.4 6.8 8 13" />
+      <circle cx="12" cy="3.6" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const PROVIDER_ICON_MAP: Record<string, React.FC<IconProps>> = {
+  antigravity: AntigravityIcon,
   opencode: ({ size = 24, className, style }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}><rect x="2" y="3" width="20" height="18" rx="3" /><path d="m6 8 4 4-4 4m7 0h5" /></svg>,
   claude: ClaudeIcon,
   anthropic: ClaudeIcon,

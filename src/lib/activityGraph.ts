@@ -1,6 +1,6 @@
 import type { ActivityActor, ActivityRecord, ActivityUsage } from '../types/activity';
 
-export const providerName = (provider: string) => ({ claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', unknown: 'Agent' }[provider] ?? provider);
+export const providerName = (provider: string) => ({ claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', antigravity: 'Antigravity', unknown: 'Agent' }[provider] ?? provider);
 export const actorKey = (actor: ActivityActor) => `${actor.provider}:${actor.id}`;
 export const tokenTotal = (usage: ActivityUsage | null) => usage ? usage.input + usage.output + usage.cacheRead + usage.cacheWrite : 0;
 export const shortTokens = (tokens: number) => tokens >= 1e6 ? `${(tokens / 1e6).toFixed(1)}M` : tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);

@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { applyForkToInstance, cancelFork, startFork, submitForkOpeningToTerminal, takeForkOpeningMessage } from './forkActions';
 import { emptyCodexState } from './codexReducer';
 import { useCodexStore } from '../store/codexStore';
+import { useAntigravityStore } from '../store/antigravityStore';
+import { stopAntigravityWatch } from './antigravityBridge';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -72,6 +74,30 @@ it.each(['chat', 'terminal'] as const)('forks into OpenCode %s without writing C
   expect(instance.codexThreadId).toBeUndefined();
   expect(takeForkOpeningMessage(target)).toBeNull();
   expect(invoke).not.toHaveBeenCalled();
+});
+it.each(['chat', 'terminal'] as const)('forks into Antigravity %s by attaching the history to its first message, writing no session file', async (panelView) => {
+  await startFork(sourceId);
+  vi.mocked(invoke).mockClear();
+  const target = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'antigravity', panelView }, 'Antigravity');
+  await applyForkToInstance(target);
+  const instance = useInstanceStore.getState().instances.get(target)!;
+  expect(instance.config.fork).toMatchObject({ transcript, pending: true, sourceProvider: 'codex' });
+  expect([instance.claudeSessionId, instance.codexThreadId, instance.antigravityConversationId]).toEqual([undefined, undefined, undefined]);
+  expect(invoke).not.toHaveBeenCalled();
+});
+it('forks from an Antigravity panel using its transcript, without a model call', async () => {
+  const source = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'antigravity', panelView: 'chat', antigravity: { model: '', effort: '', permission: 'review', sandbox: false, executablePath: '' } }, 'Source Antigravity');
+  const snapshot = { generation: 'g', revision: 'g:1', configured: true, conversationId: 'conv', processAlive: false, busy: false, items: [
+    { id: 'u', type: 'user', text: transcript[0].content, at: 1 }, { id: 't', type: 'tool', name: 'run_command', state: 'done', at: 2 },
+    { id: 'a', type: 'assistant', text: transcript[1].content, state: 'done', at: 3 }, { id: 'r', type: 'result', level: 'completed', text: 'SUCCESS', at: 4 }] };
+  await vi.mocked(invoke).withImplementation(async () => snapshot, async () => {
+    await startFork(source);
+    expect(useWizardStore.getState().fork).toMatchObject({ sourceName: 'Source Antigravity', messageCount: 2 });
+    expect(vi.mocked(invoke).mock.calls.map(c => c[0])).toEqual(['antigravity_configure', 'antigravity_snapshot']);
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({ start: false });
+  });
+  stopAntigravityWatch(source);
+  expect(useAntigravityStore.getState().sessions[source]).toBeUndefined();
 });
 
 it('still sends a custom opening message once when the user chooses one', async () => {

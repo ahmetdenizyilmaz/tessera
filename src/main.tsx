@@ -1,7 +1,9 @@
 import './styles/codex.css';
 import './styles/opencode.css';
+import './styles/antigravity.css';
 import { initCodexBridge } from './lib/codexBridge';
 import { initOpenCodeBridge } from './lib/opencodeBridge';
+import { initAntigravityBridge } from './lib/antigravityBridge';
 import './lib/brandMigration'; // must run before any store hydrates
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -24,6 +26,7 @@ initStreamBridge();
 initPanelBus();
 void initCodexBridge();
 initOpenCodeBridge();
+initAntigravityBridge();
 initLaunchBridge();
 initThemeManager();
 void initLanBridge();

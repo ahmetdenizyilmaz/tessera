@@ -10,6 +10,7 @@ import { usePluginStore } from '../../store/pluginStore';
 import { closePanel } from '../../lib/panelCleanup';
 import claudeIcon from '../../assets/claude-icon.ico';
 import opencodeIcon from '../../assets/opencode-icon.svg';
+import antigravityIcon from '../../assets/antigravity-icon.svg';
 import openaiIcon from '../../assets/openai-icon.png';
 import geminiIcon from '../../assets/gemini-icon.png';
 import ollamaIcon from '../../assets/ollama-icon.svg';
@@ -19,6 +20,7 @@ import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
 const PROVIDER_ICONS: Record<string, string> = {
   opencode: opencodeIcon,
+  antigravity: antigravityIcon,
   claude: claudeIcon,
   anthropic: claudeIcon,
   openai: openaiIcon,

@@ -73,7 +73,7 @@ try {
   await expect(page.locator('.office-chat')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.office-chat')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.officeCalls.filter(c => !['activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot'].includes(c.command)))).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.officeCalls.filter(c => !['activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot', 'antigravity_snapshot'].includes(c.command)))).toEqual([]);
   console.log('PASS live named characters, providers, task stations, completed-turn rewards, and StrictMode initialization');
   console.log('PASS real character clicks, live Codex/Claude transcripts, collapsed roster, switching, floor/Escape dismissal, and panning without dismissal or provider side effects');
 
@@ -191,6 +191,42 @@ try {
   await page.locator('[data-office-agent="automation"]').click();
   await expect(page.locator('.office-chat-messages')).toContainText('OpenCode is building the project.');
   await page.getByRole('button', { name: 'Close agent chat' }).click();
+  // Antigravity: state follows the open turn it reported; coins come only from recorded completed turns.
+  await page.evaluate(() => {
+    const base = window.instances.getState().instances.get('tester');
+    window.instances.setState(s => ({ instances: new Map([...s.instances, ['gemini', { ...base, id: 'gemini', name: 'Antigravity builder', antigravityConversationId: 'ag-conv',
+      config: { ...base.config, agentProvider: 'antigravity', panelView: 'chat', model: 'gemini-3.8-flash-low' } }]]) }));
+    window.antigravity.setState({ sessions: { gemini: { generation: 'ag', revision: 'ag:1', configured: true, conversationId: 'ag-conv', processAlive: true, busy: true, items: [
+      { id: 'u', type: 'user', text: 'Build the release and run the checks.', at: 1 }, { id: 't', type: 'tool', name: 'run_command', state: 'active', at: 2 }] } } });
+  });
+  await expect(page.locator('[data-office-agent="gemini"]')).toContainText('Running command');
+  // The tool finished and nothing more has been printed: the turn is still open, so the agent is still working.
+  await page.evaluate(() => { const s = window.antigravity.getState().sessions.gemini; window.antigravity.setState({ sessions: { gemini: { ...s, revision: 'ag:2', items: s.items.map(i => i.type === 'tool' ? { ...i, state: 'done' } : i) } } }); });
+  await expect(page.locator('[data-office-agent="gemini"]')).toContainText('Thinking');
+  const beforeAntigravity = await page.evaluate(() => window.office.getState().currency);
+  await page.waitForTimeout(6500);
+  await expect(page.locator('[data-office-agent="gemini"]')).toContainText('Thinking');
+  expect(await page.evaluate(() => window.office.getState().currency)).toBe(beforeAntigravity);
+  await page.evaluate(() => {
+    const s = window.antigravity.getState().sessions.gemini;
+    window.antigravity.setState({ sessions: { gemini: { ...s, revision: 'ag:3', busy: false, items: [...s.items,
+      { id: 'a', type: 'assistant', text: 'The release build passes.', state: 'done', at: 3 }, { id: 'r', type: 'result', level: 'completed', text: 'SUCCESS', at: 4 }] } } });
+    const record = { ...window.officeRecords[0], id: 'antigravity:ag-conv:turn-1', actor: { id: 'gemini', name: 'Antigravity builder', provider: 'antigravity', model: 'gemini-3.8-flash-low', device: null },
+      sessionId: 'ag-conv', tools: ['Bash'], startedAt: Date.now(), updatedAt: Date.now() };
+    // The recorder can deliver the same finished turn more than once.
+    window.officeRecords.push(record, { ...record, updatedAt: Date.now() + 1 });
+  });
+  await expect(page.locator('[data-office-agent="gemini"]')).toContainText('Taking a break');
+  await expect.poll(() => page.evaluate(() => window.office.getState().currency), { timeout: 10000 }).toBe(beforeAntigravity + 35);
+  await page.waitForTimeout(6500);
+  expect(await page.evaluate(() => window.office.getState().currency)).toBe(beforeAntigravity + 35);
+  expect(await page.evaluate(() => window.office.getState().profiles.gemini.tasks)).toBe(1);
+  await page.locator('[data-office-agent="gemini"]').click();
+  await expect(page.locator('.office-chat-heading')).toContainText('Antigravity');
+  await expect(page.locator('.office-chat-messages')).toContainText('The release build passes.');
+  await expect(page.locator('.office-chat-messages')).toContainText('run_command');
+  await page.getByRole('button', { name: 'Close agent chat' }).click();
+  console.log('PASS Antigravity character: tool station, quiet open turn stays working, explicit completion, one reward for a replayed turn, and chat sidebar');
   await page.locator('[data-office-agent="api"]').click();
   await expect(page.locator('.office-chat-heading')).toContainText('OpenAI');
   await expect(page.locator('.office-chat-messages')).toContainText('API conversation is live.');
@@ -215,7 +251,7 @@ try {
   await page.evaluate(() => { window.instances.setState(s => { const instances = new Map(s.instances); instances.delete('architect'); return { instances }; }); });
   await expect(page.locator('.office-chat')).toHaveCount(0);
   await expect(page.locator('.office-team--collapsed')).toHaveCount(0);
-  expect(await page.evaluate(() => window.officeCalls.filter(c => !['activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot'].includes(c.command)))).toEqual([]);
+  expect(await page.evaluate(() => window.officeCalls.filter(c => !['activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot', 'antigravity_snapshot'].includes(c.command)))).toEqual([]);
   await page.locator('[data-office-agent="tester"]').click();
   await page.getByRole('button', { name: 'Open full chat' }).click();
   await expect(page.getByRole('button', { name: 'Return to office' })).toBeVisible();

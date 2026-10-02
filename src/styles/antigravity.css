@@ -1,0 +1,13 @@
+.antigravity-status { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.antigravity-status code, .antigravity-denied code { user-select: all; }
+.antigravity-auth--signed-in strong, .antigravity-auth--api-key strong { color: #51cf66; }
+.antigravity-auth--signed-out strong { color: #ff8d8d; }
+.antigravity-auth--unknown strong { color: #ffd43b; }
+.antigravity-panel .antigravity-turn { margin: 2px 0 14px; padding-top: 6px; border-top: 1px dashed var(--border); color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.antigravity-panel .antigravity-turn--failed { color: #ff8d8d; }
+.antigravity-panel .antigravity-turn--interrupted { color: #ffd43b; }
+.antigravity-denied { margin: 8px 0; border: 1px solid #ffd43b55; border-radius: 6px; color: var(--text-primary); background: #ffd43b14; }
+.antigravity-denied pre { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-muted); }
+.antigravity-notice { margin: 8px 0; }
+.antigravity-working { margin: 8px 0; }
+.antigravity-usage { margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }

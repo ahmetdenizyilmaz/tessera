@@ -7,6 +7,9 @@ import { useCodexStore } from '../store/codexStore';
 import { ensureOpenCode, refreshOpenCode } from './opencodeBridge';
 import { useOpenCodeStore } from '../store/opencodeStore';
 import { openCodeTranscript } from './opencodeConfig';
+import { ensureAntigravity, refreshAntigravity } from './antigravityBridge';
+import { useAntigravityStore } from '../store/antigravityStore';
+import { antigravityTranscript } from './antigravityConfig';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { canAddPanel, notifyPanelLimit } from '../store/layoutStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -44,6 +47,13 @@ export async function collectTranscript(instanceId: string): Promise<ForkMessage
     await ensureOpenCode(instanceId);
     await refreshOpenCode(instanceId);
     return openCodeTranscript(useOpenCodeStore.getState().sessions[instanceId]?.messages ?? []);
+  }
+
+  if (inst.config.agentProvider === 'antigravity') {
+    // Tessera's own transcript: reading it starts no process and no model call.
+    await ensureAntigravity(instanceId);
+    await refreshAntigravity(instanceId, true);
+    return antigravityTranscript(useAntigravityStore.getState().sessions[instanceId]?.items ?? []);
   }
 
   if (inst.config.llmConfig) {
@@ -142,7 +152,9 @@ export async function applyForkToInstance(newId: string): Promise<void> {
   const isLlm = !!inst.config.llmConfig;
   const openingMessage = fork.openingMessage.trim() || undefined;
 
-  if (!isLlm && inst.config.agentProvider !== 'opencode') {
+  // agy has no supported way to import history, so (like OpenCode) an
+  // Antigravity target receives the transcript with its first message.
+  if (!isLlm && inst.config.agentProvider !== 'opencode' && inst.config.agentProvider !== 'antigravity') {
     const wire = normalizeAlternation(transcript);
     try {
       if (inst.config.agentProvider === 'codex') {

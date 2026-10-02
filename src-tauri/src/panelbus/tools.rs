@@ -20,7 +20,7 @@ pub fn definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "list_panels",
-            "description": "Find the Claude and Codex sessions open in this Tessera window, including \
+            "description": "Find the agent sessions (Claude, Codex, OpenCode, Antigravity) open in this Tessera window, including \
         panels inside groups. Panel, session, subwindow, sub-window, pane, tab, chat, conversation, and \
         other agent refer to these same destinations. Call this when the user says 'the other session', \
         'another subwindow', or 'the other one', before sending a message or reading its context. \
@@ -272,6 +272,11 @@ async fn send_to_panel_traced(app: &AppHandle, caller_id: &str, args: Value, tra
         bus.record_inbound_hop(&target.id, hop);
         return crate::opencode::deliver(app, &target.id, &wrapped, wait, args.get("timeout_seconds").and_then(Value::as_u64).unwrap_or(DEFAULT_WAIT_SECS)).await;
     }
+    // Antigravity terminals are a native TUI: they take the generic paste path below.
+    if target.provider.as_deref() == Some("antigravity") && target.kind == "chat" {
+        bus.record_inbound_hop(&target.id, hop);
+        return crate::antigravity::deliver(app, &target.id, &wrapped, wait, args.get("timeout_seconds").and_then(Value::as_u64).unwrap_or(DEFAULT_WAIT_SECS)).await;
+    }
     if target.provider.as_deref() == Some("codex") {
         bus.record_inbound_hop(&target.id, hop);
         return crate::codex::deliver(
@@ -442,6 +447,9 @@ pub async fn deliver_inbound(
     if target.provider.as_deref() == Some("opencode") {
         return crate::opencode::deliver(app, &target.id, wrapped, false, DEFAULT_WAIT_SECS).await;
     }
+    if target.provider.as_deref() == Some("antigravity") && target.kind == "chat" {
+        return crate::antigravity::deliver(app, &target.id, wrapped, false, DEFAULT_WAIT_SECS).await;
+    }
     if target.provider.as_deref() == Some("codex") {
         return crate::codex::deliver(app, &target.id, wrapped, false, DEFAULT_WAIT_SECS).await;
     }
@@ -473,6 +481,14 @@ pub async fn read_local(app: &AppHandle, target_id: &str, limit: usize) -> Resul
 
     if target.provider.as_deref() == Some("opencode") {
         let messages = crate::opencode::read_recent(app, &target.id, limit).await?;
+        return Ok(json!({"panel":target.name,"messages":messages}));
+    }
+    if target.provider.as_deref() == Some("antigravity") {
+        if target.kind == "terminal" {
+            return Ok(json!({"panel":target.name,"messages":[],
+                "note":"Antigravity terminal panels expose no structured transcript in agy's supported interfaces. Ask the person, or use an Antigravity chat panel."}));
+        }
+        let messages = crate::antigravity::read_recent(app, &target.id, limit).await?;
         return Ok(json!({"panel":target.name,"messages":messages}));
     }
     if target.provider.as_deref() == Some("codex") {

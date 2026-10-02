@@ -4,9 +4,11 @@ import type { CodexState } from '../types/codex';
 import type { ChatMessage, PendingControlRequest, StreamResult } from '../types/stream';
 import type { OpenCodeSnapshot } from '../types/opencode';
 import type { ActivityRecord } from '../types/activity';
+import type { AntigravitySnapshot } from '../types/antigravity';
+import { antigravityOfficeTool } from './antigravityConfig';
 
 export const officeProvider = (instance: ClaudeInstance) => instance.config.llmConfig?.provider ?? instance.config.agentProvider ?? 'claude';
-export const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', anthropic: 'Claude API', openai: 'OpenAI', gemini: 'Gemini', ollama: 'Ollama', lmstudio: 'LM Studio', openrouter: 'OpenRouter' };
+export const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', antigravity: 'Antigravity', anthropic: 'Claude API', openai: 'OpenAI', gemini: 'Gemini', ollama: 'Ollama', lmstudio: 'LM Studio', openrouter: 'OpenRouter' };
 export interface WorkSignal { activity: WorkerActivity; task: string; detail: string }
 export function mapOfficeTool(name: string): WorkerActivity {
   const tool = name.toLowerCase();
@@ -74,6 +76,24 @@ export function openCodeSignal(session?: OpenCodeSnapshot): WorkSignal {
   if (session.status.type === 'idle') return signal('idle', task);
   const part = session.messages.at(-1)?.parts.at(-1);
   return signal(part?.type === 'tool' ? mapOfficeTool(part.tool ?? '') : part?.type === 'reasoning' ? 'thinking' : 'responding', task, part?.state?.title ?? part?.tool);
+}
+/** Work is the open turn agy reported, never how recently it printed something:
+ *  a silent stretch during thinking or a long command is still work. */
+export function antigravitySignal(session?: AntigravitySnapshot): WorkSignal {
+  if (!session) return signal('unknown');
+  const task = [...session.items].reverse().find(i => i.type === 'user')?.text ?? '';
+  if (!session.configured) return session.error ? signal('error', task, session.error) : signal('unknown', task);
+  if (!session.busy) {
+    if (session.error) return signal('error', task, session.error);
+    const result = [...session.items].reverse().find(i => i.type === 'result');
+    // agy ends a turn as WAITING when the agent needs an answer before it can go on.
+    if (result?.text === 'WAITING') return signal('awaiting_permission', task, 'Waiting for your reply');
+    return signal(result?.level === 'failed' ? 'error' : 'idle', task);
+  }
+  const item = [...session.items].reverse().find(i => i.type === 'tool' || i.type === 'assistant' || i.type === 'user');
+  if (item?.type === 'tool' && item.state === 'active') return signal(mapOfficeTool(antigravityOfficeTool(item.name ?? '')), task, item.name);
+  if (item?.type === 'assistant' && item.state === 'active') return signal('responding', task);
+  return signal('thinking', task);
 }
 export function recordedSignal(record: ActivityRecord | undefined): WorkSignal {
   if (!record) return signal('unknown', '', 'No structured activity has been reported');

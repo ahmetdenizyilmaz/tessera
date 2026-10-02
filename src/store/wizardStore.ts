@@ -1,16 +1,18 @@
 import { create } from 'zustand';
 import { useSettingsStore } from './settingsStore';
 import type { OpenCodeOptions } from '../types/opencode';
+import type { AntigravityOptions } from '../types/antigravity';
 
 /** Routes the wizard can create. 'claude-sub' and the gw-* entries are real
  *  Claude Code sessions (subscription login / routed gateways); api-* entries
  *  are plain LLM chat panels via llm_create_session. */
 export type WizardRoute =
-  | 'opencode' | 'codex' | 'claude-sub' | 'gw-openrouter' | 'gw-ollama' | 'gw-custom'
+  | 'opencode' | 'antigravity' | 'codex' | 'claude-sub' | 'gw-openrouter' | 'gw-ollama' | 'gw-custom'
   | 'api-anthropic' | 'api-openai' | 'api-gemini' | 'api-lmstudio' | 'api-ollama';
 
 export interface WizardState {
   opencode: OpenCodeOptions | null;
+  antigravity: AntigravityOptions | null;
   panelView: 'chat' | 'terminal' | null;
   /** "Local PC" picked in step 1: connect to another Tessera computer instead. */
   lanMode: boolean;
@@ -43,6 +45,7 @@ function seededDefaults() {
   const s = useSettingsStore.getState().settings;
   return {
     opencode: null as OpenCodeOptions | null,
+    antigravity: null as AntigravityOptions | null,
     panelView: null as WizardState['panelView'],
     lanMode: false,
     fork: null as WizardState['fork'],
