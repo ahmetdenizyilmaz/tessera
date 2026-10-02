@@ -108,7 +108,7 @@ export async function switchSession(
         permissionMode: inst.config.permissionMode || null,
         allowedTools: inst.config.allowedTools.length > 0 ? inst.config.allowedTools : null,
         dangerouslySkipPermissions: inst.config.dangerouslySkipPermissions,
-        env: await buildRoutingEnv(inst.config.routing),
+        env: await buildRoutingEnv(inst.config.routing, inst.config.cwd),
       });
     } catch (err) {
       console.error(`[sessionActions] stream_configure failed for ${instanceId}:`, err);

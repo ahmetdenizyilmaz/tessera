@@ -43,9 +43,13 @@ fn iso(t: DateTime<Utc>) -> String {
 /// The `version` the installed Claude Code writes, taken from any session file
 /// it already produced, so the synthetic file looks like the CLI's own.
 fn claude_version() -> String {
-    let root = claude_paths::projects_dir();
+    let roots = claude_paths::projects_dirs();
     let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
-    for dir in std::fs::read_dir(&root).into_iter().flatten().flatten() {
+    for dir in roots
+        .iter()
+        .flat_map(|root| std::fs::read_dir(root).into_iter().flatten())
+        .flatten()
+    {
         for file in std::fs::read_dir(dir.path()).into_iter().flatten().flatten() {
             let path = file.path();
             if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {

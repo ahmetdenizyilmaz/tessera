@@ -1,6 +1,7 @@
 pub mod scanner;
 pub mod history_loader;
 pub mod fork_writer;
+pub mod routed_config;
 pub mod usage_parser;
 pub mod usage_checker;
 pub mod image_saver;

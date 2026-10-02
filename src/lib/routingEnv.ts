@@ -15,6 +15,7 @@ export const OPENROUTER_GATEWAY_URL = 'https://openrouter.ai/api';
  */
 export async function buildRoutingEnv(
   routing?: ClaudeRouting,
+  cwd?: string,
 ): Promise<Record<string, string> | null> {
   if (!routing || routing.gateway === 'anthropic') return null;
 
@@ -70,6 +71,11 @@ export async function buildRoutingEnv(
     // OpenRouter free routes can queue; a milder bump avoids spurious
     // retries without hiding a genuinely dead connection for long.
     env.CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS = '600000';
+    // The CLI asks for a 64k output budget, which OpenRouter charges against
+    // up front: on the free tier every request dies with "API Error: 402 ...
+    // you requested up to 64000 tokens, but can only afford 688". Ask for a
+    // budget a free route can actually front.
+    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = '8192';
   }
 
   const model = routing.model?.trim();
@@ -84,5 +90,24 @@ export async function buildRoutingEnv(
     env.ANTHROPIC_SMALL_FAST_MODEL = small;
     env.CLAUDE_CODE_SUBAGENT_MODEL = small;
   }
+
+  // `/model` in the CLI saves the pick as the default for every NEW session,
+  // in the shared ~/.claude/settings.json. Switching a routed panel's model
+  // used to leave e.g. "openrouter/free" as the default for normal Claude
+  // panels and for `claude` in a terminal — a gateway model they cannot reach.
+  // Give routed panels their own config home so that write stays contained.
+  try {
+    const dir = await invoke<string>('claude_routed_config_dir', {
+      key: routing.gateway === 'custom' ? baseUrl : routing.gateway,
+      model: model || null,
+      cwd: cwd || null,
+    });
+    if (dir) env.CLAUDE_CONFIG_DIR = dir;
+  } catch (err) {
+    // Routing still works without the split; the panel just shares the
+    // user's config home again, so say why rather than failing the spawn.
+    console.error('[routingEnv] no private config dir, /model will hit the shared one:', err);
+  }
+
   return env;
 }

@@ -165,8 +165,13 @@ fn parse_jsonl_file(path: &std::path::Path) -> UsageInfo {
 /// Scan all session .jsonl files modified in the last N hours and compute total cost.
 #[tauri::command]
 pub async fn session_parse_recent_usage(hours: u64) -> Result<UsageInfo, String> {
-    let projects_dir = claude_paths::projects_dir();
-    if !projects_dir.exists() {
+    // Shared home plus routed config homes — a gateway-routed panel's spend
+    // belongs in the same totals.
+    let projects_dirs: Vec<_> = claude_paths::projects_dirs()
+        .into_iter()
+        .filter(|p| p.exists())
+        .collect();
+    if projects_dirs.is_empty() {
         return Ok(UsageInfo::default());
     }
 
@@ -177,35 +182,40 @@ pub async fn session_parse_recent_usage(hours: u64) -> Result<UsageInfo, String>
     let mut total = UsageInfo::default();
 
     // Walk projects directory: projects/<encoded-folder>/<sessionId>.jsonl
-    if let Ok(project_dirs) = std::fs::read_dir(&projects_dir) {
-        for project_entry in project_dirs.flatten() {
-            let project_path = project_entry.path();
-            if !project_path.is_dir() {
+    let project_dirs = projects_dirs
+        .iter()
+        .filter_map(|root| std::fs::read_dir(root).ok())
+        .flatten()
+        .flatten();
+
+    for project_entry in project_dirs {
+        let project_path = project_entry.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+        let Ok(files) = std::fs::read_dir(&project_path) else {
+            continue;
+        };
+        for file_entry in files.flatten() {
+            let file_path = file_entry.path();
+            if file_path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
                 continue;
             }
-            if let Ok(files) = std::fs::read_dir(&project_path) {
-                for file_entry in files.flatten() {
-                    let file_path = file_entry.path();
-                    if file_path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            // Check modification time against cutoff
+            if let Ok(metadata) = std::fs::metadata(&file_path) {
+                if let Ok(modified) = metadata.modified() {
+                    if modified < cutoff {
                         continue;
                     }
-                    // Check modification time against cutoff
-                    if let Ok(metadata) = std::fs::metadata(&file_path) {
-                        if let Ok(modified) = metadata.modified() {
-                            if modified < cutoff {
-                                continue;
-                            }
-                        }
-                    }
-                    let file_info = parse_jsonl_file(&file_path);
-                    total.input_tokens += file_info.input_tokens;
-                    total.output_tokens += file_info.output_tokens;
-                    total.cache_read_tokens += file_info.cache_read_tokens;
-                    total.cache_write_tokens += file_info.cache_write_tokens;
-                    total.message_count += file_info.message_count;
-                    total.total_cost_usd += file_info.total_cost_usd;
                 }
             }
+            let file_info = parse_jsonl_file(&file_path);
+            total.input_tokens += file_info.input_tokens;
+            total.output_tokens += file_info.output_tokens;
+            total.cache_read_tokens += file_info.cache_read_tokens;
+            total.cache_write_tokens += file_info.cache_write_tokens;
+            total.message_count += file_info.message_count;
+            total.total_cost_usd += file_info.total_cost_usd;
         }
     }
 

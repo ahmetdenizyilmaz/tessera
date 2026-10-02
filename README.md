@@ -40,6 +40,13 @@ Coding-agent panels provide the CLI's file, command, and MCP tools. Direct API a
 panels provide streaming conversations. Available models and tool support depend on the chosen
 provider, endpoint, and model.
 
+A Claude Code panel routed to OpenRouter, Ollama, or a custom gateway runs against its own
+`CLAUDE_CONFIG_DIR` under `~/.tessera/claude-config/`, seeded once from your real config. The
+CLI's `/model` saves the model you pick as the default for every new session, so without the
+split a routed panel would leave a gateway-only model as the default for ordinary Claude panels
+and for `claude` in a terminal. Sessions started in routed panels still appear in Tessera's
+session list, history, and usage totals.
+
 See the [Codex guide](docs/codex-provider.md) for login discovery, session resume, permission
 defaults, and the separate Preview build.
 

@@ -48,10 +48,73 @@ pub fn find_claude_exe() -> Option<PathBuf> {
     None
 }
 
-/// Returns the path to ~/.claude
+/// Returns the path to ~/.claude, honoring CLAUDE_CONFIG_DIR the same way the
+/// CLI does — otherwise a user who sets it would have the CLI writing one
+/// place while every reader here looked in another.
 pub fn claude_home() -> PathBuf {
+    if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR") {
+        let dir = PathBuf::from(dir);
+        if !dir.as_os_str().is_empty() {
+            return dir;
+        }
+    }
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     home.join(".claude")
+}
+
+/// The private Claude config home for a gateway-routed panel.
+///
+/// `/model` inside the CLI saves the chosen model as the user's default for
+/// every new session, so one routed panel picking an OpenRouter model used to
+/// leave `model: "openrouter/free"` in the shared ~/.claude/settings.json —
+/// breaking every other panel, and plain `claude` in a terminal. Routed panels
+/// get their own config home (CLAUDE_CONFIG_DIR) so that write stays local to
+/// the gateway it belongs to.
+pub fn routed_home(key: &str) -> PathBuf {
+    crate::app_paths::data_dir()
+        .join("claude-config")
+        .join(sanitize_key(key))
+}
+
+/// Directory names are derived from user-supplied gateway/URL strings, so keep
+/// them to a flat, path-safe token.
+fn sanitize_key(key: &str) -> String {
+    let cleaned: String = key
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    let trimmed = cleaned.trim_matches('-').to_string();
+    if trimmed.is_empty() { "gateway".to_string() } else { trimmed }
+}
+
+/// Every routed config home Tessera has created, newest first is irrelevant —
+/// order only decides which duplicate a lookup finds first, and session ids
+/// are unique across all of them.
+pub fn routed_homes() -> Vec<PathBuf> {
+    let root = crate::app_paths::data_dir().join("claude-config");
+    let mut homes: Vec<PathBuf> = match std::fs::read_dir(&root) {
+        Ok(entries) => entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    homes.sort();
+    homes
+}
+
+/// The shared config home first, then the routed ones. Readers walk all of
+/// them so a routed panel's transcripts still appear in the session list,
+/// history and usage totals.
+pub fn claude_homes() -> Vec<PathBuf> {
+    let mut homes = vec![claude_home()];
+    for home in routed_homes() {
+        if !homes.contains(&home) {
+            homes.push(home);
+        }
+    }
+    homes
 }
 
 /// Returns the path to ~/.claude/history.jsonl
@@ -59,9 +122,19 @@ pub fn history_jsonl_path() -> PathBuf {
     claude_home().join("history.jsonl")
 }
 
+/// Every history.jsonl, shared and routed.
+pub fn history_jsonl_paths() -> Vec<PathBuf> {
+    claude_homes().into_iter().map(|h| h.join("history.jsonl")).collect()
+}
+
 /// Returns the path to ~/.claude/projects/
 pub fn projects_dir() -> PathBuf {
     claude_home().join("projects")
+}
+
+/// Every projects/ directory, shared and routed.
+pub fn projects_dirs() -> Vec<PathBuf> {
+    claude_homes().into_iter().map(|h| h.join("projects")).collect()
 }
 
 /// Encode a project path for use as a directory name.
@@ -89,16 +162,18 @@ pub fn encode_project_path(path: &str) -> String {
 /// both `C--Works-…` and `c--Works-…` exist side by side in practice, and an
 /// exact-only match loses whichever one the caller didn't guess.
 pub fn find_project_dir(encoded: &str) -> Option<PathBuf> {
-    let root = projects_dir();
-    let exact = root.join(encoded);
-    if exact.is_dir() {
-        return Some(exact);
-    }
-    for entry in std::fs::read_dir(&root).ok()?.flatten() {
-        if entry.file_name().to_string_lossy().eq_ignore_ascii_case(encoded) {
-            let path = entry.path();
-            if path.is_dir() {
-                return Some(path);
+    for root in projects_dirs() {
+        let exact = root.join(encoded);
+        if exact.is_dir() {
+            return Some(exact);
+        }
+        let Ok(entries) = std::fs::read_dir(&root) else { continue };
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().eq_ignore_ascii_case(encoded) {
+                let path = entry.path();
+                if path.is_dir() {
+                    return Some(path);
+                }
             }
         }
     }
@@ -125,7 +200,8 @@ pub fn session_file_path(project_path: &str, session_id: &str) -> PathBuf {
     }
 
     if !session_id.is_empty() {
-        if let Ok(entries) = std::fs::read_dir(projects_dir()) {
+        for root in projects_dirs() {
+            let Ok(entries) = std::fs::read_dir(root) else { continue };
             for entry in entries.flatten() {
                 let candidate = entry.path().join(&file_name);
                 if candidate.exists() {

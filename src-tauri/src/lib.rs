@@ -161,6 +161,7 @@ pub fn run() {
             sessions::history_loader::session_load_history,
             sessions::fork_writer::session_write_fork,
             sessions::fork_writer::codex_write_fork_thread,
+            sessions::routed_config::claude_routed_config_dir,
             sessions::usage_parser::session_parse_usage,
             sessions::usage_parser::session_parse_recent_usage,
             sessions::usage_checker::check_claude_usage,

@@ -89,7 +89,7 @@ const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
     const model = instance?.config?.model;
     const systemPrompt = instance?.config?.systemPrompt;
 
-    buildRoutingEnv(instance?.config?.routing)
+    buildRoutingEnv(instance?.config?.routing, projectDir)
       .then((env) =>
         spawn(projectDir, {
           model: model || undefined,

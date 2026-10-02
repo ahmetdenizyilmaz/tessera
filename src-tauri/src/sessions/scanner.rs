@@ -40,12 +40,23 @@ fn to_epoch_secs(ts: f64) -> f64 {
 fn scan_history() -> HashMap<String, (String, String, f64)> {
     let mut sessions: HashMap<String, (String, String, f64)> = HashMap::new();
 
-    let file = match std::fs::File::open(claude_paths::history_jsonl_path()) {
-        Ok(f) => f,
-        Err(_) => return sessions,
-    };
-    let reader = std::io::BufReader::new(file);
+    for path in claude_paths::history_jsonl_paths() {
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        scan_history_file(std::io::BufReader::new(file), &mut sessions);
+    }
 
+    sessions
+}
+
+/// One history.jsonl into the accumulator, so the shared log and each routed
+/// config home's log fold into the same session map.
+fn scan_history_file<R: std::io::BufRead>(
+    reader: R,
+    sessions: &mut HashMap<String, (String, String, f64)>,
+) {
     // Group by sessionId, keeping latest timestamp and first display
     for line in reader.lines() {
         let line = match line {
@@ -80,8 +91,6 @@ fn scan_history() -> HashMap<String, (String, String, f64)> {
             })
             .or_insert((display, project, ts));
     }
-
-    sessions
 }
 
 /// Pull the launch cwd and a first-prompt preview out of a transcript's head.
@@ -167,10 +176,13 @@ fn read_transcript_head(path: &Path) -> (Option<String>, Option<String>) {
 fn scan_disk(history: &HashMap<String, (String, String, f64)>) -> Vec<SessionInfo> {
     let mut out = Vec::new();
 
-    let projects = match std::fs::read_dir(claude_paths::projects_dir()) {
-        Ok(p) => p,
-        Err(_) => return out,
-    };
+    // Shared ~/.claude plus every routed config home: a panel on OpenRouter or
+    // Ollama writes its transcripts under its own CLAUDE_CONFIG_DIR, and those
+    // sessions belong in the same list.
+    let projects = claude_paths::projects_dirs()
+        .into_iter()
+        .filter_map(|root| std::fs::read_dir(root).ok())
+        .flatten();
 
     for project_entry in projects.flatten() {
         let project_dir = project_entry.path();

@@ -108,7 +108,7 @@ export function usePty(instanceId: string) {
     }
 
     try {
-      const env = await buildRoutingEnv(instance.config.routing);
+      const env = await buildRoutingEnv(instance.config.routing, instance.config.cwd);
       await invoke('pty_spawn', {
         id: instanceId,
         cwd: instance.config.cwd,
