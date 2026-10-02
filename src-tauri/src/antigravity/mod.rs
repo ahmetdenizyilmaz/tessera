@@ -6,6 +6,7 @@
 //! here follows the installed CLI's documented flags; nothing reads its private
 //! conversation database.
 pub mod executable;
+pub mod mcp;
 pub mod state;
 
 use executable::Executable;
@@ -163,10 +164,12 @@ pub struct Session {
     generation: String,
     store: PathBuf,
     sink: Sink,
+    /// Extra environment for this panel's agy processes (its panel-bus address and token).
+    env: Vec<(String, String)>,
 }
 
 impl Session {
-    pub fn open(config: Config, executable: Executable, conversation_id: Option<String>, store: PathBuf, sink: Sink) -> Arc<Self> {
+    pub fn open(config: Config, executable: Executable, conversation_id: Option<String>, store: PathBuf, sink: Sink, env: Vec<(String, String)>) -> Arc<Self> {
         let saved: Saved = std::fs::read(&store)
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -191,6 +194,7 @@ impl Session {
             generation: uuid::Uuid::new_v4().to_string(),
             store,
             sink,
+            env,
         })
     }
     fn lock(&self) -> MutexGuard<'_, Inner> {
@@ -253,6 +257,7 @@ impl Session {
         let mut command = inner.executable.command();
         command
             .args(inner.config.stream_args(inner.conversation_id.as_deref()))
+            .envs(self.env.iter().cloned())
             .current_dir(&inner.config.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -678,7 +683,7 @@ impl AntigravityManager {
     }
 }
 
-async fn run(executable: &Executable, args: &[&str], seconds: u64) -> Result<String, String> {
+pub(crate) async fn run(executable: &Executable, args: &[&str], seconds: u64) -> Result<String, String> {
     let mut command = tokio::process::Command::from(executable.command());
     command.args(args).stdin(Stdio::null()).kill_on_drop(true);
     let output = tokio::time::timeout(Duration::from_secs(seconds), command.output())
@@ -804,7 +809,7 @@ pub async fn antigravity_configure(
         }
         let executable = executable::resolve(&config.executable_path)?;
         let store = crate::app_paths::data_dir().join("antigravity").join(format!("{}.json", config.data_id));
-        let session = Session::open(config, executable, conversation_id, store, activity_sink(&app, &id));
+        let session = Session::open(config, executable, conversation_id, store, activity_sink(&app, &id), mcp::panel_env(&app, &id));
         state.sessions.lock().unwrap().insert(id.clone(), session.clone());
         session
     };
@@ -933,6 +938,9 @@ pub async fn antigravity_terminal_spawn(
         command.args(["--prompt-interactive", prompt.as_str()]);
     }
     command.cwd(&config.cwd);
+    for (key, value) in &session.env {
+        command.env(key, value);
+    }
     for key in ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CODEX_THREAD_ID"] {
         command.env_remove(key);
     }
@@ -1061,7 +1069,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let (sink, events) = collecting_sink();
         let executable = Executable { program: root.join("agy-not-installed.exe"), args: vec![] };
-        let session = Session::open(config(&root), executable, None, root.join("panel.json"), sink);
+        let session = Session::open(config(&root), executable, None, root.join("panel.json"), sink, vec![]);
         let error = session.send("hello".into()).await.unwrap_err();
         assert!(error.starts_with("Cannot start Antigravity"), "{error}");
         let snapshot = session.snapshot();
@@ -1071,7 +1079,7 @@ mod tests {
         assert_eq!(snapshot["items"].as_array().unwrap().last().unwrap()["level"], "failed");
         assert!(events.lock().unwrap().is_empty(), "a turn that never started is not an Activity turn");
         // The question survives a restart of the app.
-        let reopened = Session::open(config(&root), Executable { program: root.join("x"), args: vec![] }, None, root.join("panel.json"), collecting_sink().0);
+        let reopened = Session::open(config(&root), Executable { program: root.join("x"), args: vec![] }, None, root.join("panel.json"), collecting_sink().0, vec![]);
         assert_eq!(reopened.snapshot()["items"][0]["text"], "hello");
         let _ = std::fs::remove_dir_all(root);
     }
@@ -1092,7 +1100,7 @@ mod tests {
             c.executable_path = path.clone();
             c.data_id = name.into();
             let (sink, events) = collecting_sink();
-            (Session::open(c.clone(), executable::resolve(&path).unwrap(), conversation, root.join(format!("{name}.json")), sink), events)
+            (Session::open(c.clone(), executable::resolve(&path).unwrap(), conversation, root.join(format!("{name}.json")), sink, vec![]), events)
         };
         async fn idle(session: &Arc<Session>) {
             for _ in 0..1200 {

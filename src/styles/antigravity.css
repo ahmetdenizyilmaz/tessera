@@ -11,3 +11,12 @@
 .antigravity-notice { margin: 8px 0; }
 .antigravity-working { margin: 8px 0; }
 .antigravity-usage { margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.antigravity-mcp { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.antigravity-mcp h4, .antigravity-mcp h5 { margin: 6px 0 0; }
+.antigravity-mcp code { overflow-wrap: anywhere; }
+.antigravity-mcp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.antigravity-mcp-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.antigravity-mcp-list li > span { min-width: 0; overflow-wrap: anywhere; }
+.antigravity-mcp-list small { color: var(--text-muted); }
+.antigravity-mcp-list button { flex-shrink: 0; }
+.antigravity-mcp-problem { color: #ff8d8d !important; }

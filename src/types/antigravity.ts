@@ -60,3 +60,10 @@ export interface AntigravityDiscovery {
   modelsError: string | null;
   auth: { state: 'signed-in' | 'api-key' | 'signed-out' | 'unknown'; detail: string };
 }
+
+/** agy's global MCP list as Settings shows it, and what could be added to it. */
+export interface AntigravityMcpStatus {
+  servers: Array<{ name: string; target: string; disabled: boolean; tessera: boolean }>;
+  candidates: Array<{ name: string; source: string; target: string; problem: string | null; added: boolean }>;
+  panelTools: { name: string; registered: boolean; current: boolean; allowedInChat: boolean; rules: string[] };
+}

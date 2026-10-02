@@ -115,6 +115,8 @@ Set up the connections you want to use:
 - **Antigravity:** install the Antigravity CLI (`irm https://antigravity.google/cli/install.ps1 | iex`)
   and run `agy` once to sign in. Create a Chat or Terminal panel and choose
   **Antigravity · Google sign-in** under Coding agents; the setup step reports the CLI and sign-in status.
+  To let the Antigravity agent message other panels or use your existing MCP servers, enable them
+  under **Settings → Antigravity → MCP tools** (this edits agy's global MCP list).
 - **Local chat:** start Ollama or LM Studio, make a model available, and configure its server URL
   in **Settings → LLM Providers**. Direct chat panels work independently of the coding-agent CLIs.
 

@@ -28,6 +28,7 @@ window.instances = useInstanceStore; window.layout = useLayoutStore; window.anti
 window.workspace = { save: serializeWorkspace, load: deserializeWorkspace };
 window.auth = { state: 'signed-in', detail: 'A saved Antigravity sign-in was found in Windows Credential Manager. Its validity is confirmed when a turn runs.' };
 window.discoverFail = null; window.startFail = null;
+window.mcp = { registered: false, allowed: false, added: {} };
 let conversations = 0;
 const touch = s => { s.rev += 1; s.revision = `fixture:${s.rev}`; };
 const item = (type, extra) => ({ id: crypto.randomUUID(), type, at: Date.now(), ...extra });
@@ -113,6 +114,16 @@ mockIPC(async (command, args) => {
     setTimeout(() => void emit(`pty-data-${args.id}`, '\x1b[?2004hNative Antigravity terminal fixture\r\n'), 30);
     return { conversationId: s.conversationId, warning: null };
   }
+  if (command === 'antigravity_mcp_status') return {
+    servers: [...Object.keys(window.mcp.added).map(name => ({ name, target: 'C:/tools/python.exe', disabled: false, tessera: false })), { name: 'my-own-server', target: 'npx', disabled: false, tessera: false }],
+    candidates: [{ name: 'desktop-control', source: 'Claude Code', target: 'C:/tools/python.exe', problem: null, added: !!window.mcp.added['desktop-control'] },
+      { name: 'old-events', source: 'Tessera MCP manager', target: 'https://example.com/sse', problem: 'uses the legacy SSE transport, which agy does not support.', added: false }],
+    panelTools: { name: 'tessera-panels', registered: window.mcp.registered, current: window.mcp.registered, allowedInChat: window.mcp.allowed,
+      rules: ['mcp(tessera-panels/list_panels)', 'mcp(tessera-panels/send_to_panel)', 'mcp(tessera-panels/read_panel)'] },
+  };
+  if (command === 'antigravity_mcp_panel_tools') { window.mcp.registered = args.enable; window.mcp.allowed = args.enable && args.allowInChat; return; }
+  if (command === 'antigravity_mcp_import') { window.mcp.added[args.name] = true; return; }
+  if (command === 'antigravity_mcp_remove') { delete window.mcp.added[args.name]; return; }
   if (command === 'pty_capabilities') return { windowsPty: { backend: 'conpty', buildNumber: 26200 } };
   if (command === 'pty_read_buffer') return '';
   if (command === 'plugin:dialog|open') return 'C:/fixture/project';

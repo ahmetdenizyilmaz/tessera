@@ -130,14 +130,43 @@ Antigravity panels are ordinary panels: grouping, moving between groups, renamin
   panel's own agy process even when the panel is hidden in a group. A busy panel returns an
   explicit "still working" error. Terminal panels receive messages by paste-and-Enter and
   have no readable transcript.
-- **Sending messages: not available.** agy 1.2.15 loads MCP servers only from its global
-  `~/.gemini/config/mcp_config.json` or from plugins; it has no per-session MCP option. Giving
-  one panel the Tessera panel tools would mean writing a per-panel address and token into your
-  global Antigravity configuration, so the Antigravity agent cannot call `list_panels`,
-  `send_to_panel` or `read_panel` itself. Other agents can still hand work to it.
+- **Sending messages (opt-in):** enable **Settings → Antigravity → MCP tools → Panel messaging**
+  and the Antigravity agent can call `list_panels`, `send_to_panel` and `read_panel` itself.
+  See the next section for what that writes.
 - **Forks:** an Antigravity chat can be forked into any provider. Forking *into* Antigravity
   attaches the earlier conversation to the first message (agy has no history import); a forked
   terminal starts with `--prompt-interactive` carrying the newest 12,000 characters.
+
+## MCP tools
+
+agy 1.2.15 has one MCP list for every agy session on the PC, in
+`~/.gemini/config/mcp_config.json` (or packaged in plugins). It has no per-session MCP option,
+so Tessera cannot hand a panel its own server list the way it does for Claude and Codex.
+**Settings → Antigravity → MCP tools** therefore changes that global list, only when you press
+a button, and only through agy's own `agy mcp add` / `agy mcp remove`. Open agy sessions,
+including ones outside Tessera, pick the change up live.
+
+- **Panel messaging.** Adds one stdio entry (`tessera-panels`; `tessera-preview-panels` for the
+  Preview build) that runs this Tessera executable with `--panel-mcp-bridge`. agy passes each
+  process's environment on to its stdio servers, and Tessera starts every Antigravity panel with
+  that panel's loopback bus address and token, so the one global entry still acts as the right
+  panel. In an agy session Tessera did not start, the bridge is a valid server with no tools.
+  The bridge only ever talks to `127.0.0.1`. If Tessera is closed or restarted, tool calls fail
+  with a message telling the agent to have the panel restarted.
+- **Chat needs allow rules.** agy treats every MCP call as an action needing approval, and
+  headless chat auto-denies those. The checkbox adds exactly three rules to `permissions.allow`
+  in `~/.gemini/antigravity-cli/settings.json` (`mcp(tessera-panels/list_panels)`,
+  `.../send_to_panel`, `.../read_panel`) and removes them when turned off; nothing else in that
+  file is changed. agy matches `mcp(server/tool)` exactly, a bare `mcp(server)` does not work.
+  Without the rules, terminal panels can still use the tools because agy asks you there.
+- **Your other MCP servers.** Servers enabled in Tessera's MCP manager and in Claude Code's user
+  settings are listed with **Add to Antigravity**, which copies the command, arguments and
+  environment (or URL and headers). Legacy SSE servers are listed but cannot be added: agy
+  supports stdio and Streamable HTTP only. Tool calls from chat are auto-denied until you add
+  your own `mcp(server/tool)` rules or use Allow everything; a terminal panel prompts instead.
+  Tessera does not write allow rules for servers other than its own.
+- Messages sent by an Antigravity agent are recorded in Activity as handoffs, linked to the
+  turn that sent them and the turn they started.
 
 ## Activity, token flow and Office
 
@@ -150,8 +179,8 @@ Antigravity panels are ordinary panels: grouping, moving between groups, renamin
   turn's own reported steps and says so. A stopped turn keeps only its completed steps. A turn
   with no reported usage is **unavailable**, never zero. Repeated events for a finished turn
   change nothing. `thinking_tokens` are part of output and are not added twice.
-- A message received from another panel links to its recorded handoff. Handoffs *from*
-  Antigravity do not exist (see above).
+- A message received from another panel links to its recorded handoff, and a message an
+  Antigravity agent sends (with panel messaging enabled) is recorded as a handoff from its turn.
 - Office: each chat panel has a character whose station follows the reported tool, and which
   stays working for the whole open turn however quiet the output is. It is idle only after agy
   reports the turn's end, "waiting" when agy ends a turn awaiting your reply, and in error on a
@@ -181,3 +210,6 @@ $env:TESSERA_ANTIGRAVITY_TEST_EXECUTABLE = "$env:LOCALAPPDATA\agy\bin\agy.exe"
 
 Live in the app (Preview build only, see the Codex guide for the Preview setup):
 `node tools/smoke-antigravity.mjs http://127.0.0.1:9222 C:\path\to\scratch-project`.
+`tools/smoke-antigravity-paste.mjs` (terminal paste) and `tools/smoke-antigravity-messaging.mjs`
+(an agent messaging another panel through the bridge) take the same arguments; the latter
+registers the Preview bridge in agy's MCP list for the run and removes it afterwards.

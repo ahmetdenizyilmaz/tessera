@@ -257,6 +257,34 @@ try {
   await page.getByLabel('Permissions').selectOption('plan');
   await page.getByRole('button', { name: 'Save Antigravity defaults' }).click();
   await expect(page.getByText('Defaults saved. Existing panels are unchanged.')).toBeVisible();
+  // MCP: nothing is written to agy's global configuration until a button is pressed.
+  const mcp = page.getByRole('region', { name: 'Antigravity MCP tools' });
+  await expect(mcp.locator('.antigravity-mcp-state')).toContainText('Not enabled');
+  expect((await calls('antigravity_mcp_panel_tools')).length + (await calls('antigravity_mcp_import')).length).toBe(0);
+  await expect(mcp.getByText('mcp(tessera-panels/send_to_panel)')).toBeVisible();
+  await mcp.getByRole('button', { name: 'Enable panel messaging' }).click();
+  await expect(mcp.locator('.antigravity-mcp-state')).toContainText('Enabled · chat and terminal panels can use it.');
+  expect((await calls('antigravity_mcp_panel_tools')).at(-1)).toEqual({ executablePath: '', enable: true, allowInChat: true });
+  await mcp.getByLabel('Let chat panels call these three tools without a prompt').uncheck();
+  await mcp.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(mcp.locator('.antigravity-mcp-state')).toContainText('Chat panels cannot: calls are auto-denied');
+  expect((await calls('antigravity_mcp_panel_tools')).at(-1)).toMatchObject({ enable: true, allowInChat: false });
+  const control = mcp.locator('li').filter({ hasText: 'desktop-control' });
+  await expect(control).toContainText('Claude Code');
+  await control.getByRole('button', { name: 'Add to Antigravity' }).click();
+  await expect(control.getByRole('button', { name: 'Remove from Antigravity' })).toBeVisible();
+  expect(await calls('antigravity_mcp_import')).toEqual([{ executablePath: '', name: 'desktop-control' }]);
+  const legacy = mcp.locator('li').filter({ hasText: 'old-events' });
+  await expect(legacy).toContainText('legacy SSE transport');
+  await expect(legacy.getByRole('button', { name: 'Add to Antigravity' })).toBeDisabled();
+  await expect(mcp.getByText('my-own-server')).toBeVisible();
+  await control.getByRole('button', { name: 'Remove from Antigravity' }).click();
+  await expect(control.getByRole('button', { name: 'Add to Antigravity' })).toBeEnabled();
+  await mcp.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(mcp.locator('.antigravity-mcp-state')).toContainText('Not enabled');
+  expect((await calls('antigravity_mcp_panel_tools')).at(-1)).toMatchObject({ enable: false });
+  await page.screenshot({ path: `${shots}/mcp-settings.png`, fullPage: true });
+  console.log('PASS MCP settings: opt-in panel messaging with explicit chat allow rules, copying an existing server, unsupported SSE explained, removal');
   expect(errors).toEqual([]);
   console.log('PASS terminal uses the Antigravity PTY with a pinned conversation (never Claude/Codex/OpenCode), honest terminal usage note, and defaults page');
 } catch (error) {

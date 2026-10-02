@@ -14,6 +14,7 @@
 //!   (`panel_registry_sync`) and paint an echo of injected messages out
 //!   (`window.__panelInject`, fire-and-forget).
 
+pub mod bridge;
 pub mod plugin;
 pub mod registry;
 pub mod server;
@@ -32,7 +33,7 @@ use registry::{PanelInfo, PanelRegistry};
 pub const SERVER_NAME: &str = "panels";
 
 /// Shared vocabulary for MCP discovery and the Codex session instructions.
-pub const MESSAGING_INSTRUCTIONS: &str = "Tessera contains separate Claude and Codex coding-agent conversations. \
+pub const MESSAGING_INSTRUCTIONS: &str = "Tessera contains separate coding-agent conversations (Claude, Codex, OpenCode, Antigravity). \
 A panel is also called a session, subwindow, sub-window, pane, tab, chat, conversation, or the other agent. \
 When the user asks to send, tell, ask, message, or forward something to another open session \
 (for example 'send the other session this message', 'ask the backend subwindow', or 'tell the other one'), \

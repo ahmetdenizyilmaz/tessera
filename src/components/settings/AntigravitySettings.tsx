@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSettingsStore } from '../../store/settingsStore';
 import { AntigravityOptionsForm } from '../antigravity/AntigravityOptionsForm';
+import { AntigravityMcpSettings } from './AntigravityMcpSettings';
 export function AntigravitySettings() {
   const [value, setValue] = useState(() => ({ ...useSettingsStore.getState().settings.antigravityDefaults }));
   const [message, setMessage] = useState('');
@@ -12,5 +13,6 @@ export function AntigravitySettings() {
     <AntigravityOptionsForm value={value} onChange={next => { setValue(next); setMessage(''); }} />
     <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={save}>Save Antigravity defaults</button>
     {message && <p className="opencode-hint" role="status">{message}</p>}
+    <AntigravityMcpSettings executablePath={value.executablePath} />
   </div>;
 }
