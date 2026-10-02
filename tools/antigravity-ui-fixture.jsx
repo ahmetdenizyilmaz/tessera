@@ -109,7 +109,8 @@ mockIPC(async (command, args) => {
     const s = window.snapshots[args.id];
     if (window.terminalMissing) { s.error = 'The saved Antigravity conversation conv-gone was not found on this PC, so it was not resumed.'; s.recovery = 'new_conversation'; touch(s); throw s.error; }
     s.conversationId ??= `conv-fixture-${++conversations}`; touch(s);
-    setTimeout(() => void emit(`pty-output-${args.id}`, 'Native Antigravity terminal fixture\r\n'), 30);
+    // Like the real TUI, the fixture enables bracketed paste (DECSET 2004).
+    setTimeout(() => void emit(`pty-data-${args.id}`, '\x1b[?2004hNative Antigravity terminal fixture\r\n'), 30);
     return { conversationId: s.conversationId, warning: null };
   }
   if (command === 'pty_capabilities') return { windowsPty: { backend: 'conpty', buildNumber: 26200 } };

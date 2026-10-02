@@ -63,6 +63,11 @@ with `--conversation <id>`.
 Terminal panels run the native `agy` TUI in a PTY, so every native feature (slash commands,
 approval prompts, sign-in, workspace trust prompt) works as in any terminal.
 
+Pasting (Ctrl+V, Shift+Insert, right-click) is sent as a bracketed paste, which is the only
+form agy's TUI reads as a paste. Sent as raw text, agy types it one character at a time and
+treats every line break as Enter, submitting a multi-line paste line by line. Claude Code and
+Codex terminals recognise a raw paste themselves and are unchanged.
+
 Before the TUI starts, Tessera pins an exact conversation: it starts the headless interface
 without sending anything, reads the conversation ID from its `init` event, exits it, and then
 launches `agy --conversation <id>`. That costs a few seconds at startup and no model call, and

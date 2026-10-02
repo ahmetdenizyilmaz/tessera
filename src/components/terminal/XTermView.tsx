@@ -18,6 +18,7 @@ import { activateTerminalLink } from '../../lib/terminalLinks';
 import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
 import { terminalTheme } from '../../lib/terminalTheme';
+import { terminalPasteData } from '../../lib/terminalPaste';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
 
@@ -227,12 +228,20 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       return true;
     };
 
+    // Claude Code and Codex recognise a raw burst of input as a paste. agy does
+    // not: it reads a paste only as the bracketed block it asked for, and
+    // otherwise types it key by key and submits at every line break.
+    const pasteText = (text: string) => {
+      const antigravity = useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'antigravity';
+      write(terminalPasteData(text, antigravity && terminal.modes.bracketedPasteMode));
+    };
+
     const pasteClipboard = () => {
       navigator.clipboard.readText()
         .then((text) => {
           if (text && mounted) {
             scrollGuard.revealInput();
-            write(text);
+            pasteText(text);
           }
         })
         .catch((err) => console.error('Paste failed:', err));
@@ -282,7 +291,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         e.preventDefault();
         e.stopPropagation();
         scrollGuard.revealInput();
-        write(text);
+        pasteText(text);
       }
     };
     container.addEventListener('paste', handleNativePaste, true);

@@ -233,6 +233,15 @@ try {
   await expect(page.locator('.xterm')).toBeVisible();
   await expect.poll(async () => (await calls('antigravity_terminal_spawn')).length).toBe(1);
   expect((await calls('antigravity_terminal_spawn'))[0]).toMatchObject({ initialPrompt: null });
+  // agy reads a paste only as the bracketed block it asked for; raw text would be
+  // typed key by key and submitted at every line break.
+  await expect(page.locator('.xterm-rows')).toContainText('Native Antigravity terminal fixture');
+  await page.locator('.xterm-helper-textarea').evaluate(node => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', 'first line\r\nsecond line');
+    node.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+  });
+  await expect.poll(async () => (await calls('pty_write')).at(-1)?.data).toBe('\x1b[200~first line\rsecond line\x1b[201~');
   expect((await calls('antigravity_configure')).at(-1)).toMatchObject({ start: false });
   const terminal = page.locator('[data-panel^="Antigravity ·"]');
   await expect(terminal.getByLabel('Message Antigravity')).toHaveCount(0);
