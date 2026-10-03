@@ -25,3 +25,5 @@ Thumbs.db
 /crop_*.png
 /screenshot_*.png
 /screenshot_*.txt
+
+.tmp/

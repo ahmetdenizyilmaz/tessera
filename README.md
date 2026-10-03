@@ -92,8 +92,10 @@ agents, credentials, model discovery, permissions, and session storage.
 - **MCP server manager** — add and toggle MCP servers for coding-agent panels.
 - **Permission controls** — see coding-agent questions and approvals in the app and configure
   per-panel permissions, with separate Claude and Codex defaults.
-- **Usage dashboard, workspaces & plugins** — token analytics, save/reload whole layouts, and small
-  built-in tools (notepad, timer).
+- **Usage dashboard, workspaces & plugins** — `ccusage`-style daily/monthly/session/model token
+  reports across Claude Code, Codex and Antigravity (Claude and Codex read from their own session
+  files, Antigravity from Tessera's Activity records; list-price costs for Claude models), save/reload
+  whole layouts, and small built-in tools (notepad, timer).
 
 ---
 

@@ -10,18 +10,17 @@ export interface Tokens {
   unpriced: number;
 }
 export interface PeriodRow extends Tokens { period: string; models: string[]; messages: number }
-export interface ModelRow extends Tokens { model: string; priced: boolean; messages: number }
-export interface SessionRow extends Tokens { sessionId: string; project: string; models: string[]; firstAt: number; lastAt: number; messages: number }
+export interface ProviderRow extends Tokens { provider: string; sessions: number; messages: number }
+export interface ModelRow extends Tokens { provider: string; model: string; priced: boolean; messages: number }
+export interface SessionRow extends Tokens { provider: string; sessionId: string; project: string; models: string[]; firstAt: number; lastAt: number; messages: number }
 export interface ProjectRow extends Tokens { project: string; sessions: number; messages: number }
-/** Other agents from Activity records: tokens only. */
-export interface AgentRow { period: string; provider: string; model: string; turns: number; input: number; output: number; cacheRead: number; cacheWrite: number }
 export interface UsageReport {
   daily: PeriodRow[];
   monthly: PeriodRow[];
   models: ModelRow[];
   sessions: SessionRow[];
   projects: ProjectRow[];
-  agents: AgentRow[];
+  providers: ProviderRow[];
   totals: Tokens;
   messages: number;
   files: number;

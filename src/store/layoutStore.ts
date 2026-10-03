@@ -294,11 +294,13 @@ export function computeRects(
         sideY += sideFracs[i];
       });
 
-      // Bottom panels (equal widths, spanning only the main area width)
+      // Bottom panels (equal widths, spanning only the main area width). They
+      // fill from the RIGHT: the sidebar stack runs top to bottom, so panels
+      // keep flowing clockwise instead of jumping back to the left edge.
       if (hasBottom) {
         const botW = mainW / bottomIds.length;
         bottomIds.forEach((id, i) => {
-          rects.set(id, { x: i * botW, y: mainH, w: botW, h: bottomH });
+          rects.set(id, { x: (bottomIds.length - 1 - i) * botW, y: mainH, w: botW, h: bottomH });
         });
       }
       break;

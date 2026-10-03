@@ -6,14 +6,14 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { UsageInfo } from '../types/ipc';
 
 /** Which structured source knows a panel's usage. Claude: its own session file.
- *  Codex and Antigravity: the turns Tessera recorded in Activity (tokens only,
- *  no list price). OpenCode and API chats record nothing, and Antigravity
+ *  Codex: its own rollout file. Antigravity: the turns Tessera recorded in
+ *  Activity. Both are tokens only (no list price). OpenCode and API chats record nothing, and Antigravity
  *  terminals report nothing, so they are left out rather than shown as zero. */
 export function usageSource(instance: { config: { agentProvider?: string; panelView?: string; cwd: string; llmConfig?: unknown }; claudeSessionId?: string; codexThreadId?: string; antigravityConversationId?: string }): { command: string; args: Record<string, string>; provider: string } | null {
   if (instance.config.llmConfig) return null;
   const provider = instance.config.agentProvider ?? 'claude';
   if (provider === 'claude') return instance.claudeSessionId ? { command: 'session_parse_usage', args: { sessionId: instance.claudeSessionId, projectPath: instance.config.cwd }, provider } : null;
-  if (provider === 'codex') return instance.codexThreadId ? { command: 'activity_session_usage', args: { provider, sessionId: instance.codexThreadId }, provider } : null;
+  if (provider === 'codex') return instance.codexThreadId ? { command: 'codex_session_usage', args: { threadId: instance.codexThreadId }, provider } : null;
   if (provider === 'antigravity' && instance.config.panelView !== 'terminal') return instance.antigravityConversationId ? { command: 'activity_session_usage', args: { provider, sessionId: instance.antigravityConversationId }, provider } : null;
   return null;
 }

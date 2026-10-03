@@ -20,7 +20,8 @@ try {
   console.log('totals:', JSON.stringify(report.totals), 'tz', report.timezone);
   console.log('months:', report.monthly.map(m => `${m.period} $${m.cost.toFixed(2)} (${m.models.length} models)`).join(' | '));
   console.log('models:', report.models.map(m => `${m.model}${m.priced ? '' : ' (unpriced)'} $${m.cost.toFixed(2)}`).join(' | '));
-  console.log('agents rows:', report.agents.length, report.agents.slice(0, 3).map(a => `${a.period} ${a.provider} ${a.turns} turns ${a.input + a.output}`).join(' | '));
+  console.log('providers:', report.providers.map(p => `${p.provider}: ${p.sessions} sessions, ${p.messages} responses, ${p.input + p.output + p.cacheRead + p.cacheWrite} tokens, $${p.cost.toFixed(2)}`).join(' | '));
+  if (!report.providers.some(p => p.provider === 'codex')) throw new Error('Codex rollouts were not read.');
   if (!report.messages || !report.sessions.length) throw new Error('No Claude usage found although session files exist.');
   const sum = report.daily.reduce((s, d) => s + d.cost, 0);
   if (Math.abs(sum - report.totals.cost) > 1e-6) throw new Error(`daily costs ${sum} != total ${report.totals.cost}`);
@@ -29,9 +30,11 @@ try {
   console.log(`cached second read in ${Date.now() - again} ms`);
   console.log('PASS (live): usage_report reads the real session files, de-duplicates, prices, and caches');
 
-  await page.locator('.sidebar-nav button, [title="Analytics"], button:has-text("Analytics")').first().click().catch(() => {});
-  await page.getByRole('button', { name: 'Analytics' }).first().click().catch(() => {});
   const monthly = page.getByRole('button', { name: 'Monthly', exact: true });
+  if (!await monthly.isVisible()) {
+    await page.locator('.sidebar-nav button, [title="Analytics"], button:has-text("Analytics")').first().click().catch(() => {});
+    if (!await monthly.isVisible()) await page.getByRole('button', { name: 'Analytics' }).first().click().catch(() => {});
+  }
   await expect(monthly).toBeVisible();
   await page.getByRole('button', { name: 'All time', exact: true }).click();
   await expect(page.getByText('Total tokens')).toBeVisible();
@@ -41,12 +44,13 @@ try {
   await expect(page.locator('table tbody tr').first()).toContainText(/\d{4}-\d{2}/);
   await page.screenshot({ path: '.tmp/usage/monthly.png' });
   await page.getByRole('button', { name: 'Models', exact: true }).click();
-  await expect(page.locator('table')).toContainText('claude-');
+  await expect(page.locator('table').first()).toContainText('Codex');
+  await expect(page.locator('table').last()).toContainText('claude-');
   await page.screenshot({ path: '.tmp/usage/models.png' });
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await expect(page.locator('table tbody tr').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Other agents', exact: true }).click();
-  await page.screenshot({ path: '.tmp/usage/agents.png' });
+  await expect(page.locator('table').first()).toContainText('Codex');
+  await page.screenshot({ path: '.tmp/usage/sessions.png' });
   console.log('PASS (live): Analytics sidebar renders daily, monthly, models, sessions and other-agent tables from real data');
 } finally {
   await browser.close();

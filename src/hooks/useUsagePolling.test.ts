@@ -5,7 +5,7 @@ const base = { cwd: 'C:/p', agentProvider: undefined as string | undefined, pane
 
 it('reads each panel from the source that actually knows its usage', () => {
   expect(usageSource({ config: base, claudeSessionId: 'c1' })).toEqual({ command: 'session_parse_usage', args: { sessionId: 'c1', projectPath: 'C:/p' }, provider: 'claude' });
-  expect(usageSource({ config: { ...base, agentProvider: 'codex' }, codexThreadId: 't1' })).toEqual({ command: 'activity_session_usage', args: { provider: 'codex', sessionId: 't1' }, provider: 'codex' });
+  expect(usageSource({ config: { ...base, agentProvider: 'codex' }, codexThreadId: 't1' })).toEqual({ command: 'codex_session_usage', args: { threadId: 't1' }, provider: 'codex' });
   expect(usageSource({ config: { ...base, agentProvider: 'antigravity' }, antigravityConversationId: 'a1' })).toEqual({ command: 'activity_session_usage', args: { provider: 'antigravity', sessionId: 'a1' }, provider: 'antigravity' });
 });
 

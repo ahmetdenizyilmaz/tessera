@@ -179,6 +179,7 @@ pub fn run() {
             sessions::usage_parser::session_parse_usage,
             sessions::usage_parser::session_parse_recent_usage,
             sessions::usage_report::usage_report,
+            sessions::usage_report::codex_session_usage,
             activity::activity_session_usage,
             sessions::usage_checker::check_claude_usage,
             sessions::image_saver::save_chat_image,

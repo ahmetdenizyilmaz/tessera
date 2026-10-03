@@ -103,8 +103,10 @@ describe('stacked layout divider', () => {
     layout().setFocused('a');
     expect(layout().panelRects.get('a')).toMatchObject({ w: 60, h: 80 });
     const bottom = layout().layoutConfig!.panelOrder.slice(5).map(id => layout().panelRects.get(id)!);
-    expect(bottom[0].x).toBe(0);
-    expect(bottom.at(-1)!.x + bottom.at(-1)!.w).toBeCloseTo(60);
+    // The strip fills from the right so the order keeps flowing clockwise after the sidebar stack.
+    expect(bottom[0].x + bottom[0].w).toBeCloseTo(60);
+    expect(bottom.at(-1)!.x).toBe(0);
+    expect(bottom.map(r => r.x)).toEqual([...bottom.map(r => r.x)].sort((a, b) => b - a));
     expect(bottom.every(r => r.y === 80 && r.h === 20)).toBe(true);
     const mainWidth = layout().layoutConfig!.mainWidthPercent;
     layout().finishResize('x', [layout().layoutConfig!.panelOrder[5]], []);

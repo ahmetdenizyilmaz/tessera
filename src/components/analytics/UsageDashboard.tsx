@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { BarChart3, Download, RefreshCw } from 'lucide-react';
 import TokenChart from './TokenChart';
@@ -6,12 +6,12 @@ import CostBreakdown from './CostBreakdown';
 import { AnalyticsSummaryCards } from './AnalyticsSummaryCards';
 import { formatCost, formatTokens } from './chartTheme';
 import { providerName } from '../../lib/activityGraph';
-import type { AgentRow, PeriodRow, Tokens, UsageReport } from '../../types/usage';
+import type { PeriodRow, Tokens, UsageReport } from '../../types/usage';
 
-type Tab = 'daily' | 'monthly' | 'sessions' | 'models' | 'projects' | 'agents';
+type Tab = 'daily' | 'monthly' | 'sessions' | 'models' | 'projects';
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'daily', label: 'Daily' }, { key: 'monthly', label: 'Monthly' }, { key: 'sessions', label: 'Sessions' },
-  { key: 'models', label: 'Models' }, { key: 'projects', label: 'Projects' }, { key: 'agents', label: 'Other agents' },
+  { key: 'models', label: 'Models' }, { key: 'projects', label: 'Projects' },
 ];
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const total = (t: Tokens) => t.input + t.output + t.cacheWrite + t.cacheRead;
@@ -43,7 +43,8 @@ function TokenCells({ t, strong }: { t: Tokens; strong?: boolean }) {
 const TOKEN_HEADS = ['Input', 'Output', 'Cache create', 'Cache read', 'Total tokens', 'Cost (USD)'];
 
 function Table({ heads, rows, totals, empty }: { heads: string[]; rows: React.ReactNode; totals?: React.ReactNode; empty: string }) {
-  return <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'auto', maxHeight: '100%' }}>
+  // flexShrink 0: inside the scrolling column a table must not collapse when the page is taller than the sidebar.
+  return <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'auto', flexShrink: 0 }}>
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>{heads.map((h, i) => <th key={h} style={{ ...head, textAlign: i < heads.length - 6 ? 'left' : 'right' }}>{h}</th>)}</tr></thead>
       <tbody>{rows}{totals}</tbody>
@@ -84,17 +85,15 @@ export default function UsageDashboard() {
   // Session files change as agents work: refresh while the widget is open.
   useEffect(() => { const timer = setInterval(() => setGeneration(g => g + 1), 60000); return () => clearInterval(timer); }, []);
 
-  const agentsByPeriod = useMemo<AgentRow[]>(() => [...(report?.agents ?? [])].sort((a, b) => b.period.localeCompare(a.period) || a.provider.localeCompare(b.provider)), [report]);
 
   const exportCsv = () => {
     if (!report) return;
     const rows: (string | number)[][] = [];
     const push = (label: string, extra: string[], t: Tokens, more: (string | number)[] = []) => rows.push([label, ...extra, t.input, t.output, t.cacheWrite, t.cacheRead, total(t), t.cost.toFixed(4), ...more]);
     if (tab === 'daily' || tab === 'monthly') { rows.push([tab === 'daily' ? 'date' : 'month', 'models', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); (tab === 'daily' ? report.daily : report.monthly).forEach(r => push(r.period, [r.models.join(' ')], r)); }
-    else if (tab === 'sessions') { rows.push(['session_id', 'project', 'last_activity', 'models', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.sessions.forEach(r => push(r.sessionId, [r.project, new Date(r.lastAt).toISOString(), r.models.join(' ')], r)); }
-    else if (tab === 'models') { rows.push(['model', 'messages', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.models.forEach(r => push(r.model, [String(r.messages)], r)); }
-    else if (tab === 'projects') { rows.push(['project', 'sessions', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.projects.forEach(r => push(r.project, [String(r.sessions)], r)); }
-    else { rows.push(['period', 'provider', 'model', 'turns', 'input', 'output', 'cache_read', 'cache_write']); agentsByPeriod.forEach(r => rows.push([r.period, r.provider, r.model, r.turns, r.input, r.output, r.cacheRead, r.cacheWrite])); }
+    else if (tab === 'sessions') { rows.push(['provider', 'session_id', 'project', 'last_activity', 'models', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.sessions.forEach(r => push(r.provider, [r.sessionId, r.project, new Date(r.lastAt).toISOString(), r.models.join(' ')], r)); }
+    else if (tab === 'models') { rows.push(['provider', 'model', 'messages', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.models.forEach(r => push(r.provider, [r.model, String(r.messages)], r)); }
+    else { rows.push(['project', 'sessions', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.projects.forEach(r => push(r.project, [String(r.sessions)], r)); }
     const csv = rows.map(r => r.map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v)).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = `usage_${tab}_${startDate}_${endDate}.csv`; a.click();
@@ -131,7 +130,7 @@ export default function UsageDashboard() {
     <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error && <p role="alert" style={{ textAlign: 'center', color: 'var(--error)', fontSize: 13 }}>{error}</p>}
       {!report && loading && <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Reading Claude Code session files…</p>}
-      {report && tab !== 'agents' && <AnalyticsSummaryCards totalCost={report.totals.cost} totalInputTokens={report.totals.input} totalOutputTokens={report.totals.output} sessionsCount={report.sessions.length} />}
+      {report && <AnalyticsSummaryCards totalCost={report.totals.cost} totalInputTokens={report.totals.input} totalOutputTokens={report.totals.output} sessionsCount={report.sessions.length} />}
       {report && tab === 'daily' && <>
         {report.daily.length > 1 && <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
           <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Tokens per day</h3>
@@ -141,20 +140,26 @@ export default function UsageDashboard() {
       </>}
       {report && tab === 'monthly' && periodRows(report.monthly, report.totals, 'Month')}
       {report && tab === 'sessions' && <Table heads={['Session', 'Models', ...TOKEN_HEADS]} empty="No Claude Code sessions in this range."
-        rows={report.sessions.map(s => <tr key={s.sessionId} style={{ borderBottom: '1px solid var(--border)' }}>
-          <td style={{ ...cell, whiteSpace: 'normal' }}><div style={{ color: 'var(--text-primary)', fontWeight: 500 }} title={s.sessionId}>{s.project.split(/[\\/]/).pop() || s.project} · {s.sessionId.slice(0, 8)}</div><div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(s.lastAt).toLocaleString()} · {s.messages} messages</div></td>
+        rows={report.sessions.map(s => <tr key={`${s.provider}:${s.sessionId}`} style={{ borderBottom: '1px solid var(--border)' }}>
+          <td style={{ ...cell, whiteSpace: 'normal' }}><div style={{ color: 'var(--text-primary)', fontWeight: 500 }} title={s.sessionId}>{s.project.split(/[\\/]/).pop() || s.project} · {s.sessionId.slice(0, 8)}</div><div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{providerName(s.provider)} · {new Date(s.lastAt).toLocaleString()} · {s.messages} messages</div></td>
           <td style={{ ...cell, color: 'var(--text-secondary)' }}><ModelList models={s.models} /></td>
           <TokenCells t={s} />
         </tr>)}
         totals={report.sessions.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total · {report.sessions.length} sessions</td><td style={cell} /><TokenCells t={report.totals} strong /></tr>} />}
       {report && tab === 'models' && <>
+        <Table heads={['Agent', 'Sessions', 'Messages', ...TOKEN_HEADS]} empty="No usage in this range."
+          rows={report.providers.map(p => <tr key={p.provider} style={{ borderBottom: '1px solid var(--border)' }}>
+            <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{providerName(p.provider)}</td>
+            <td style={num}>{p.sessions}</td><td style={num}>{p.messages}</td><TokenCells t={p} />
+          </tr>)}
+          totals={report.providers.length > 1 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={num}>{report.sessions.length}</td><td style={num}>{report.messages}</td><TokenCells t={report.totals} strong /></tr>} />
         {report.models.some(m => m.cost > 0) && <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
           <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Cost by model</h3>
           <CostBreakdown data={report.models.filter(m => m.cost > 0).map(m => ({ model: shortModel(m.model), cost_usd: m.cost }))} />
         </div>}
         <Table heads={['Model', 'Messages', ...TOKEN_HEADS]} empty="No model usage in this range."
-          rows={report.models.map(m => <tr key={m.model} style={{ borderBottom: '1px solid var(--border)' }}>
-            <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{m.model}{!m.priced && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}> · no list price</span>}</td>
+          rows={report.models.map(m => <tr key={`${m.provider}:${m.model}`} style={{ borderBottom: '1px solid var(--border)' }}>
+            <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{m.model || '(model not reported)'}<span style={{ fontSize: 10, color: 'var(--text-muted)' }}> · {providerName(m.provider)}{!m.priced ? ' · no list price' : ''}</span></td>
             <td style={num}>{m.messages}</td><TokenCells t={m} />
           </tr>)}
           totals={report.models.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={num}>{report.messages}</td><TokenCells t={report.totals} strong /></tr>} />
@@ -165,19 +170,8 @@ export default function UsageDashboard() {
           <td style={num}>{p.sessions}</td><TokenCells t={p} />
         </tr>)}
         totals={report.projects.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={num}>{report.sessions.length}</td><TokenCells t={report.totals} strong /></tr>} />}
-      {report && tab === 'agents' && <>
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Codex, Antigravity and other agents, from the turns Tessera recorded in Activity. These run on their own subscriptions and report no price, so only tokens are shown. Antigravity terminal panels report nothing.</p>
-        <Table heads={['Date', 'Agent', 'Model', 'Turns', 'Input', 'Output', 'Cache read', 'Cache write', 'Total tokens']} empty="No recorded turns from other agents in this range."
-          rows={agentsByPeriod.map(r => <tr key={`${r.period}|${r.provider}|${r.model}`} style={{ borderBottom: '1px solid var(--border)' }}>
-            <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{r.period}</td>
-            <td style={cell}>{providerName(r.provider)}</td>
-            <td style={{ ...cell, color: 'var(--text-secondary)' }}>{r.model || '—'}</td>
-            <td style={num}>{r.turns}</td><td style={num}>{formatTokens(r.input)}</td><td style={num}>{formatTokens(r.output)}</td><td style={num}>{formatTokens(r.cacheRead)}</td><td style={num}>{formatTokens(r.cacheWrite)}</td>
-            <td style={{ ...num, color: 'var(--text-primary)', fontWeight: 600 }}>{formatTokens(r.input + r.output + r.cacheRead + r.cacheWrite)}</td>
-          </tr>)} />
-      </>}
       {report && <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-        Read from Claude Code's session files ({report.files} files, days in {report.timezone}), de-duplicated per message like <code>ccusage</code>. Costs are what the tokens would cost at Anthropic's list prices; a subscription is not billed per token. Models without a list price (gateway and local models) count as tokens only{report.totals.unpriced > 0 ? ` (${formatTokens(report.totals.unpriced)} tokens here)` : ''}.
+        Claude Code and Codex are read from their own session files ({report.files} files, days in {report.timezone}), de-duplicated per response like <code>ccusage</code>; Antigravity from the turns Tessera recorded (chat panels, since recording began). Costs are what the tokens would cost at Anthropic's list prices; subscriptions are not billed per token. Codex, Antigravity, gateway and local models have no list price here and count as tokens only{report.totals.unpriced > 0 ? ` (${formatTokens(report.totals.unpriced)} tokens)` : ''}.
       </p>}
     </div>
   </div>;
