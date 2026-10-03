@@ -34,6 +34,15 @@ try {
     await expect(hint).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 2)');
   }
   await page.evaluate(() => window.focusPanel('terminal'));
+  // Focusing a panel by any route puts the cursor in its terminal or composer.
+  await expect(input('terminal')).toBeFocused();
+  await page.keyboard.up('Alt');
+  await page.locator('[data-panel-id="chat"] .unfocused-overlay').click();
+  await expect(input('chat')).toBeFocused();
+  expect(await focused()).toBe('chat');
+  await page.locator('[data-panel-id="terminal"] .unfocused-overlay').click();
+  await expect(input('terminal')).toBeFocused();
+  await page.keyboard.down('Alt');
   await expect(badge).toHaveCount(2);
   await expect(page.locator('[data-panel-id="terminal"] .panel-shortcut-badge')).toHaveText('Ctrl + ?');
   await expect(page.locator('[data-panel-id="chat"] .panel-shortcut-badge')).toHaveCount(0);

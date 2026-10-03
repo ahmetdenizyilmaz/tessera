@@ -121,6 +121,12 @@ export function installPanelShortcuts(options: { isBlocked?: () => boolean; onFo
   const keyup = updateModifiers;
   const reset = () => { cancelFocus(); usePanelShortcutStore.getState().setModifiers(false, false); };
   const visibility = () => { if (document.hidden) reset(); };
+  // Every way of focusing a panel (its tile, its tab, Ctrl+Tab, a closed neighbour)
+  // puts the cursor where typing goes, not only the number shortcuts. An unfocused
+  // tile's first click is swallowed by its overlay anyway, so nothing is stolen.
+  const unsubscribe = useLayoutStore.subscribe((state, previous) => {
+    if (state.focusedId && state.focusedId !== previous.focusedId) focusInput(state.focusedId);
+  });
   window.addEventListener('keydown', keydown, true);
   window.addEventListener('keyup', keyup, true);
   window.addEventListener('blur', reset);
@@ -132,6 +138,7 @@ export function installPanelShortcuts(options: { isBlocked?: () => boolean; onFo
     window.removeEventListener('blur', reset);
     window.removeEventListener('pointerdown', cancelFocus, true);
     document.removeEventListener('visibilitychange', visibility);
+    unsubscribe();
     reset();
   };
 }
