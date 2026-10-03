@@ -178,6 +178,8 @@ pub fn run() {
             sessions::routed_config::claude_routed_config_dir,
             sessions::usage_parser::session_parse_usage,
             sessions::usage_parser::session_parse_recent_usage,
+            sessions::usage_report::usage_report,
+            activity::activity_session_usage,
             sessions::usage_checker::check_claude_usage,
             sessions::image_saver::save_chat_image,
             sessions::image_saver::read_chat_image,

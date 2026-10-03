@@ -644,6 +644,39 @@ fn codex_event(
     save(conn, &record)
 }
 
+/// Recorded usage of one Codex/Antigravity conversation, for the Session usage dialog.
+/// Tokens only: subscription use has no per-token price to report.
+#[tauri::command]
+pub async fn activity_session_usage(
+    provider: String,
+    session_id: String,
+    db: tauri::State<'_, Database>,
+) -> Result<crate::sessions::usage_parser::UsageInfo, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT data FROM activity_records WHERE kind='turn' AND json_extract(data,'$.actor.provider')=?1 AND json_extract(data,'$.sessionId')=?2")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![provider, session_id], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let mut info = crate::sessions::usage_parser::UsageInfo::default();
+    let mut models = std::collections::BTreeSet::new();
+    for raw in rows {
+        let record: Record = serde_json::from_str(&raw.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let Some(usage) = record.usage else { continue };
+        info.input_tokens += usage.input;
+        info.output_tokens += usage.output;
+        info.cache_read_tokens += usage.cache_read;
+        info.cache_write_tokens += usage.cache_write;
+        info.message_count += 1;
+        if let Some(model) = record.actor.model {
+            models.insert(model);
+        }
+    }
+    info.models = models.into_iter().collect();
+    Ok(info)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Cursor {

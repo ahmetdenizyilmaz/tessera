@@ -32,4 +32,9 @@ export interface UsageInfo {
   cacheWriteTokens: number;
   totalCostUsd: number;
   messageCount: number;
+  /** False when no message came from a model with a known list price (gateway/local models, other agents). */
+  priced?: boolean;
+  models?: string[];
+  /** Set by the poller: claude | codex | antigravity. */
+  provider?: string;
 }

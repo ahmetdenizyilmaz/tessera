@@ -1,386 +1,184 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { BarChart3, Download, DollarSign, Hash, Coins } from 'lucide-react';
+import { BarChart3, Download, RefreshCw } from 'lucide-react';
 import TokenChart from './TokenChart';
 import CostBreakdown from './CostBreakdown';
-import { TimelineChart } from './TimelineChart';
-import { ProjectBreakdown } from './ProjectBreakdown';
-import { AnalyticsSummaryCards, type SummaryDeltas } from './AnalyticsSummaryCards';
+import { AnalyticsSummaryCards } from './AnalyticsSummaryCards';
+import { formatCost, formatTokens } from './chartTheme';
+import { providerName } from '../../lib/activityGraph';
+import type { AgentRow, PeriodRow, Tokens, UsageReport } from '../../types/usage';
 
-interface AnalyticsSummary {
-  total_cost_usd: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-  records_count: number;
-  by_date: Array<{ date: string; input_tokens: number; output_tokens: number; cost_usd: number }>;
-  by_model: Array<{ model: string; input_tokens: number; output_tokens: number; cost_usd: number }>;
+type Tab = 'daily' | 'monthly' | 'sessions' | 'models' | 'projects' | 'agents';
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: 'daily', label: 'Daily' }, { key: 'monthly', label: 'Monthly' }, { key: 'sessions', label: 'Sessions' },
+  { key: 'models', label: 'Models' }, { key: 'projects', label: 'Projects' }, { key: 'agents', label: 'Other agents' },
+];
+const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const total = (t: Tokens) => t.input + t.output + t.cacheWrite + t.cacheRead;
+/** "opus-5-5" instead of "claude-opus-5-5"; gateway models keep their full name. */
+const shortModel = (m: string) => m.replace(/^claude-/, '').replace(/-\d{8}$/, '');
+/** Priced models first, at most three named; the rest are counted. The full list is the tooltip. */
+function ModelList({ models }: { models: string[] }) {
+  const ordered = [...models].sort((a, b) => Number(b.startsWith('claude-')) - Number(a.startsWith('claude-')) || a.localeCompare(b));
+  const shown = ordered.slice(0, 3).map(shortModel).join(', ');
+  return <span title={ordered.join(', ')}>{shown}{ordered.length > 3 ? ` +${ordered.length - 3}` : ''}</span>;
+}
+const money = (t: Tokens) => t.cost > 0 ? formatCost(t.cost) : t.unpriced > 0 ? '—' : '$0.00';
+
+const cell: React.CSSProperties = { padding: '7px 10px', fontSize: 12, whiteSpace: 'nowrap' };
+const num: React.CSSProperties = { ...cell, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' };
+const head: React.CSSProperties = { ...cell, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, position: 'sticky', top: 0, background: 'var(--bg-elevated)' };
+
+function TokenCells({ t, strong }: { t: Tokens; strong?: boolean }) {
+  const style = strong ? { ...num, color: 'var(--text-primary)', fontWeight: 600 } : num;
+  return <>
+    <td style={style}>{formatTokens(t.input)}</td>
+    <td style={style}>{formatTokens(t.output)}</td>
+    <td style={style}>{formatTokens(t.cacheWrite)}</td>
+    <td style={style}>{formatTokens(t.cacheRead)}</td>
+    <td style={style}>{formatTokens(total(t))}</td>
+    <td style={{ ...style, color: strong ? 'var(--accent)' : 'var(--text-primary)', fontWeight: 600 }} title={t.unpriced > 0 ? `${formatTokens(t.unpriced)} tokens from models without a list price are not costed` : undefined}>{money(t)}{t.unpriced > 0 && t.cost > 0 ? '*' : ''}</td>
+  </>;
+}
+const TOKEN_HEADS = ['Input', 'Output', 'Cache create', 'Cache read', 'Total tokens', 'Cost (USD)'];
+
+function Table({ heads, rows, totals, empty }: { heads: string[]; rows: React.ReactNode; totals?: React.ReactNode; empty: string }) {
+  return <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'auto', maxHeight: '100%' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>{heads.map((h, i) => <th key={h} style={{ ...head, textAlign: i < heads.length - 6 ? 'left' : 'right' }}>{h}</th>)}</tr></thead>
+      <tbody>{rows}{totals}</tbody>
+    </table>
+    {!rows || (Array.isArray(rows) && rows.length === 0) ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{empty}</div> : null}
+  </div>;
 }
 
-interface ProjectCost {
-  project_path: string;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-  sessions_count: number;
+function periodRows(rows: PeriodRow[], totals: Tokens, label: string) {
+  const body = [...rows].reverse().map(r => <tr key={r.period} style={{ borderBottom: '1px solid var(--border)' }}>
+    <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{r.period}</td>
+    <td style={{ ...cell, color: 'var(--text-secondary)' }}><ModelList models={r.models} /></td>
+    <TokenCells t={r} />
+  </tr>);
+  const foot = rows.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={cell} /><TokenCells t={totals} strong /></tr>;
+  return <Table heads={[label, 'Models', ...TOKEN_HEADS]} rows={body} totals={foot} empty="No Claude Code usage in this range." />;
 }
-
-interface TimeCost {
-  period: string;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-type DashboardTab = 'overview' | 'by-model' | 'by-project' | 'timeline';
 
 export default function UsageDashboard() {
-  const today = new Date().toISOString().slice(0, 10);
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-
-  const [startDate, setStartDate] = useState(thirtyDaysAgo);
+  const today = localDate(new Date());
+  const [startDate, setStartDate] = useState(localDate(new Date(Date.now() - 30 * 86400000)));
   const [endDate, setEndDate] = useState(today);
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [deltas, setDeltas] = useState<SummaryDeltas | undefined>(undefined);
-  const [projectData, setProjectData] = useState<ProjectCost[]>([]);
-  const [timelineData, setTimelineData] = useState<TimeCost[]>([]);
+  const [report, setReport] = useState<UsageReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-  const [timelineMode, setTimelineMode] = useState<'tokens' | 'cost'>('tokens');
-
-  const fetchSummary = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await invoke<AnalyticsSummary>('analytics_summary', {
-        startDate, endDate,
-      });
-      setSummary(data);
-
-      // Period-over-period deltas: compare against the previous window of the
-      // same length. Skip for open-ended "All Time" ranges.
-      const startMs = new Date(startDate).getTime();
-      const endMs = new Date(endDate).getTime();
-      const lenDays = Math.round((endMs - startMs) / 86400000) + 1;
-      if (lenDays > 0 && lenDays <= 92) {
-        const prevEnd = new Date(startMs - 86400000).toISOString().slice(0, 10);
-        const prevStart = new Date(startMs - lenDays * 86400000).toISOString().slice(0, 10);
-        try {
-          const prev = await invoke<AnalyticsSummary>('analytics_summary', {
-            startDate: prevStart, endDate: prevEnd,
-          });
-          const pct = (cur: number, before: number) =>
-            before > 0 ? ((cur - before) / before) * 100 : null;
-          setDeltas({
-            cost: pct(data.total_cost_usd, prev.total_cost_usd),
-            inputTokens: pct(data.total_input_tokens, prev.total_input_tokens),
-            outputTokens: pct(data.total_output_tokens, prev.total_output_tokens),
-            sessions: pct(data.records_count, prev.records_count),
-          });
-        } catch {
-          setDeltas(undefined);
-        }
-      } else {
-        setDeltas(undefined);
-      }
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchProjectData = async () => {
-    try {
-      const data = await invoke<ProjectCost[]>('analytics_by_project', { startDate, endDate });
-      setProjectData(data);
-    } catch {
-      setProjectData([]);
-    }
-  };
-
-  const fetchTimelineData = async () => {
-    try {
-      const data = await invoke<TimeCost[]>('analytics_timeseries', { startDate, endDate, granularity: 'day' });
-      setTimelineData(data);
-    } catch {
-      // Fallback: use by_date from summary
-      if (summary?.by_date) {
-        setTimelineData(summary.by_date.map(d => ({ period: d.date, ...d })));
-      }
-    }
-  };
+  const [tab, setTab] = useState<Tab>('daily');
+  const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
-    fetchSummary();
-  }, [startDate, endDate]);
+    let active = true;
+    setLoading(true); setError(null);
+    invoke<UsageReport>('usage_report', { startDate, endDate })
+      .then(data => { if (active) setReport(data); })
+      .catch(e => { if (active) setError(String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [startDate, endDate, generation]);
+  // Session files change as agents work: refresh while the widget is open.
+  useEffect(() => { const timer = setInterval(() => setGeneration(g => g + 1), 60000); return () => clearInterval(timer); }, []);
 
-  useEffect(() => {
-    if (activeTab === 'by-project') fetchProjectData();
-    if (activeTab === 'timeline') fetchTimelineData();
-  }, [activeTab, startDate, endDate]);
+  const agentsByPeriod = useMemo<AgentRow[]>(() => [...(report?.agents ?? [])].sort((a, b) => b.period.localeCompare(a.period) || a.provider.localeCompare(b.provider)), [report]);
 
-  const handleExport = () => {
-    if (!summary) return;
-    const rows = [
-      ['Date', 'Input Tokens', 'Output Tokens', 'Cost USD'],
-      ...summary.by_date.map((d) => [d.date, d.input_tokens, d.output_tokens, d.cost_usd.toFixed(4)]),
-    ];
-    const csv = rows.map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `usage_${startDate}_${endDate}.csv`;
-    a.click();
+  const exportCsv = () => {
+    if (!report) return;
+    const rows: (string | number)[][] = [];
+    const push = (label: string, extra: string[], t: Tokens, more: (string | number)[] = []) => rows.push([label, ...extra, t.input, t.output, t.cacheWrite, t.cacheRead, total(t), t.cost.toFixed(4), ...more]);
+    if (tab === 'daily' || tab === 'monthly') { rows.push([tab === 'daily' ? 'date' : 'month', 'models', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); (tab === 'daily' ? report.daily : report.monthly).forEach(r => push(r.period, [r.models.join(' ')], r)); }
+    else if (tab === 'sessions') { rows.push(['session_id', 'project', 'last_activity', 'models', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.sessions.forEach(r => push(r.sessionId, [r.project, new Date(r.lastAt).toISOString(), r.models.join(' ')], r)); }
+    else if (tab === 'models') { rows.push(['model', 'messages', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.models.forEach(r => push(r.model, [String(r.messages)], r)); }
+    else if (tab === 'projects') { rows.push(['project', 'sessions', 'input', 'output', 'cache_create', 'cache_read', 'total_tokens', 'cost_usd']); report.projects.forEach(r => push(r.project, [String(r.sessions)], r)); }
+    else { rows.push(['period', 'provider', 'model', 'turns', 'input', 'output', 'cache_read', 'cache_write']); agentsByPeriod.forEach(r => rows.push([r.period, r.provider, r.model, r.turns, r.input, r.output, r.cacheRead, r.cacheWrite])); }
+    const csv = rows.map(r => r.map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v)).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a'); a.href = url; a.download = `usage_${tab}_${startDate}_${endDate}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
+  const preset = (days: number | 'month' | 'all') => {
+    setEndDate(today);
+    setStartDate(days === 'all' ? '2020-01-01' : days === 'month' ? today.slice(0, 8) + '01' : localDate(new Date(Date.now() - days * 86400000)));
+  };
+  const chip: React.CSSProperties = { padding: '2px 8px', fontSize: 10 };
 
-  const tabs: { key: DashboardTab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'by-model', label: 'By Model' },
-    { key: 'by-project', label: 'By Project' },
-    { key: 'timeline', label: 'Timeline' },
-  ];
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Header */}
-      <div style={{
-        padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <BarChart3 size={16} style={{ color: 'var(--accent)' }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Analytics</span>
-          </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleExport}
-            disabled={!summary}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 11 }}
-          >
-            <Download size={12} /> CSV
-          </button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-          {[
-            { label: 'Last 7 Days', days: 7 },
-            { label: 'Last 30 Days', days: 30 },
-            { label: 'All Time', days: null },
-          ].map((preset) => (
-            <button
-              key={preset.label}
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setStartDate(
-                  preset.days
-                    ? new Date(Date.now() - preset.days * 86400000).toISOString().slice(0, 10)
-                    : '2020-01-01',
-                );
-                setEndDate(today);
-              }}
-              style={{ padding: '2px 8px', fontSize: 10 }}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input
-            type="date"
-            className="form-input"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            style={{ flex: 1, minWidth: 0, fontSize: 11, padding: '3px 6px' }}
-          />
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>to</span>
-          <input
-            type="date"
-            className="form-input"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            style={{ flex: 1, minWidth: 0, fontSize: 11, padding: '3px 6px' }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, marginTop: 8 }}>
-          {tabs.map((tab, i) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              style={{
-                flex: 1,
-                padding: '5px 0',
-                fontSize: 11,
-                fontWeight: activeTab === tab.key ? 600 : 400,
-                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-muted)',
-                background: activeTab === tab.key ? 'var(--bg-elevated)' : 'transparent',
-                border: '1px solid var(--border)',
-                borderBottom: activeTab === tab.key ? '2px solid var(--accent)' : '1px solid var(--border)',
-                cursor: 'pointer',
-                borderRadius: i === 0 ? '4px 0 0 0' : i === tabs.length - 1 ? '0 4px 0 0' : 0,
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+  return <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><BarChart3 size={16} style={{ color: 'var(--accent)' }} /><span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Analytics</span>{loading && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Reading session files…</span>}</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setGeneration(g => g + 1)} title="Re-read the session files now" style={{ ...chip, display: 'flex', alignItems: 'center', gap: 4 }}><RefreshCw size={11} /></button>
+          <button className="btn btn-secondary btn-sm" onClick={exportCsv} disabled={!report} style={{ ...chip, display: 'flex', alignItems: 'center', gap: 4 }}><Download size={12} /> CSV</button>
         </div>
       </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {loading && !summary && (
-          <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading...</p>
-        )}
-        {error && (
-          <p style={{ textAlign: 'center', color: 'var(--error)', fontSize: 13 }}>{error}</p>
-        )}
-
-        {summary && activeTab === 'overview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Summary cards */}
-            <AnalyticsSummaryCards
-              totalCost={summary.total_cost_usd}
-              totalInputTokens={summary.total_input_tokens}
-              totalOutputTokens={summary.total_output_tokens}
-              sessionsCount={summary.records_count}
-              deltas={deltas}
-            />
-
-            {/* Token chart */}
-            {summary.by_date.length > 0 && (
-              <div style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                borderRadius: 8, padding: 16,
-              }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  Token Usage Over Time
-                </h3>
-                <TokenChart data={summary.by_date} />
-              </div>
-            )}
-
-            {/* Cost breakdown */}
-            {summary.by_model.length > 0 && (
-              <div style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                borderRadius: 8, padding: 16,
-              }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  Cost by Model
-                </h3>
-                <CostBreakdown data={summary.by_model} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {summary && activeTab === 'by-model' && (
-          <div style={{
-            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-            borderRadius: 8, overflow: 'hidden',
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Model', 'Input Tokens', 'Output Tokens', 'Cost'].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        textAlign: h === 'Model' ? 'left' : 'right',
-                        padding: '8px 12px',
-                        fontSize: 10,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        color: 'var(--text-muted)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {summary.by_model.map((m) => (
-                  <tr key={m.model} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '8px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>{m.model}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{formatTokens(m.input_tokens)}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{formatTokens(m.output_tokens)}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>${m.cost_usd.toFixed(4)}</td>
-                  </tr>
-                ))}
-                {summary.by_model.length > 0 && (
-                  <tr>
-                    <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--text-primary)' }}>Total</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-                      {formatTokens(summary.total_input_tokens)}
-                    </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-                      {formatTokens(summary.total_output_tokens)}
-                    </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
-                      ${summary.total_cost_usd.toFixed(4)}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-            {summary.by_model.length === 0 && (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                No model data available.
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'by-project' && (
-          <div style={{
-            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 16,
-          }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Cost by Project
-            </h3>
-            <ProjectBreakdown data={projectData} />
-          </div>
-        )}
-
-        {activeTab === 'timeline' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                className={`btn btn-sm ${timelineMode === 'tokens' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setTimelineMode('tokens')}
-              >
-                Tokens
-              </button>
-              <button
-                className={`btn btn-sm ${timelineMode === 'cost' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setTimelineMode('cost')}
-              >
-                Cost
-              </button>
-            </div>
-            <div style={{
-              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-              borderRadius: 8, padding: 16,
-            }}>
-              <TimelineChart
-                data={timelineData.length > 0 ? timelineData : (summary?.by_date.map(d => ({ period: d.date, ...d })) ?? [])}
-                mode={timelineMode}
-              />
-            </div>
-          </div>
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+        {([['Today', 0], ['Last 7 days', 6], ['Last 30 days', 29], ['This month', 'month'], ['All time', 'all']] as const).map(([label, days]) => <button key={label} className="btn btn-secondary btn-sm" onClick={() => preset(days)} style={chip}>{label}</button>)}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input type="date" className="form-input" aria-label="Start date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: 11, padding: '3px 6px' }} />
+        <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>to</span>
+        <input type="date" className="form-input" aria-label="End date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: 11, padding: '3px 6px' }} />
+      </div>
+      <div style={{ display: 'flex', marginTop: 8 }}>
+        {TABS.map((t, i) => <button key={t.key} onClick={() => setTab(t.key)} aria-pressed={tab === t.key} style={{ flex: 1, padding: '5px 0', fontSize: 11, fontWeight: tab === t.key ? 600 : 400, color: tab === t.key ? 'var(--accent)' : 'var(--text-muted)', background: tab === t.key ? 'var(--bg-elevated)' : 'transparent', border: '1px solid var(--border)', borderBottom: tab === t.key ? '2px solid var(--accent)' : '1px solid var(--border)', cursor: 'pointer', borderRadius: i === 0 ? '4px 0 0 0' : i === TABS.length - 1 ? '0 4px 0 0' : 0 }}>{t.label}</button>)}
       </div>
     </div>
-  );
+
+    <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {error && <p role="alert" style={{ textAlign: 'center', color: 'var(--error)', fontSize: 13 }}>{error}</p>}
+      {!report && loading && <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Reading Claude Code session files…</p>}
+      {report && tab !== 'agents' && <AnalyticsSummaryCards totalCost={report.totals.cost} totalInputTokens={report.totals.input} totalOutputTokens={report.totals.output} sessionsCount={report.sessions.length} />}
+      {report && tab === 'daily' && <>
+        {report.daily.length > 1 && <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Tokens per day</h3>
+          <TokenChart data={report.daily.map(d => ({ date: d.period, input_tokens: d.input + d.cacheWrite + d.cacheRead, output_tokens: d.output, cost_usd: d.cost }))} />
+        </div>}
+        {periodRows(report.daily, report.totals, 'Date')}
+      </>}
+      {report && tab === 'monthly' && periodRows(report.monthly, report.totals, 'Month')}
+      {report && tab === 'sessions' && <Table heads={['Session', 'Models', ...TOKEN_HEADS]} empty="No Claude Code sessions in this range."
+        rows={report.sessions.map(s => <tr key={s.sessionId} style={{ borderBottom: '1px solid var(--border)' }}>
+          <td style={{ ...cell, whiteSpace: 'normal' }}><div style={{ color: 'var(--text-primary)', fontWeight: 500 }} title={s.sessionId}>{s.project.split(/[\\/]/).pop() || s.project} · {s.sessionId.slice(0, 8)}</div><div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(s.lastAt).toLocaleString()} · {s.messages} messages</div></td>
+          <td style={{ ...cell, color: 'var(--text-secondary)' }}><ModelList models={s.models} /></td>
+          <TokenCells t={s} />
+        </tr>)}
+        totals={report.sessions.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total · {report.sessions.length} sessions</td><td style={cell} /><TokenCells t={report.totals} strong /></tr>} />}
+      {report && tab === 'models' && <>
+        {report.models.some(m => m.cost > 0) && <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Cost by model</h3>
+          <CostBreakdown data={report.models.filter(m => m.cost > 0).map(m => ({ model: shortModel(m.model), cost_usd: m.cost }))} />
+        </div>}
+        <Table heads={['Model', 'Messages', ...TOKEN_HEADS]} empty="No model usage in this range."
+          rows={report.models.map(m => <tr key={m.model} style={{ borderBottom: '1px solid var(--border)' }}>
+            <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{m.model}{!m.priced && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}> · no list price</span>}</td>
+            <td style={num}>{m.messages}</td><TokenCells t={m} />
+          </tr>)}
+          totals={report.models.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={num}>{report.messages}</td><TokenCells t={report.totals} strong /></tr>} />
+      </>}
+      {report && tab === 'projects' && <Table heads={['Project', 'Sessions', ...TOKEN_HEADS]} empty="No projects in this range."
+        rows={report.projects.map(p => <tr key={p.project} style={{ borderBottom: '1px solid var(--border)' }}>
+          <td style={{ ...cell, whiteSpace: 'normal', color: 'var(--text-primary)', fontWeight: 500 }} title={p.project}>{p.project}</td>
+          <td style={num}>{p.sessions}</td><TokenCells t={p} />
+        </tr>)}
+        totals={report.projects.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={num}>{report.sessions.length}</td><TokenCells t={report.totals} strong /></tr>} />}
+      {report && tab === 'agents' && <>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Codex, Antigravity and other agents, from the turns Tessera recorded in Activity. These run on their own subscriptions and report no price, so only tokens are shown. Antigravity terminal panels report nothing.</p>
+        <Table heads={['Date', 'Agent', 'Model', 'Turns', 'Input', 'Output', 'Cache read', 'Cache write', 'Total tokens']} empty="No recorded turns from other agents in this range."
+          rows={agentsByPeriod.map(r => <tr key={`${r.period}|${r.provider}|${r.model}`} style={{ borderBottom: '1px solid var(--border)' }}>
+            <td style={{ ...cell, color: 'var(--text-primary)', fontWeight: 500 }}>{r.period}</td>
+            <td style={cell}>{providerName(r.provider)}</td>
+            <td style={{ ...cell, color: 'var(--text-secondary)' }}>{r.model || '—'}</td>
+            <td style={num}>{r.turns}</td><td style={num}>{formatTokens(r.input)}</td><td style={num}>{formatTokens(r.output)}</td><td style={num}>{formatTokens(r.cacheRead)}</td><td style={num}>{formatTokens(r.cacheWrite)}</td>
+            <td style={{ ...num, color: 'var(--text-primary)', fontWeight: 600 }}>{formatTokens(r.input + r.output + r.cacheRead + r.cacheWrite)}</td>
+          </tr>)} />
+      </>}
+      {report && <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+        Read from Claude Code's session files ({report.files} files, days in {report.timezone}), de-duplicated per message like <code>ccusage</code>. Costs are what the tokens would cost at Anthropic's list prices; a subscription is not billed per token. Models without a list price (gateway and local models) count as tokens only{report.totals.unpriced > 0 ? ` (${formatTokens(report.totals.unpriced)} tokens here)` : ''}.
+      </p>}
+    </div>
+  </div>;
 }

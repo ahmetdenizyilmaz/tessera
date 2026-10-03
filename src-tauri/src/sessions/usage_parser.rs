@@ -1,6 +1,5 @@
 use crate::util::claude_paths;
 use serde::{Deserialize, Serialize};
-use std::io::BufRead;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -11,47 +10,11 @@ pub struct UsageInfo {
     pub cache_write_tokens: u64,
     pub total_cost_usd: f64,
     pub message_count: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct UsageLine {
-    #[serde(rename = "type")]
-    msg_type: Option<String>,
-    message: Option<UsageMessage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct UsageMessage {
-    usage: Option<TokenUsage>,
-    model: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenUsage {
-    input_tokens: Option<u64>,
-    output_tokens: Option<u64>,
-    cache_read_input_tokens: Option<u64>,
-    cache_creation_input_tokens: Option<u64>,
-}
-
-fn estimate_cost(model: &str, input: u64, output: u64, cache_read: u64, cache_write: u64) -> f64 {
-    // Approximate pricing per 1M tokens (as of 2025)
-    let (input_price, output_price, cache_read_price, cache_write_price) = if model.contains("opus") {
-        (15.0, 75.0, 1.5, 18.75)
-    } else if model.contains("haiku") {
-        (0.25, 1.25, 0.025, 0.3)
-    } else {
-        // Default to sonnet pricing
-        (3.0, 15.0, 0.3, 3.75)
-    };
-
-    let cost = (input as f64 * input_price
-        + output as f64 * output_price
-        + cache_read as f64 * cache_read_price
-        + cache_write as f64 * cache_write_price)
-        / 1_000_000.0;
-
-    cost
+    /// False when no message came from a model with a known list price.
+    #[serde(default)]
+    pub priced: bool,
+    #[serde(default)]
+    pub models: Vec<String>,
 }
 
 #[tauri::command]
@@ -60,106 +23,17 @@ pub async fn session_parse_usage(
     project_path: String,
 ) -> Result<UsageInfo, String> {
     let file_path = claude_paths::session_file_path(&project_path, &session_id);
-
     if !file_path.exists() {
         return Ok(UsageInfo::default());
     }
-
-    let file = std::fs::File::open(&file_path)
-        .map_err(|e| format!("Failed to open session file: {}", e))?;
-    let reader = std::io::BufReader::new(file);
-
-    let mut info = UsageInfo::default();
-    let mut last_model = String::from("sonnet");
-
-    for line in reader.lines() {
-        let line = match line {
-            Ok(l) => l,
-            Err(_) => continue,
-        };
-
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        let entry: UsageLine = match serde_json::from_str(&line) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        if entry.msg_type.as_deref() != Some("assistant") {
-            continue;
-        }
-
-        if let Some(ref message) = entry.message {
-            if let Some(ref model) = message.model {
-                last_model = model.clone();
-            }
-
-            if let Some(ref usage) = message.usage {
-                let input = usage.input_tokens.unwrap_or(0);
-                let output = usage.output_tokens.unwrap_or(0);
-                let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
-                let cache_write = usage.cache_creation_input_tokens.unwrap_or(0);
-
-                info.input_tokens += input;
-                info.output_tokens += output;
-                info.cache_read_tokens += cache_read;
-                info.cache_write_tokens += cache_write;
-                info.message_count += 1;
-                info.total_cost_usd += estimate_cost(&last_model, input, output, cache_read, cache_write);
-            }
-        }
-    }
-
-    Ok(info)
+    // Same de-duplication and list prices as the analytics report.
+    Ok(tokio::task::spawn_blocking(move || super::usage_report::session_totals(&file_path))
+        .await
+        .map_err(|e| e.to_string())?)
 }
 
-/// Parse a single .jsonl session file and return aggregated UsageInfo.
 fn parse_jsonl_file(path: &std::path::Path) -> UsageInfo {
-    let file = match std::fs::File::open(path) {
-        Ok(f) => f,
-        Err(_) => return UsageInfo::default(),
-    };
-    let reader = std::io::BufReader::new(file);
-    let mut info = UsageInfo::default();
-    let mut last_model = String::from("sonnet");
-
-    for line in reader.lines() {
-        let line = match line {
-            Ok(l) => l,
-            Err(_) => continue,
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        let entry: UsageLine = match serde_json::from_str(&line) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        if entry.msg_type.as_deref() != Some("assistant") {
-            continue;
-        }
-        if let Some(ref message) = entry.message {
-            if let Some(ref model) = message.model {
-                last_model = model.clone();
-            }
-            if let Some(ref usage) = message.usage {
-                let input = usage.input_tokens.unwrap_or(0);
-                let output = usage.output_tokens.unwrap_or(0);
-                let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
-                let cache_write = usage.cache_creation_input_tokens.unwrap_or(0);
-
-                info.input_tokens += input;
-                info.output_tokens += output;
-                info.cache_read_tokens += cache_read;
-                info.cache_write_tokens += cache_write;
-                info.message_count += 1;
-                info.total_cost_usd += estimate_cost(&last_model, input, output, cache_read, cache_write);
-            }
-        }
-    }
-    info
+    super::usage_report::session_totals(path)
 }
 
 /// Scan all session .jsonl files modified in the last N hours and compute total cost.
