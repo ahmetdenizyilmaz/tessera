@@ -28,11 +28,26 @@ if ((Get-Item -LiteralPath $source).VersionInfo.ProductName -eq 'Tessera Preview
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-# The stable app must not be running, or the copy is denied
-$running = Get-Process -Name 'Tessera','Claude GUI' -ErrorAction SilentlyContinue
+# The stable app must not be running, or the copy is denied. Ask it to close
+# first: a normal exit lets Tessera stop its own agent processes. A force-stop
+# orphans them, and an orphaned Codex keeps its thread's writer lock, so every
+# Codex panel in the next launch fails with "already has an active writer".
+$running = Get-Process -Name 'Tessera','Claude GUI' -ErrorAction SilentlyContinue |
+    Where-Object { $_.MainWindowHandle -ne 0 }
 if ($running) {
     Write-Host 'Stable app is running - closing it first.'
-    $running | Stop-Process -Force
+    $children = Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -in $running.Id }
+    $running | ForEach-Object { $null = $_.CloseMainWindow() }
+    $deadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $deadline -and ($running | Where-Object { -not $_.HasExited })) { Start-Sleep -Milliseconds 300 }
+    $stuck = $running | Where-Object { -not $_.HasExited }
+    if ($stuck) {
+        Write-Host 'Did not close in time - stopping it and the agents it started.'
+        $stuck | Stop-Process -Force
+        foreach ($child in $children) {
+            Stop-Process -Id $child.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
     Start-Sleep -Milliseconds 800
 }
 
