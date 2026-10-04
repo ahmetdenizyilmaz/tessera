@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Matrix, Rectangle, Text } from 'pixi.js';
 import type { OfficeLayout, OfficeFurniture } from '../types/office';
-import { drawOfficeCharacter, drawOfficeFurniture, drawSpeechBubble, type BubbleKind } from './officeArt';
+import { BUBBLE_FRAMES, drawOfficeCharacter, drawOfficeFurniture, drawSpeechBubble, type BubbleKind, type CharacterMood } from './officeArt';
 import type { WorkerPose } from './WorkerAnimator';
 
 const ROOM_NAMES: Record<string, string> = { reception: 'WELCOME', open_floor: 'THE STUDIO', manager_office: 'YOUR OFFICE', meeting_room: 'PLANNING', server_room: 'BUILD LAB', break_room: 'COFFEE LOUNGE', archive: 'LIBRARY', computer_lab: 'RESEARCH', maintenance: 'SUPPORT' };
@@ -124,18 +124,18 @@ export class IsometricEngine {
       w.bubble.position.set(p.x, p.y); w.glyph.position.set(p.x, p.y - 72);
     }
   }
-  updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', wearables = '', walking = false, frame = 0, appearanceId = id) {
+  updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', wearables = '', walking = false, frame = 0, appearanceId = id, mood: CharacterMood = '') {
     const w = this.workerGraphics.get(id); if (!w) return;
-    const key = [color, activity, name, provider, wearables, walking, walking ? frame % 2 : 0, appearanceId].join(':');
+    const key = [color, activity, name, provider, wearables, walking, walking ? frame % 2 : 0, appearanceId, walking ? '' : mood].join(':');
     if (key === w.key) return;
-    w.key = key; drawOfficeCharacter(w.body, appearanceId, color, wearables, frame, walking, activity);
+    w.key = key; drawOfficeCharacter(w.body, appearanceId, color, wearables, frame, walking, activity, walking ? '' : mood);
     w.label.text = `${name.length > 22 ? name.slice(0, 21) + '…' : name}\n${provider}`;
   }
   /** The bubble over a character: animated dots while it works, a glyph when it needs
    * someone, a tinted bubble while it is messaging another agent. */
   updateWorkerBubble(id: string, kind: BubbleKind, frame = 0) {
     const w = this.workerGraphics.get(id); if (!w) return;
-    const key = kind ? `${kind}:${kind === 'dots' || kind === 'talk' ? frame % 3 : 0}` : '';
+    const key = kind ? `${kind}:${frame % BUBBLE_FRAMES[kind]}` : '';
     if (key === w.bubbleKey) return;
     w.bubbleKey = key;
     w.bubble.visible = !!kind; w.glyph.visible = kind === 'question' || kind === 'alert';

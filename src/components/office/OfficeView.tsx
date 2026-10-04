@@ -7,7 +7,7 @@ import { useOfficeGameStore } from '../../store/officeGameStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { officeProvider, PROVIDER_NAMES } from '../../lib/officeActivity';
 import { wearableKey } from '../../lib/officeCatalog';
-import { bubbleFor } from '../../lib/officeBubbles';
+import { bubbleFor, moodFor } from '../../lib/officeBubbles';
 import { EXCHANGE_VISIBLE_MS, liveExchanges } from '../../lib/officeTalk';
 import { focusShortcutPanel } from '../../lib/panelShortcuts';
 import { OfficeHUD } from './OfficeHUD';
@@ -69,9 +69,10 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
         for (const [id, worker] of Object.entries(state.workers)) {
           const instance = useInstanceStore.getState().instances.get(id); if (!instance) continue;
           const provider = officeProvider(instance);
+          const beat = Math.floor(time / 260);
           engine.updateWorkerGraphic(id, getProviderColor(provider), worker.activity, instance.name, PROVIDER_NAMES[provider] ?? provider,
-            wearableKey(state.profiles[id]?.wearables), poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId);
-          engine.updateWorkerBubble(id, bubbleFor(worker.activity, talking.has(id)), Math.floor(time / 260));
+            wearableKey(state.profiles[id]?.wearables), poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId, moodFor(worker.activity, talking.has(id), beat));
+          engine.updateWorkerBubble(id, bubbleFor(worker.activity, talking.has(id)), beat);
         }
         engine.drawLinks(exchanges.map(e => {
           const sender = useInstanceStore.getState().instances.get(e.from);

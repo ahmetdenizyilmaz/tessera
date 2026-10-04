@@ -9,13 +9,40 @@ function box(g: Graphics, x: number, y: number, w: number, d: number, h: number,
   g.poly([b, c, { x: c.x, y: c.y + h }, { x: b.x, y: b.y + h }]).fill(shade(color, .5));
   g.poly([a, b, c, e]).fill(color).stroke({ color: 0x181d27, width: 1, alpha: .35 });
 }
-export type BubbleKind = '' | 'dots' | 'talk' | 'question' | 'alert';
-/** A speech bubble drawn at the character's origin, floating above the head. */
+export type BubbleKind = '' | 'talk' | 'think' | 'work' | 'question' | 'alert';
+/** How many animation frames a bubble kind cycles through. */
+export const BUBBLE_FRAMES: Record<Exclude<BubbleKind, ''>, number> = { talk: 4, think: 3, work: 12, question: 1, alert: 1 };
+/** A bubble drawn at the character's origin, floating above the head. Each kind
+ * has its own shape and motion so the state reads at a glance without text:
+ * talk = speech bubble with sound waves, think = thought cloud with pulsing
+ * dots, work = spinning gear, question/alert = a glyph drawn by the engine. */
 export function drawSpeechBubble(g: Graphics, kind: BubbleKind, frame: number) {
-  const fill = kind === 'talk' ? 0xdff3ea : kind === 'question' ? 0xfbe7b5 : kind === 'alert' ? 0xf8d2cb : 0xf7f4e8;
-  g.clear().roundRect(-15, -82, 30, 19, 9).fill(fill).stroke({ color: 0x2a3a44, width: 1.2, alpha: .5 });
+  g.clear();
+  if (!kind) return;
+  const outline = { color: 0x2a3a44, width: 1.2, alpha: .5 };
+  if (kind === 'think') {
+    const fill = 0xf7f4e8;
+    // Cloud: overlapping circles for a bumpy outline, with a trail of small circles to the head.
+    for (const [x, y, r] of [[-9, -73, 7], [0, -76, 9], [9, -73, 7], [-4, -68, 6], [5, -68, 6]]) g.circle(x, y, r).fill(fill);
+    for (const [x, y, r] of [[-9, -73, 7], [0, -76, 9], [9, -73, 7]]) g.circle(x, y, r).stroke(outline);
+    g.circle(-3, -60, 2.4).fill(fill).stroke(outline); g.circle(-6, -55, 1.5).fill(fill).stroke(outline);
+    for (let i = 0; i < 3; i++) g.circle(-6 + i * 6, -73, frame % 3 === i ? 2.6 : 1.7).fill(0x5a6b78);
+    return;
+  }
+  const fill = kind === 'talk' ? 0xdff3ea : kind === 'question' ? 0xfbe7b5 : kind === 'alert' ? 0xf8d2cb : 0xfbead3;
+  g.roundRect(-15, -82, 30, 19, 9).fill(fill).stroke(outline);
   g.poly([-4, -64, 2, -64, 0, -58]).fill(fill);
-  if (kind === 'dots' || kind === 'talk') for (let i = 0; i < 3; i++) g.circle(-7 + i * 7, -72.5 - (frame % 3 === i ? 2.5 : 0), 2.2).fill(kind === 'talk' ? 0x2f8f6b : 0x4a5a66);
+  if (kind === 'talk') {
+    // A speaker dot and three sound-wave arcs that light up outward in turn.
+    g.circle(-8, -72.5, 2.4).fill(0x2f8f6b);
+    for (let i = 0; i < 3; i++) g.arc(-8, -72.5, 5 + i * 3.3, -Math.PI / 3, Math.PI / 3).stroke({ color: 0x2f8f6b, width: 1.6, alpha: frame % 4 === i + 1 ? 1 : .3 });
+  }
+  if (kind === 'work') {
+    // Gear turning one tooth per frame.
+    const angle = (frame % 12) * Math.PI / 6, cx = 0, cy = -72.5;
+    for (let t = 0; t < 6; t++) { const a = angle + t * Math.PI / 3; g.poly([cx + Math.cos(a - .28) * 4.5, cy + Math.sin(a - .28) * 4.5, cx + Math.cos(a - .2) * 7.2, cy + Math.sin(a - .2) * 7.2, cx + Math.cos(a + .2) * 7.2, cy + Math.sin(a + .2) * 7.2, cx + Math.cos(a + .28) * 4.5, cy + Math.sin(a + .28) * 4.5]).fill(0xd98d3a); }
+    g.circle(cx, cy, 4.6).fill(0xd98d3a); g.circle(cx, cy, 1.8).fill(fill);
+  }
 }
 export function drawOfficeFurniture(g: Graphics, type: OfficeFurnitureType) {
   g.ellipse(8, 8, 22, 10).fill({ color: 0x111b25, alpha: .2 });
@@ -63,20 +90,27 @@ export function drawOfficeFurniture(g: Graphics, type: OfficeFurnitureType) {
   }
 }
 
+/** What the body does besides walking: `talk0/talk1` move the mouth,
+ * `think` lifts the gaze, `work0/work1` move the arms as if typing. */
+export type CharacterMood = '' | 'talk0' | 'talk1' | 'think' | 'work0' | 'work1';
 /** `wearables` is the `wearableKey()` string: head|face|neck item ids. */
-export function drawOfficeCharacter(g: Graphics, id: string, color: number, wearables: string, frame: number, walking: boolean, activity: string) {
+export function drawOfficeCharacter(g: Graphics, id: string, color: number, wearables: string, frame: number, walking: boolean, activity: string, mood: CharacterMood = '') {
   const [head, face, neck] = wearables.split('|');
   const seed = characterSeed(id), skin = [0xf1c29c, 0xbd8968, 0x966747, 0xe3af81][seed % 4], hair = [0x423632, 0xb6804d, 0x302e39, 0x8a6751][seed % 4];
-  const step = walking ? (frame % 2 ? 2 : -2) : 0;
+  const step = walking ? (frame % 2 ? 2 : -2) : mood === 'work0' ? 1 : mood === 'work1' ? -1 : 0;
   g.clear().ellipse(0, 7, 10, 4).fill({ color: 0x152329, alpha: .28 });
-  g.rect(-6, -8 + step, 5, 12).rect(1, -8 - step, 5, 12).fill(0x3b485a);
-  g.rect(-7, 2 + step, 6, 4).rect(1, 2 - step, 6, 4).fill(0xd5d8c7);
+  const stride = walking ? step : 0;
+  g.rect(-6, -8 + stride, 5, 12).rect(1, -8 - stride, 5, 12).fill(0x3b485a);
+  g.rect(-7, 2 + stride, 6, 4).rect(1, 2 - stride, 6, 4).fill(0xd5d8c7);
   g.roundRect(-8, -27, 16, 22, 3).fill(color).stroke({ color: 0x202b37, width: 1 });
   g.rect(-11, -24 - step, 4, 14).rect(7, -24 + step, 4, 14).fill(shade(color, .8));
   g.rect(-11, -11 - step, 4, 4).rect(7, -11 + step, 4, 4).fill(skin);
   g.roundRect(-7, -42, 14, 16, 3).fill(skin);
   g.rect(-8, -43, 16, 5).rect(-8, -39, seed % 2 ? 5 : 3, 6).fill(hair);
-  g.rect(-4, -35, 2, 2).rect(3, -35, 2, 2).fill(0x26313d);
+  const gaze = mood === 'think' ? 1 : 0;
+  g.rect(-4, -35 - gaze, 2, 2).rect(3, -35 - gaze, 2, 2).fill(0x26313d);
+  if (mood === 'talk1') g.roundRect(-2, -30.5, 4, 2.5, 1).fill(0x7a3f3f);
+  else if (mood === 'talk0') g.rect(-1.5, -29.5, 3, 1).fill(0x7a3f3f);
   // Neck first so hats and glasses draw over it.
   if (neck === 'tie') g.poly([-1, -27, 1, -27, 2, -17, 0, -13, -2, -17]).fill(0xc24d4d);
   if (neck === 'bowtie') g.poly([-6, -29, -1, -27, -6, -24]).poly([6, -29, 1, -27, 6, -24]).fill(0xc24d4d).rect(-1, -28, 2, 2).fill(0x8a2f2f);
