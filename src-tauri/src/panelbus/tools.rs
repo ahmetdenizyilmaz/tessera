@@ -6,7 +6,7 @@
 //! notification is fire-and-forget — losing it costs a bubble, not a message.
 
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::registry::Resolution;
 use super::{PanelBus, SERVER_NAME};
@@ -199,10 +199,26 @@ async fn send_to_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<
     let target = resolve_target(&app.state::<PanelBus>(), caller_id, &args)?;
     let message = args["message"].as_str().unwrap_or("").trim();
     if message.is_empty() { return Err("`message` is required".into()); }
+    announce_exchange(app, caller_id, &target.id, &target.name, message);
     let trace = crate::activity::begin_handoff(app, caller_id, &target, message);
     let result = send_to_panel_traced(app, caller_id, args, &trace).await;
     crate::activity::finish_handoff(app, &trace, &result);
     result
+}
+
+/// Tell the UI that one panel is talking to another (the office draws it as a
+/// speech bubble and a line between the two characters). Fire-and-forget: a
+/// missing window must never fail the delivery.
+fn announce_exchange(app: &AppHandle, from_id: &str, to_id: &str, to_name: &str, message: &str) {
+    let from_name = app
+        .state::<PanelBus>()
+        .with_registry(|r| r.get(from_id).map(|p| p.name.clone()))
+        .unwrap_or_else(|| from_id.to_string());
+    let preview: String = message.chars().take(160).collect();
+    let _ = app.emit("panel-bus-message", json!({
+        "from": from_id, "fromName": from_name, "to": to_id, "toName": to_name, "preview": preview,
+        "at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0),
+    }));
 }
 
 async fn send_to_panel_traced(app: &AppHandle, caller_id: &str, args: Value, trace: &str) -> Result<Value, String> {

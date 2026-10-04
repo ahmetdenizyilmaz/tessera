@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ArrowDown, ArrowUpRight, ChevronDown, MessageSquare, X } from 'lucide-react';
+import { ArrowDown, ChevronDown, MessageSquare, X } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useCodexStore } from '../../store/codexStore';
 import { useOpenCodeStore } from '../../store/opencodeStore';
@@ -8,7 +8,6 @@ import { useAntigravityStore } from '../../store/antigravityStore';
 import { useLlmChatStore } from '../../store/llmChatStore';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { officeProvider, PROVIDER_NAMES } from '../../lib/officeActivity';
-import { OFFICE_CATALOG } from '../../lib/officeCatalog';
 import { historyItems } from '../../lib/codexReducer';
 import { stripForkPreamble } from '../../lib/forkTranscript';
 import { ACTIVITY_LABELS, getProviderColor } from '../../engine/SpriteManager';
@@ -17,7 +16,9 @@ import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { CodexItemView } from '../codex/CodexItemView';
 import { OpenCodeMessageView } from '../opencode/OpenCodeMessageView';
 import { AntigravityItemView } from '../antigravity/AntigravityItemView';
-import { CharacterPortrait } from './OfficeTeam';
+import { CharacterPortrait, WearablePicker } from './OfficeTeam';
+import { OfficeComposer, OfficeExchanges, OfficeHuddle, OfficeResources } from './OfficeTalk';
+import { PathCwdContext } from '../../lib/openPath';
 import type { ClaudeInstance } from '../../types/instance';
 import type { CodexItem, CodexThread } from '../../types/codex';
 import type { OpenCodeSnapshot } from '../../types/opencode';
@@ -46,7 +47,6 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
   const llm = useLlmChatStore(s => s.conversations[id]);
   const worker = useOfficeGameStore(s => s.workers[id]);
   const profile = useOfficeGameStore(s => s.profiles[id]);
-  const purchased = useOfficeGameStore(s => s.purchasedItems);
   const [history, setHistory] = useState<History>({});
   const [loading, setLoading] = useState(false);
   const [readError, setReadError] = useState('');
@@ -107,7 +107,7 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
 
   return <aside className="office-chat" aria-label={`Chat with ${instance.name}`}>
     <header className="office-chat-heading">
-      <CharacterPortrait id={profile?.appearanceId ?? id} color={`#${getProviderColor(provider).toString(16).padStart(6, '0')}`} accessory={profile?.accessory} />
+      <CharacterPortrait id={profile?.appearanceId ?? id} color={`#${getProviderColor(provider).toString(16).padStart(6, '0')}`} wearables={profile?.wearables} />
       <div><span className="office-eyebrow">AGENT CONVERSATION</span><h3>{instance.name}</h3><p>{providerName} · {instance.config.llmConfig?.model ?? instance.config.model}</p></div>
       <button aria-label="Close agent chat" title="Close chat (Esc)" onClick={onClose}><X size={18} /></button>
     </header>
@@ -115,10 +115,13 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
       <summary><span className={`office-state-dot ${worker?.activity ?? 'unknown'}`} />{worker ? ACTIVITY_LABELS[worker.activity] : 'Offline'}<span>Agent details</span><ChevronDown size={13} /></summary>
       {worker?.task && <p>{worker.task}</p>}
       <div className="office-chat-stats">{profile?.tasks ?? 0} completed turns · {profile?.coins ?? 0} coins earned</div>
-      <label className="office-accessory">Accessory<select aria-label={`Accessory for ${instance.name}`} value={profile?.accessory ?? ''} onChange={e => useOfficeGameStore.getState().equip(id, e.target.value)}><option value="">None</option>{OFFICE_CATALOG.filter(i => i.category === 'accessory' && purchased.includes(i.id)).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
+      <WearablePicker panelId={id} name={instance.name} />
+      <OfficeHuddle instance={instance} />
+      <OfficeExchanges id={id} />
     </details>
+    <OfficeResources cwd={cwd} items={isLlm ? llm?.messages ?? [] : provider === 'codex' ? codexItems : provider === 'antigravity' ? antigravitySession?.items ?? [] : provider === 'opencode' ? openCodeSession?.messages ?? [] : claudeMessages.length ? claudeMessages : historicClaude} />
     {error && <p className="office-chat-error" role="alert">{error}</p>}
-    <div ref={body} className="office-chat-messages" role="region" aria-label="Agent conversation" tabIndex={0} onScroll={() => {
+    <PathCwdContext.Provider value={cwd}><div ref={body} className="office-chat-messages" role="region" aria-label="Agent conversation" tabIndex={0} onScroll={() => {
       const el = body.current!; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64; setFollowing(follow.current);
     }}>
       <div ref={content}>
@@ -131,8 +134,9 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
         {!count && <div className="office-chat-empty"><MessageSquare size={24} /><p>{loading ? 'Loading conversation…' : 'No messages to show yet.'}</p><small>{loading ? 'Reading this agent’s conversation.' : 'Open the full chat to start or resume this agent.'}</small></div>}
         {busy && <p className="office-chat-working" role="status"><span className="office-live-dot" />{providerName} is working…</p>}
       </div>
-    </div>
+    </div></PathCwdContext.Provider>
     {!following && <button className="office-chat-latest" onClick={scrollToLatest}><ArrowDown size={13} />Latest messages</button>}
-    <footer className="office-chat-footer"><span>{needsYou ? 'This agent needs your input.' : 'Conversation updates as your agent works.'}</span><button onClick={() => onOpen(id)}>Open full chat<ArrowUpRight size={15} /></button></footer>
+    {needsYou && <p className="office-chat-needs-you" role="status">This agent is waiting for your approval — open the full chat to answer.</p>}
+    <OfficeComposer instance={instance} onOpen={onOpen} />
   </aside>;
 }

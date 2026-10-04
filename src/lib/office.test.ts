@@ -104,7 +104,7 @@ describe('office purchases and movement', () => {
     office.getState().equip('a', 'crown'); expect(office.getState().profiles.a).toBeUndefined();
     expect(office.getState().purchase('cap')).toBe(true);
     expect(office.getState().purchase('cap')).toBe(false);
-    office.getState().equip('a', 'cap'); expect(office.getState().profiles.a.accessory).toBe('cap');
+    office.getState().equip('a', 'cap'); expect(office.getState().profiles.a.wearables).toEqual({ head: 'cap' });
   });
   it('routes each task to a free room tile and never cuts blocked corners', () => {
     const layout = getDefaultLayout(), blocked = blockedCells(layout);

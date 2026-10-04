@@ -283,10 +283,13 @@ pub fn run() {
             launch::take_launch_dirs,
             // Panel bus (cross-panel messaging)
             panelbus::panel_registry_sync,
+            panelbus::panel_send_text,
             panelbus::panel_bus_set_enabled,
             panelbus::panel_bus_status,
             // File listing
             util::file_listing::list_project_files,
+            util::open_path::open_path_smart,
+            util::open_path::resolve_path_smart,
             // Slash commands
             util::slash_commands::list_slash_commands,
             // PostHog

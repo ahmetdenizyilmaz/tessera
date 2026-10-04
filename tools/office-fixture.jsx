@@ -12,6 +12,8 @@ import { useOpenCodeStore } from '../src/store/opencodeStore';
 import { useAntigravityStore } from '../src/store/antigravityStore';
 import { useLlmChatStore } from '../src/store/llmChatStore';
 import { useLayoutStore } from '../src/store/layoutStore';
+import { useOfficeTalkStore } from '../src/lib/officeTalk';
+import { Toasts } from '../src/lib/toast';
 import '../src/styles/global.css';
 import '../src/styles/chat.css';
 import '../src/styles/codex.css';
@@ -24,6 +26,7 @@ window.chat = useChatStore;
 window.opencode = useOpenCodeStore;
 window.antigravity = useAntigravityStore;
 window.llm = useLlmChatStore;
+window.talk = useOfficeTalkStore;
 window.officeHistory = {};
 window.officeHistoryDelay = 0;
 window.officeCalls = [];
@@ -39,6 +42,8 @@ mockIPC(async (command, args) => {
     if (window.officeHistoryFail) throw new Error('History temporarily unavailable');
     return messages;
   }
+  if (command === 'panel_send_text') return { delivered: true, panel: args.id };
+  if (command === 'open_path_smart') return args.path.includes('missing') ? null : { path: args.path, isDir: !/\.\w+$/.test(args.path), base: 'cwd' };
   if (command === 'codex_read_thread') return { thread: { id: args.threadId, turns: [{ id: 'saved', items: [{ id: 'saved-answer', type: 'agentMessage', text: 'Saved Codex thread restored in office.' }] }] } };
   if (command === 'activity_list') {
     if (window.officeFail) throw new Error('Test connection unavailable');
@@ -60,6 +65,7 @@ for (const [id, name, provider, model] of [['architect', 'Backend architect', 'c
     useChatStore.getState().initSession(id);
     useChatStore.getState().addUserMessage(id, id === 'architect' ? 'Refactor the connection manager and read the existing retry behavior.' : id === 'designer' ? 'Polish the office layout and update the furniture controls.' : 'Review the permissions and ask before making the final change.');
     useChatStore.getState().setStreaming(id, true);
+    if (id === 'architect') useChatStore.getState().processEvent(id, { type: 'assistant', message: { id: 'msg-architect-text', role: 'assistant', model, content: [{ type: 'text', text: 'Notes are in C:\\fixture\\notes\\plan.md and the retry code lives in `src/lib/retry.ts`; the old folder was `legacy/missing_dir`. Spec: https://example.com/spec' }] } });
     useChatStore.getState().processEvent(id, { type: 'assistant', message: { id: `msg-${id}`, role: 'assistant', model, content: [{ type: 'tool_use', id: 'tool', name: id === 'architect' ? 'Read' : 'Edit', input: {} }] } });
     if (id === 'reviewer') useChatStore.getState().processEvent(id, { type: 'control_request', request_id: 'approve', request: { subtype: 'can_use_tool', tool_name: 'Edit' } });
   } else {
@@ -71,7 +77,7 @@ for (const [id, name, provider, model] of [['architect', 'Backend architect', 'c
 function Fixture() {
   useWorkerActivity();
   const [visible, setVisible] = useState(true);
-  return <div style={{ height: '100vh', display: 'flex' }}>{visible ? <OfficeView onBack={() => setVisible(false)} /> : <button onClick={() => setVisible(true)}>Return to office</button>}</div>;
+  return <div style={{ height: '100vh', display: 'flex' }}>{visible ? <OfficeView onBack={() => setVisible(false)} /> : <button onClick={() => setVisible(true)}>Return to office</button>}<Toasts /></div>;
 }
 if (location.search.includes('empty')) useInstanceStore.setState({ instances: new Map() });
 document.documentElement.setAttribute('data-theme', 'dark');

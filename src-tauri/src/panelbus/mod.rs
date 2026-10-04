@@ -250,6 +250,17 @@ mod conversation_tests {
 // ─── Tauri commands ─────────────────────────────────────────────────────────
 
 /// Called (debounced) from the app root whenever the instance list or any
+/// Send a message from the person to any local panel, routed the way the bus
+/// routes agent messages (Claude stream, Codex, OpenCode, Antigravity, or a
+/// terminal paste) but without the `[panel-message …]` wrapper. The office
+/// uses it so a chat can be continued without opening the panel.
+#[tauri::command]
+pub async fn panel_send_text(id: String, text: String, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let text = text.trim();
+    if text.is_empty() { return Err("Type a message first.".into()); }
+    tools::deliver_inbound(&app, &id, text).await
+}
+
 /// panel's streaming state changes. Full replacement, not a patch — it is small
 /// and a diff would drift.
 #[tauri::command]

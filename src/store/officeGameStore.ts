@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { OfficeLayout, OfficeWorker, GridPosition, WorkerActivity, WorkerProfile, OfficeReward } from '../types/office';
+import type { OfficeLayout, OfficeWorker, GridPosition, WorkerActivity, WorkerProfile, OfficeReward, WearableSlot } from '../types/office';
 import { getDefaultLayout } from '../engine/defaultOffice';
 import { officeItem, OFFICE_CATALOG } from '../lib/officeCatalog';
 import { furnitureCells, insideOffice, placementError } from '../lib/officeSpace';
 
-const emptyProfile = (): WorkerProfile => ({ coins: 0, tasks: 0, accessory: '' });
+const emptyProfile = (): WorkerProfile => ({ coins: 0, tasks: 0, wearables: {} });
 interface OfficeGameState {
   layout: OfficeLayout;
   workers: Record<string, OfficeWorker>;
@@ -36,7 +36,9 @@ interface OfficeGameState {
   purchase: (id: string) => boolean;
   selectItem: (id: string) => void;
   placeAt: (position: GridPosition) => boolean;
-  equip: (panelId: string, accessory: string) => void;
+  /** Put an owned wearable on (its slot comes from the catalog), or clear a slot with `unequip`. */
+  equip: (panelId: string, itemId: string) => void;
+  unequip: (panelId: string, slot: WearableSlot) => void;
   remapPanels: (ids: Map<string, string>) => void;
   setEditMode: (enabled: boolean) => void;
   setShopOpen: (enabled: boolean) => void;
@@ -120,9 +122,17 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
       movingId: null, notice: existing ? 'Furniture moved.' : `${item?.name} placed.` });
     return true;
   },
-  equip: (panelId, accessory) => set(s => accessory && (!s.purchasedItems.includes(accessory) || officeItem(accessory)?.category !== 'accessory') ? s : ({
-    profiles: { ...s.profiles, [panelId]: { ...(s.profiles[panelId] ?? emptyProfile()), accessory } },
-  })),
+  equip: (panelId, itemId) => set(s => {
+    const item = officeItem(itemId);
+    if (!item?.slot || item.category !== 'accessory' || !s.purchasedItems.includes(itemId)) return s;
+    const profile = s.profiles[panelId] ?? emptyProfile();
+    return { profiles: { ...s.profiles, [panelId]: { ...profile, wearables: { ...profile.wearables, [item.slot]: itemId } } } };
+  }),
+  unequip: (panelId, slot) => set(s => {
+    const profile = s.profiles[panelId]; if (!profile?.wearables[slot]) return s;
+    const wearables = { ...profile.wearables }; delete wearables[slot];
+    return { profiles: { ...s.profiles, [panelId]: { ...profile, wearables } } };
+  }),
   remapPanels: ids => set(s => {
     const profiles = { ...s.profiles }, panelAliases = { ...s.panelAliases };
     for (const [oldId, newId] of ids) {
@@ -136,13 +146,22 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
   setEditMode: editMode => set({ editMode, shopOpen: false, movingId: null, notice: null }),
   setShopOpen: shopOpen => set({ shopOpen, editMode: false, movingId: null, notice: null }),
 }), {
-  name: 'tessera-office', version: 1,
-  migrate: (saved: unknown) => {
-    const old = saved as Partial<OfficeGameState>;
-    const inventory: Record<string, number> = {};
-    for (const id of old.purchasedItems ?? []) if (officeItem(id)?.furnitureType) inventory[id] = (inventory[id] ?? 0) + 1;
-    return { ...old, layout: old.layout?.rooms.length ? old.layout : getDefaultLayout(), currency: Math.max(0, old.currency ?? 0) + 150, inventory,
-      startedAt: Date.now(), pendingRecords: [] } as OfficeGameState;
+  name: 'tessera-office', version: 2,
+  migrate: (saved: unknown, version) => {
+    let old = saved as Partial<OfficeGameState>;
+    if (version < 1) {
+      const inventory: Record<string, number> = {};
+      for (const id of old.purchasedItems ?? []) if (officeItem(id)?.furnitureType) inventory[id] = (inventory[id] ?? 0) + 1;
+      old = { ...old, layout: old.layout?.rooms.length ? old.layout : getDefaultLayout(), currency: Math.max(0, old.currency ?? 0) + 150, inventory, startedAt: Date.now(), pendingRecords: [] };
+    }
+    // v2: the single `accessory` became per-slot `wearables` (every old item was a head item).
+    const profiles: Record<string, WorkerProfile> = {};
+    for (const [id, p] of Object.entries(old.profiles ?? {})) {
+      const legacy = (p as WorkerProfile & { accessory?: string }).accessory;
+      profiles[id] = { ...p, wearables: p.wearables ?? (legacy ? { head: legacy } : {}) };
+      delete (profiles[id] as WorkerProfile & { accessory?: string }).accessory;
+    }
+    return { ...old, profiles } as OfficeGameState;
   },
   partialize: s => ({ layout: s.layout, currency: s.currency, totalEarned: s.totalEarned, completedTasks: s.completedTasks,
     inventory: s.inventory, purchasedItems: s.purchasedItems, profiles: s.profiles, panelAliases: s.panelAliases, rewards: s.rewards, claimed: s.claimed,

@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Matrix, Rectangle, Text } from 'pixi.js';
 import type { OfficeLayout, OfficeFurniture } from '../types/office';
-import { drawOfficeCharacter, drawOfficeFurniture } from './officeArt';
+import { drawOfficeCharacter, drawOfficeFurniture, drawSpeechBubble, type BubbleKind } from './officeArt';
 import type { WorkerPose } from './WorkerAnimator';
 
 const ROOM_NAMES: Record<string, string> = { reception: 'WELCOME', open_floor: 'THE STUDIO', manager_office: 'YOUR OFFICE', meeting_room: 'PLANNING', server_room: 'BUILD LAB', break_room: 'COFFEE LOUNGE', archive: 'LIBRARY', computer_lab: 'RESEARCH', maintenance: 'SUPPORT' };
@@ -11,6 +11,8 @@ export class IsometricEngine {
   private walls = new Container();
   private entities = new Container();
   private labels = new Container();
+  private links = new Graphics();
+  private bubbles = new Container();
   private grid = new Graphics();
   private ghost = new Graphics();
   private ready = false;
@@ -21,7 +23,7 @@ export class IsometricEngine {
   private layout: OfficeLayout | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private cleanup: (() => void) | null = null;
-  private workerGraphics = new Map<string, { body: Graphics; label: Text; key: string }>();
+  private workerGraphics = new Map<string, { body: Graphics; label: Text; bubble: Graphics; glyph: Text; key: string; bubbleKey: string }>();
   private onTileClickHandler?: (gx: number, gy: number) => void;
   private onWorkerClickHandler?: (id: string) => void;
   private onBackgroundClickHandler?: () => void;
@@ -35,10 +37,10 @@ export class IsometricEngine {
     if (this.disposed) { this.app.destroy(true, { children: true }); return; }
     this.ready = true;
     parent.appendChild(this.app.canvas);
-    this.world.addChild(this.floor, this.walls, this.entities, this.labels, this.grid, this.ghost);
+    this.world.addChild(this.floor, this.walls, this.entities, this.links, this.labels, this.bubbles, this.grid, this.ghost);
     this.app.stage.addChild(this.world);
     this.entities.sortableChildren = true;
-    this.labels.eventMode = 'none'; this.grid.eventMode = 'none'; this.ghost.eventMode = 'none';
+    this.labels.eventMode = 'none'; this.grid.eventMode = 'none'; this.ghost.eventMode = 'none'; this.links.eventMode = 'none'; this.bubbles.eventMode = 'none';
     this.resizeObserver = new ResizeObserver(() => { if (parent.clientWidth && parent.clientHeight) { this.app.renderer.resize(parent.clientWidth, parent.clientHeight); this.centerCamera(); } });
     this.resizeObserver.observe(parent);
     this.setupInteraction(parent);
@@ -99,14 +101,18 @@ export class IsometricEngine {
     }
   }
   syncWorkers(ids: string[]) {
-    for (const [id, worker] of this.workerGraphics) if (!ids.includes(id)) { worker.body.destroy(); worker.label.destroy(); this.workerGraphics.delete(id); }
+    for (const [id, worker] of this.workerGraphics) if (!ids.includes(id)) { worker.body.destroy(); worker.label.destroy(); worker.bubble.destroy(); worker.glyph.destroy(); this.workerGraphics.delete(id); }
     for (const id of ids) if (!this.workerGraphics.has(id)) {
       const body = new Graphics(); body.eventMode = 'static'; body.cursor = 'pointer'; body.hitArea = new Rectangle(-17, -55, 34, 65);
       body.on('pointerover', e => { if (!this.edit) this.onWorkerHoverHandler?.(id, e.global.x, e.global.y); });
       body.on('pointerout', () => this.onWorkerHoverHandler?.(null, 0, 0));
       const label = new Text({ text: '', style: { fontFamily: 'Segoe UI, sans-serif', fontSize: 12, fontWeight: '600', fill: 0xf4f3df, stroke: { color: 0x1b3034, width: 3 }, align: 'center' } });
       label.anchor.set(.5, 0); label.eventMode = 'none';
-      this.entities.addChild(body); this.labels.addChild(label); this.workerGraphics.set(id, { body, label, key: '' });
+      const bubble = new Graphics(); bubble.eventMode = 'none'; bubble.visible = false;
+      const glyph = new Text({ text: '', style: { fontFamily: 'Segoe UI, sans-serif', fontSize: 13, fontWeight: '800', fill: 0x2a3a44, align: 'center' } });
+      glyph.anchor.set(.5); glyph.eventMode = 'none'; glyph.visible = false;
+      this.entities.addChild(body); this.labels.addChild(label); this.bubbles.addChild(bubble, glyph);
+      this.workerGraphics.set(id, { body, label, bubble, glyph, key: '', bubbleKey: '' });
     }
   }
   updateWorkerPositions(positions: Map<string, WorkerPose>) {
@@ -115,14 +121,39 @@ export class IsometricEngine {
       const p = this.gridToScreen(pos.x + .5, pos.y + .5);
       w.body.position.set(p.x, p.y); w.body.zIndex = p.y;
       w.label.position.set(p.x, p.y + 10);
+      w.bubble.position.set(p.x, p.y); w.glyph.position.set(p.x, p.y - 72);
     }
   }
-  updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', accessory = '', walking = false, frame = 0, appearanceId = id) {
+  updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', wearables = '', walking = false, frame = 0, appearanceId = id) {
     const w = this.workerGraphics.get(id); if (!w) return;
-    const key = [color, activity, name, provider, accessory, walking, walking ? frame % 2 : 0, appearanceId].join(':');
+    const key = [color, activity, name, provider, wearables, walking, walking ? frame % 2 : 0, appearanceId].join(':');
     if (key === w.key) return;
-    w.key = key; drawOfficeCharacter(w.body, appearanceId, color, accessory, frame, walking, activity);
+    w.key = key; drawOfficeCharacter(w.body, appearanceId, color, wearables, frame, walking, activity);
     w.label.text = `${name.length > 22 ? name.slice(0, 21) + '…' : name}\n${provider}`;
+  }
+  /** The bubble over a character: animated dots while it works, a glyph when it needs
+   * someone, a tinted bubble while it is messaging another agent. */
+  updateWorkerBubble(id: string, kind: BubbleKind, frame = 0) {
+    const w = this.workerGraphics.get(id); if (!w) return;
+    const key = kind ? `${kind}:${kind === 'dots' || kind === 'talk' ? frame % 3 : 0}` : '';
+    if (key === w.bubbleKey) return;
+    w.bubbleKey = key;
+    w.bubble.visible = !!kind; w.glyph.visible = kind === 'question' || kind === 'alert';
+    if (!kind) return;
+    drawSpeechBubble(w.bubble, kind, frame);
+    w.glyph.text = kind === 'question' ? '?' : kind === 'alert' ? '!' : '';
+  }
+  /** Lines from each sender to its receiver, with a dot travelling along (progress 0..1). */
+  drawLinks(links: Array<{ from: string; to: string; progress: number; color: number }>) {
+    this.links.clear();
+    for (const link of links) {
+      const a = this.workerGraphics.get(link.from), b = this.workerGraphics.get(link.to); if (!a || !b) continue;
+      const ax = a.body.x, ay = a.body.y - 60, bx = b.body.x, by = b.body.y - 60;
+      const cx = (ax + bx) / 2, cy = Math.min(ay, by) - 40 - Math.hypot(bx - ax, by - ay) / 6;
+      this.links.moveTo(ax, ay).quadraticCurveTo(cx, cy, bx, by).stroke({ color: link.color, width: 2, alpha: .55 });
+      const t = link.progress, x = (1 - t) * (1 - t) * ax + 2 * (1 - t) * t * cx + t * t * bx, y = (1 - t) * (1 - t) * ay + 2 * (1 - t) * t * cy + t * t * by;
+      this.links.circle(x, y, 4).fill({ color: 0xf7f4e8 }).stroke({ color: link.color, width: 2 });
+    }
   }
   centerCamera() {
     if (!this.ready || !this.layout) return;

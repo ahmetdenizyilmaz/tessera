@@ -6,7 +6,23 @@ Characters walk between workstations, the library, build lab, research lab, plan
 
 The office starts with **150 game coins**. A successfully completed conversation turn earns **30 coins**, plus **5 per distinct reported work category**, capped at a 20-coin bonus. Token usage, model price, waiting time, failed turns, and handoff messages do not generate coins. Office level advances every 10 completed turns; character level advances every five. These are local game points with no monetary value.
 
-The shop sells individual furniture/decor pieces, reusable floor styles, and team-wide accessory unlocks. Buy a piece, choose **Place**, then click an empty tile. **Decorate → Move** repositions existing furniture; **Store** returns it to inventory. **R** rotates the selected item. Floors can be painted after unlocking. Select a character to equip headphones, a cap, or a crown. **Escape** closes the editor or shop. Furniture, inventory, coins, earned rewards, character appearance, and accessories persist on this PC. Workspace restoration remaps character profiles to the restored panels.
+The shop sells individual furniture/decor pieces, reusable floor styles, and team-wide accessory unlocks. Buy a piece, choose **Place**, then click an empty tile. **Decorate → Move** repositions existing furniture; **Store** returns it to inventory. **R** rotates the selected item. Floors can be painted after unlocking. Wearables come in three slots a character wears at once: **head** (headphones, builder cap, cozy beanie, artist beret, sun visor, party hat, tiny crown, halo), **face** (reading glasses, sunglasses, monocle) and **neck** (red tie, bow tie, autumn scarf, staff lanyard); pick one per slot from the agent details. **Escape** closes the editor or shop. Furniture, inventory, coins, earned rewards, character appearance, and accessories persist on this PC. Workspace restoration remaps character profiles to the restored panels.
+
+## Speech bubbles and agent talk
+
+Characters never show message text; a bubble says what state they are in. Animated dots float over a character while it thinks, writes or uses tools; a **?** bubble means it is waiting for your approval; a **!** bubble means its last turn failed. When one agent messages another through the `tessera-panels` MCP tools (`send_to_panel`), the sender gets a green bubble and a line with a travelling dot is drawn to the receiver for a few seconds. The native bus emits `panel-bus-message` for every delivery, so this works for Claude, Codex, OpenCode and Antigravity senders alike, including messages the agents exchange on their own.
+
+**Talk with another agent** (in the agent details) asks the selected agent to discuss a topic with another panel over those same tools and report back; both chats show the exchange, and the office shows it as bubbles. The agent needs the panel tools (Claude and Codex chat panels have them; Antigravity after importing the server in Settings → Antigravity).
+
+## Chatting from the office
+
+The office chat has a composer: Enter sends to the selected agent without opening its panel. Rust routes it the way panel messages are routed (Claude stream, Codex, OpenCode, Antigravity chat, or a paste into a terminal panel). API (LLM) chats are answered from the full chat. An agent waiting for an approval still needs the full chat to answer it.
+
+**Resources** lists the files, folders and links the conversation mentioned. Clicking a file reveals it in the file manager, a folder opens it, a link opens the browser.
+
+## Clickable paths
+
+In every chat, an inline-code path (`src/lib/office.ts`, `C:\Users\you\Desktop\app`, `~/project`) and an absolute path in prose open the file manager. Agents shorten paths inconsistently, so `open_path_smart` tries the text as written, then relative to the panel folder, the Desktop, the home folder and each drive root, and opens the first that exists; line suffixes like `:12:3` and `#L12` are ignored. Nothing is launched: folders open, files are revealed. When no candidate exists a toast says where it looked.
 
 ## Activity and reward coverage
 
@@ -29,4 +45,4 @@ Tests cover reward replay/reload, old and failed records, restoration of charact
 
 Includes native tool-name collection, deduplication, omission of tool inputs, and compatibility with turn/usage recording.
 
-Start Vite, then run `node tools/test-office.mjs`. The browser fixture uses real office components, Pixi rendering, and store subscriptions with synthetic native/session data. It checks task stations, scene lifecycle, actual canvas placement, accessories, rewards while away, persistence, pagination, errors/recovery, narrow layout, and empty state. PNGs are saved under `../tessera-office-validation/`. No model inference or personal transcripts are used.
+Start Vite, then run `node tools/test-office.mjs`. The browser fixture uses real office components, Pixi rendering, and store subscriptions with synthetic native/session data. It checks task stations, scene lifecycle, actual canvas placement, wearable slots, the office composer, clickable resources and paths (including the not-found toast), the agent huddle request, the exchange list, rewards while away, persistence, pagination, errors/recovery, narrow layout, and empty state. PNGs are saved under `../tessera-office-validation/`. No model inference or personal transcripts are used.

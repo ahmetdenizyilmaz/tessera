@@ -9,6 +9,14 @@ function box(g: Graphics, x: number, y: number, w: number, d: number, h: number,
   g.poly([b, c, { x: c.x, y: c.y + h }, { x: b.x, y: b.y + h }]).fill(shade(color, .5));
   g.poly([a, b, c, e]).fill(color).stroke({ color: 0x181d27, width: 1, alpha: .35 });
 }
+export type BubbleKind = '' | 'dots' | 'talk' | 'question' | 'alert';
+/** A speech bubble drawn at the character's origin, floating above the head. */
+export function drawSpeechBubble(g: Graphics, kind: BubbleKind, frame: number) {
+  const fill = kind === 'talk' ? 0xdff3ea : kind === 'question' ? 0xfbe7b5 : kind === 'alert' ? 0xf8d2cb : 0xf7f4e8;
+  g.clear().roundRect(-15, -82, 30, 19, 9).fill(fill).stroke({ color: 0x2a3a44, width: 1.2, alpha: .5 });
+  g.poly([-4, -64, 2, -64, 0, -58]).fill(fill);
+  if (kind === 'dots' || kind === 'talk') for (let i = 0; i < 3; i++) g.circle(-7 + i * 7, -72.5 - (frame % 3 === i ? 2.5 : 0), 2.2).fill(kind === 'talk' ? 0x2f8f6b : 0x4a5a66);
+}
 export function drawOfficeFurniture(g: Graphics, type: OfficeFurnitureType) {
   g.ellipse(8, 8, 22, 10).fill({ color: 0x111b25, alpha: .2 });
   if (type === 'desk') {
@@ -55,7 +63,9 @@ export function drawOfficeFurniture(g: Graphics, type: OfficeFurnitureType) {
   }
 }
 
-export function drawOfficeCharacter(g: Graphics, id: string, color: number, accessory: string, frame: number, walking: boolean, activity: string) {
+/** `wearables` is the `wearableKey()` string: head|face|neck item ids. */
+export function drawOfficeCharacter(g: Graphics, id: string, color: number, wearables: string, frame: number, walking: boolean, activity: string) {
+  const [head, face, neck] = wearables.split('|');
   const seed = characterSeed(id), skin = [0xf1c29c, 0xbd8968, 0x966747, 0xe3af81][seed % 4], hair = [0x423632, 0xb6804d, 0x302e39, 0x8a6751][seed % 4];
   const step = walking ? (frame % 2 ? 2 : -2) : 0;
   g.clear().ellipse(0, 7, 10, 4).fill({ color: 0x152329, alpha: .28 });
@@ -67,9 +77,22 @@ export function drawOfficeCharacter(g: Graphics, id: string, color: number, acce
   g.roundRect(-7, -42, 14, 16, 3).fill(skin);
   g.rect(-8, -43, 16, 5).rect(-8, -39, seed % 2 ? 5 : 3, 6).fill(hair);
   g.rect(-4, -35, 2, 2).rect(3, -35, 2, 2).fill(0x26313d);
-  if (accessory === 'headphones') { g.arc(0, -36, 10, Math.PI, 0).stroke({ color: 0x26313d, width: 3 }); g.roundRect(-12, -37, 4, 9, 2).roundRect(8, -37, 4, 9, 2).fill(0xf0bb77); }
-  if (accessory === 'cap') g.poly([-9, -40, -7, -48, 6, -48, 9, -40, 14, -38, -9, -38]).fill(0xe7bb76);
-  if (accessory === 'crown') g.poly([-8, -43, -9, -53, -3, -48, 0, -55, 4, -48, 9, -53, 8, -43]).fill(0xf3ce75).stroke({ color: 0x9a7743, width: 1 });
+  // Neck first so hats and glasses draw over it.
+  if (neck === 'tie') g.poly([-1, -27, 1, -27, 2, -17, 0, -13, -2, -17]).fill(0xc24d4d);
+  if (neck === 'bowtie') g.poly([-6, -29, -1, -27, -6, -24]).poly([6, -29, 1, -27, 6, -24]).fill(0xc24d4d).rect(-1, -28, 2, 2).fill(0x8a2f2f);
+  if (neck === 'scarf') { g.roundRect(-9, -29, 18, 5, 2).fill(0xe28a4a); g.roundRect(3, -26, 4, 9, 1).fill(0xd3773a); }
+  if (neck === 'lanyard') { g.moveTo(-3, -27).lineTo(0, -18).moveTo(3, -27).lineTo(0, -18).stroke({ color: 0x4aa3df, width: 1.2 }); g.rect(-2, -18, 4, 5).fill(0xf2f2f2).rect(-1.5, -17, 3, 1).fill(0x4aa3df); }
+  if (face === 'glasses') { g.circle(-3, -35, 2.8).circle(4, -35, 2.8).stroke({ color: 0x26313d, width: 1 }); g.moveTo(-0.2, -35).lineTo(1.2, -35).stroke({ color: 0x26313d, width: 1 }); }
+  if (face === 'sunglasses') { g.roundRect(-6, -37, 5, 4, 1).roundRect(1.5, -37, 5, 4, 1).fill(0x1a1f26); g.moveTo(-1, -36).lineTo(1.5, -36).stroke({ color: 0x1a1f26, width: 1 }); }
+  if (face === 'monocle') { g.circle(4, -35, 3.2).stroke({ color: 0xf3ce75, width: 1 }); g.moveTo(6.5, -33).lineTo(9, -27).stroke({ color: 0xf3ce75, width: .8 }); }
+  if (head === 'headphones') { g.arc(0, -36, 10, Math.PI, 0).stroke({ color: 0x26313d, width: 3 }); g.roundRect(-12, -37, 4, 9, 2).roundRect(8, -37, 4, 9, 2).fill(0xf0bb77); }
+  if (head === 'cap') g.poly([-9, -40, -7, -48, 6, -48, 9, -40, 14, -38, -9, -38]).fill(0xe7bb76);
+  if (head === 'beanie') { g.roundRect(-8.5, -48, 17, 9, 4).fill(0xb75c6b); g.rect(-8.5, -42, 17, 3).fill(0x8f4452); g.circle(0, -49, 2.5).fill(0xf0d7a6); }
+  if (head === 'beret') { g.ellipse(-1, -45, 10, 4).fill(0x3b4f8f); g.rect(-1.5, -50, 2, 3).fill(0x2a3a6b); }
+  if (head === 'visor') { g.poly([-9, -40, 9, -40, 13, -37, -13, -37]).fill(0x3dd1a0); g.rect(-8, -43, 16, 3).fill(0x2fae84); }
+  if (head === 'party_hat') { g.poly([-6, -43, 6, -43, 0, -59]).fill(0x7fc0e8); g.poly([-4, -48, 4, -48, 3, -51, -3, -51]).fill(0xf5d76e); g.circle(0, -59, 2).fill(0xf0788f); }
+  if (head === 'crown') g.poly([-8, -43, -9, -53, -3, -48, 0, -55, 4, -48, 9, -53, 8, -43]).fill(0xf3ce75).stroke({ color: 0x9a7743, width: 1 });
+  if (head === 'halo') g.ellipse(0, -50, 9, 3).stroke({ color: 0xf3ce75, width: 2 });
   if (!walking && (activity === 'reading_file' || activity === 'searching_files')) g.poly([-9, -19, 0, -16, 9, -19, 9, -7, 0, -4, -9, -7]).fill(0xf0d7a6).stroke({ color: 0x9e805b, width: 1 });
   const active = !['idle', 'unknown', 'new'].includes(activity);
   g.circle(11, -43, 4).fill(activity === 'error' ? 0xe79588 : activity === 'awaiting_permission' ? 0xf1c574 : active ? 0x8fceaf : 0x8c9b9c);

@@ -11,6 +11,7 @@ import { AuthGate } from './auth/AuthGate';
 import App from './App';
 import { initStreamBridge } from './lib/streamBridge';
 import { initPanelBus } from './lib/panelBus';
+import { initOfficeTalk } from './lib/officeTalk';
 import { initLaunchBridge } from './lib/launchBridge';
 import { initThemeManager } from './lib/themeManager';
 import { initLanBridge } from './store/lanStore';
@@ -24,6 +25,7 @@ import './styles/mosaic.css';
 // Register global callbacks for Rust → JS stream data delivery
 initStreamBridge();
 initPanelBus();
+initOfficeTalk();
 void initCodexBridge();
 initOpenCodeBridge();
 initAntigravityBridge();

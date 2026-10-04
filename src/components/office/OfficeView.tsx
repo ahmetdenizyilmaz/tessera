@@ -6,6 +6,9 @@ import { getProviderColor } from '../../engine/SpriteManager';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { officeProvider, PROVIDER_NAMES } from '../../lib/officeActivity';
+import { wearableKey } from '../../lib/officeCatalog';
+import { bubbleFor } from '../../lib/officeBubbles';
+import { EXCHANGE_VISIBLE_MS, liveExchanges } from '../../lib/officeTalk';
 import { focusShortcutPanel } from '../../lib/panelShortcuts';
 import { OfficeHUD } from './OfficeHUD';
 import { OfficeShop } from './OfficeShop';
@@ -62,12 +65,18 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
         lastLayout = state.layout;
         const poses = animator.update(dt, state.workers);
         engine.updateWorkerPositions(poses);
+        const now = Date.now(), exchanges = liveExchanges(now), talking = new Set(exchanges.map(e => e.from));
         for (const [id, worker] of Object.entries(state.workers)) {
           const instance = useInstanceStore.getState().instances.get(id); if (!instance) continue;
           const provider = officeProvider(instance);
           engine.updateWorkerGraphic(id, getProviderColor(provider), worker.activity, instance.name, PROVIDER_NAMES[provider] ?? provider,
-            state.profiles[id]?.accessory, poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId);
+            wearableKey(state.profiles[id]?.wearables), poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId);
+          engine.updateWorkerBubble(id, bubbleFor(worker.activity, talking.has(id)), Math.floor(time / 260));
         }
+        engine.drawLinks(exchanges.map(e => {
+          const sender = useInstanceStore.getState().instances.get(e.from);
+          return { from: e.from, to: e.to, progress: Math.min(1, (now - e.at) / (EXCHANGE_VISIBLE_MS * .6)), color: getProviderColor(sender ? officeProvider(sender) : '') };
+        }));
         // Commit only after arrival; moving characters stay local to the renderer.
         const settled = new Map([...poses].filter(([id, p]) => !p.isWalking && (state.workers[id].position.x !== p.x || state.workers[id].position.y !== p.y)));
         if (settled.size) state.settleWorkers(settled);

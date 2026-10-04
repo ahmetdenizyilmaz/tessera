@@ -52,6 +52,10 @@ export interface OfficeLayout {
   rooms: OfficeRoom[];
 }
 
+/** Where a wearable sits on the character. One item per slot. */
+export type WearableSlot = 'head' | 'face' | 'neck';
+export const WEARABLE_SLOTS: WearableSlot[] = ['head', 'face', 'neck'];
+
 export interface ShopItem {
   id: string;
   name: string;
@@ -59,6 +63,7 @@ export interface ShopItem {
   price: number;
   sprite: string;
   furnitureType?: OfficeFurnitureType;
+  slot?: WearableSlot;
 }
 
 export const ACTIVITY_LOCATIONS: Record<WorkerActivity, OfficeRoomType[]> = {
@@ -83,7 +88,8 @@ export interface WorkerProfile {
   appearanceId?: string;
   coins: number;
   tasks: number;
-  accessory: string;
+  /** Equipped wearable ids by slot. */
+  wearables: Partial<Record<WearableSlot, string>>;
 }
 export interface OfficeReward {
   id: string;

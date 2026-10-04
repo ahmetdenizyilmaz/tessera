@@ -1,10 +1,11 @@
 import React, { useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import AnsiToHtml from 'ansi-to-html';
 import { open } from '@tauri-apps/plugin-shell';
 import type { Components } from 'react-markdown';
+import { looksLikePath, openPath, PATH_SCHEME, remarkPaths, useChatCwd } from '../../lib/openPath';
 
 const ansiConverter = new AnsiToHtml({
   fg: '#e0e0e0',
@@ -31,13 +32,19 @@ function extractText(children: React.ReactNode): string {
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
+  const cwd = useChatCwd();
   const handleLinkClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
-    const href = e.currentTarget.href;
-    if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+    const href = e.currentTarget.getAttribute('href') ?? '';
+    if (href.startsWith(PATH_SCHEME)) {
+      e.preventDefault();
+      void openPath(decodeURIComponent(href.slice(PATH_SCHEME.length)), cwd);
+      return;
+    }
+    if (href.startsWith('http://') || href.startsWith('https://')) {
       e.preventDefault();
       open(href).catch(() => {});
     }
-  }, []);
+  }, [cwd]);
 
   const components: Components = {
     // pre: render a fragment to avoid nesting issues; code handles the wrapper
@@ -50,8 +57,16 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
       const hasLanguage = cls?.includes('language-');
       const text = extractText(children);
 
-      // Inline code
+      // Inline code; a path opens its folder (or reveals the file) on click.
       if (!hasLanguage) {
+        if (looksLikePath(text)) {
+          return (
+            <code className="md-inline-code md-path" role="link" tabIndex={0} title="Open in file manager" data-path={text.trim()}
+              onClick={() => void openPath(text, cwd)} onKeyDown={e => { if (e.key === 'Enter') void openPath(text, cwd); }} {...props}>
+              {children}
+            </code>
+          );
+        }
         return (
           <code className="md-inline-code" {...props}>
             {children}
@@ -98,10 +113,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
       );
     },
 
-    // Links open in browser
+    // Links open in the browser; `path:` links open the file manager.
     a({ href, children }) {
+      const isPath = href?.startsWith(PATH_SCHEME);
       return (
-        <a href={href} onClick={handleLinkClick} className="md-link" rel="noreferrer">
+        <a href={href} onClick={handleLinkClick} className={isPath ? 'md-link md-path' : 'md-link'} rel="noreferrer" title={isPath ? 'Open in file manager' : undefined}>
           {children}
         </a>
       );
@@ -122,8 +138,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
   return (
     <div className={`markdown-content ${className ?? ''}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkPaths]}
         rehypePlugins={[rehypeHighlight]}
+        urlTransform={url => url.startsWith(PATH_SCHEME) ? url : defaultUrlTransform(url)}
         components={components}
       >
         {content}
