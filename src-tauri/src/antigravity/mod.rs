@@ -58,6 +58,8 @@ fn safe_id(value: &str) -> bool {
         && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
+const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
 impl Config {
     pub fn validate(&self) -> Result<(), String> {
         if !std::path::Path::new(&self.cwd).is_dir() {
@@ -66,7 +68,7 @@ impl Config {
         if !["review", "accept-edits", "plan", "skip"].contains(&self.permission.as_str()) {
             return Err("Invalid Antigravity permission mode.".into());
         }
-        if !["", "low", "medium", "high", "xhigh", "max"].contains(&self.effort.as_str()) {
+        if !self.effort.is_empty() && !EFFORTS.contains(&self.effort.as_str()) {
             return Err("Invalid Antigravity reasoning effort.".into());
         }
         // Passed as one argument without a shell; still never let it read as a flag.
@@ -78,13 +80,18 @@ impl Config {
         }
         Ok(())
     }
+    /// Model IDs like `gemini-3.8-flash-high` carry their effort; agy rejects
+    /// `--effort` next to them ("--model … conflicts with --effort=…").
+    pub fn effort_in_model(&self) -> bool {
+        EFFORTS.iter().any(|e| self.model.len() > e.len() + 1 && self.model.ends_with(e) && self.model.as_bytes()[self.model.len() - e.len() - 1] == b'-')
+    }
     /// Flags shared by the headless stream and the native terminal.
     fn flags(&self, conversation: Option<&str>) -> Vec<String> {
         let mut args = vec![];
         if !self.model.is_empty() {
             args.extend(["--model".into(), self.model.clone()]);
         }
-        if !self.effort.is_empty() {
+        if !self.effort.is_empty() && !self.effort_in_model() {
             args.extend(["--effort".into(), self.effort.clone()]);
         }
         match self.permission.as_str() {
@@ -481,6 +488,27 @@ impl Session {
 
     /// A live process that reported `init` for this panel's conversation.
     async fn ensure_ready(self: &Arc<Self>) -> Result<String, String> {
+        match self.ensure_ready_once().await {
+            // agy checks the effort against the model ("gemini-3.8-flash has no
+            // "max" effort (available: low, medium, high)"). Start again with the
+            // model's default effort rather than leaving the panel dead; the
+            // notice tells the person what to change in the options.
+            Err(e) if e.contains("invalid model selection") && !self.lock().config.effort.is_empty() => {
+                let detail = e.split("): ").nth(1).unwrap_or(&e).trim_end_matches('.').to_string();
+                {
+                    let mut inner = self.lock();
+                    let (model, effort) = (inner.config.model.clone(), std::mem::take(&mut inner.config.effort));
+                    inner.transcript.note("warning", format!(
+                        "Reasoning effort \"{effort}\" cannot be used with model \"{model}\" ({detail}). Started with the model's default effort instead; pick a valid effort in the panel options to keep it."), now());
+                    inner.startup_failure = None;
+                }
+                self.bump();
+                self.ensure_ready_once().await
+            }
+            other => other,
+        }
+    }
+    async fn ensure_ready_once(self: &Arc<Self>) -> Result<String, String> {
         if self.lock().proc.is_none() {
             self.spawn()?;
             self.bump();
@@ -1016,10 +1044,14 @@ mod tests {
         );
         c.permission = "accept-edits".into();
         c.effort = "high".into();
+        c.model = "gemini-3.8-flash-high".into();
+        assert!(c.effort_in_model());
+        assert!(!c.flags(None).iter().any(|a| a == "--effort"), "a model that names its effort gets no --effort flag");
+        c.model = "gemini-3.8-flash".into();
         c.sandbox = true;
         assert_eq!(
             c.flags(Some("055a398f-0000-4000-8000-000000000000")),
-            ["--model", "gemini-3.8-flash-low", "--effort", "high", "--mode", "accept-edits", "--sandbox", "--conversation", "055a398f-0000-4000-8000-000000000000"]
+            ["--model", "gemini-3.8-flash", "--effort", "high", "--mode", "accept-edits", "--sandbox", "--conversation", "055a398f-0000-4000-8000-000000000000"]
         );
         c.permission = "skip".into();
         assert!(c.flags(None).contains(&"--dangerously-skip-permissions".to_string()));

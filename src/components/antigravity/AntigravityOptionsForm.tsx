@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { discoverAntigravity } from '../../lib/antigravityDiscovery';
-import { ANTIGRAVITY_EFFORTS, ANTIGRAVITY_INSTALL_COMMAND, ANTIGRAVITY_INSTALL_URL, ANTIGRAVITY_PERMISSIONS } from '../../lib/antigravityConfig';
+import { ANTIGRAVITY_EFFORTS, effortInModel, ANTIGRAVITY_INSTALL_COMMAND, ANTIGRAVITY_INSTALL_URL, ANTIGRAVITY_PERMISSIONS } from '../../lib/antigravityConfig';
 import type { AntigravityDiscovery, AntigravityOptions, AntigravityPermission } from '../../types/antigravity';
 
 const AUTH_LABELS: Record<AntigravityDiscovery['auth']['state'], string> = { 'signed-in': 'Signed in', 'api-key': 'API key', 'signed-out': 'Not signed in', unknown: 'Sign-in not checked' };
@@ -64,9 +64,11 @@ export function AntigravityOptionsForm({ value, onChange, disabled = false, view
         </select> : <input className="form-input" aria-label="Antigravity model" value={value.model} onChange={e => patch({ model: e.target.value.trim() })} placeholder="Model slug from agy models (empty = agy's default)" />}
       </label>
       <label className="form-group"><span className="form-label">Reasoning effort</span>
-        <select className="form-select" value={value.effort} onChange={e => patch({ effort: e.target.value as AntigravityOptions['effort'] })}>
-          {ANTIGRAVITY_EFFORTS.map(effort => <option key={effort} value={effort}>{effort || 'Model default'}</option>)}
-        </select>
+        {effortInModel(value.model)
+          ? <select className="form-select" aria-label="Reasoning effort" value="" disabled title="This model already names its effort"><option value="">Set by the model ({value.model.split('-').pop()})</option></select>
+          : <select className="form-select" aria-label="Reasoning effort" value={value.effort} onChange={e => patch({ effort: e.target.value as AntigravityOptions['effort'] })}>
+            {ANTIGRAVITY_EFFORTS.map(effort => <option key={effort} value={effort}>{effort || 'Model default'}</option>)}
+          </select>}
       </label>
     </div>
     <small className="opencode-hint">{discovery?.modelsError ? `Models could not be listed (${discovery.modelsError}). Enter a slug from "agy models", or leave empty.` : models.length ? `${models.length} models reported by "agy models" for your account.` : 'Models are listed by the CLI once it is available.'}</small>

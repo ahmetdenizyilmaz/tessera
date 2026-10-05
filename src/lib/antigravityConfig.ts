@@ -32,6 +32,11 @@ export const ANTIGRAVITY_PERMISSIONS: Record<AntigravityPermission, { label: str
 
 export const ANTIGRAVITY_EFFORTS: AntigravityOptions['effort'][] = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 
+/** `gemini-3.8-flash-high` names its effort; agy rejects `--effort` next to such a model. */
+export function effortInModel(model: string): boolean {
+  return ANTIGRAVITY_EFFORTS.some(e => e && model.endsWith('-' + e));
+}
+
 export function antigravityModelLabel(model: string): string { return model || 'default model'; }
 
 export function antigravityTranscript(items: AntigravityItem[]): ForkMessage[] {

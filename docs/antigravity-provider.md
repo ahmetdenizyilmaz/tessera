@@ -37,6 +37,14 @@ On macOS/Linux the status reads "not checked" for the same reason.
 Models come from `agy models` for your account. Leaving the model empty uses the one saved in
 agy's own settings (`/model` in the TUI).
 
+**Reasoning effort** is checked by agy against the model. A model whose ID names its effort
+(`gemini-3.8-flash-high`, `…-low`) rejects any `--effort`, so Tessera never passes one for
+those and the options form shows the effort as set by the model. A base model only offers some
+levels (`gemini-3.8-flash`: low, medium, high — not xhigh or max). If agy refuses the saved
+combination ("invalid model selection"), the panel starts again with the model's default effort
+and adds a warning to the transcript naming the available levels; pick one of those in the panel
+options to keep an explicit effort.
+
 ## Chat panels
 
 Chat uses the CLI's documented headless interface:
