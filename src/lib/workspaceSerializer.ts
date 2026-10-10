@@ -328,11 +328,12 @@ export function deserializeWorkspace(raw: unknown): void {
 
     // Two panels must never share one agy conversation or transcript file: the
     // second copy keeps its settings but starts fresh.
-    if (inst.config.agentProvider === 'antigravity' && inst.antigravityDataId) {
-      const identity = 'antigravity:' + inst.antigravityDataId;
+    if (inst.config.agentProvider === 'antigravity' && (inst.antigravityDataId || inst.antigravityConversationId)) {
+      const dataId = inst.antigravityDataId || crypto.randomUUID();
+      const identity = 'antigravity:' + dataId;
       const conversation = inst.antigravityConversationId ? 'antigravity-conversation:' + inst.antigravityConversationId : null;
       if (!seenSessionIds.has(identity) && !(conversation && seenSessionIds.has(conversation))) {
-        useInstanceStore.getState().updateInstance(newId, { antigravityConversationId: inst.antigravityConversationId, antigravityDataId: inst.antigravityDataId });
+        useInstanceStore.getState().updateInstance(newId, { antigravityConversationId: inst.antigravityConversationId, antigravityDataId: dataId });
         seenSessionIds.add(identity);
         if (conversation) seenSessionIds.add(conversation);
       }

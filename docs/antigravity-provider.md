@@ -85,14 +85,20 @@ it is what makes save/restore deterministic. Limits of the installed version:
   ID through any supported interface, so a restart resumes the originally pinned conversation.
 - The TUI gives no structured events: no chat transcript for Office/forks/panel reads, no
   activity turns, and **no token usage**. These are shown as unavailable, not as zero.
-- If no sign-in is saved, the terminal starts unpinned so you can sign in; restart the panel
-  afterwards to make it resumable.
+- If sign-in is needed, a restored terminal still passes its saved conversation ID to the
+  native CLI. A new sign-in terminal has no ID yet; complete sign-in and restart that panel
+  before starting work so Tessera can pin its conversation.
+- Other startup failures keep the saved conversation and show an error with **Restart
+  terminal**. They never fall back to an unrelated unpinned conversation.
 
 ## Sessions, restore and recovery
 
 - Every panel has its own process, working directory, model, permission mode, storage ID and
   conversation. Workspace files and autosave store those values and the conversation ID,
   never credentials.
+- The native backend saves a conversation ID as soon as the CLI reports it, even before a
+  first answer or frontend autosave. A restored ID is also kept when an older workspace
+  lacks the separate transcript storage ID.
 - Restoring a workspace registers each panel and shows its saved transcript **without starting
   a process or making a model call**. agy starts with the next message (chat) or when the
   terminal mounts.

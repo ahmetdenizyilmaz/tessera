@@ -124,6 +124,8 @@ fn recovery_for(text: &str) -> &'static str {
         .any(|needle| lower.contains(needle))
     {
         "login"
+    } else if lower.contains("was not found on this pc") {
+        "new_conversation"
     } else if lower.contains("was not found. install") || lower.contains("executable path is invalid") || lower.contains("cannot start antigravity") {
         "executable"
     } else {
@@ -358,6 +360,9 @@ impl Session {
                 }
                 inner.init = json!({"model":event["init"]["model"],"permissionMode":event["init"]["permission_mode"],
                     "tools":event["init"]["tools"].as_array().map(Vec::len)});
+                // The CLI owns this identity as soon as init arrives. Persist it
+                // before a first turn, frontend poll, or app shutdown can race it.
+                self.persist(inner);
             }
             Some("step_update") if proc.mismatch.is_none() => {
                 let conversation = inner.conversation_id.clone().unwrap_or_default();
@@ -662,6 +667,35 @@ impl Session {
         self.persist(inner);
         Ok(conversation)
     }
+
+    /// A terminal must retain its saved identity even when the headless probe
+    /// cannot authenticate. Other probe failures must never launch an unrelated
+    /// unpinned TUI: that new conversation would be lost on the next app restart.
+    async fn terminal_conversation(self: &Arc<Self>, signed_out: bool) -> Result<(Option<String>, Option<String>), String> {
+        let saved = self.lock().conversation_id.clone();
+        let pinned = if signed_out { Err(SIGN_IN.to_string()) } else { self.pin().await };
+        match pinned {
+            Ok(id) => Ok((Some(id), None)),
+            Err(error) if recovery_for(&error) == "login" => {
+                let warning = if saved.is_some() {
+                    format!("{error} This terminal will open with its saved conversation ID so sign-in can continue that conversation.")
+                } else {
+                    format!("This sign-in terminal has no saved conversation yet. Complete sign-in, then use Restart on this panel before starting work. {error}")
+                };
+                Ok((saved, Some(warning)))
+            }
+            Err(error) => {
+                // A timed-out probe must finish before a retry starts a new one.
+                self.stop_process();
+                self.wait_stopped(Duration::from_secs(5)).await;
+                let mut inner = self.lock();
+                self.fail(&mut inner, &error);
+                drop(inner);
+                self.bump();
+                Err(error)
+            }
+        }
+    }
 }
 
 impl Drop for Session {
@@ -940,28 +974,14 @@ pub async fn antigravity_terminal_spawn(
     let _gate = session.gate.lock().await;
     // Without a saved sign-in the headless interface cannot start; the native
     // TUI is exactly where the official browser sign-in happens.
-    let pinned = if auth_status().await["state"] == "signed-out" {
-        Err(SIGN_IN.to_string())
-    } else {
-        session.pin().await
-    };
+    let (conversation, warning) = session.terminal_conversation(auth_status().await["state"] == "signed-out").await?;
     let (executable, config) = {
         let inner = session.lock();
         (inner.executable.clone(), inner.config.clone())
     };
-    let missing = pinned.as_ref().is_err_and(|e| e.contains("was not found on this PC"));
-    if missing {
-        let error = pinned.unwrap_err();
-        let mut inner = session.lock();
-        inner.error = Some(error.clone());
-        inner.recovery = Some("new_conversation");
-        drop(inner);
-        session.bump();
-        return Err(error);
-    }
     let mut command = portable_pty::CommandBuilder::new(&executable.program);
     command.args(&executable.args);
-    command.args(config.flags(pinned.as_deref().ok()));
+    command.args(config.flags(conversation.as_deref()));
     if let Some(prompt) = initial_prompt.filter(|p| !p.trim().is_empty()) {
         command.args(["--prompt-interactive", prompt.as_str()]);
     }
@@ -973,16 +993,13 @@ pub async fn antigravity_terminal_spawn(
         command.env_remove(key);
     }
     crate::pty::manager::spawn_prepared(id, command, cols, rows, &app, &pty)?;
-    let warning = pinned.as_ref().err().map(|error| {
-        format!("This terminal started without a pinned conversation, so it cannot be resumed after a restart yet: {error} Sign in here if agy asks, then use Restart on this panel.")
-    });
     {
         let mut inner = session.lock();
         inner.error = warning.clone();
         inner.recovery = warning.as_ref().map(|_| "login");
     }
     session.bump();
-    Ok(json!({"conversationId":pinned.ok(),"warning":warning}))
+    Ok(json!({"conversationId":conversation,"warning":warning}))
 }
 
 pub async fn read_recent(app: &AppHandle, id: &str, limit: usize) -> Result<Vec<Value>, String> {
@@ -1093,6 +1110,84 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = events.clone();
         (Arc::new(move |event| sink.lock().unwrap().push(event)), events)
+    }
+
+    fn resume_fixture(root: &std::path::Path, mode: &str, conversation: Option<String>) -> Arc<Session> {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+            .join("tools/fixtures/antigravity-resume.mjs");
+        Session::open(config(root), Executable { program: "node".into(), args: vec![fixture.to_string_lossy().into()] },
+            conversation, root.join("panel.json"), collecting_sink().0,
+            vec![("TESSERA_AGY_RESUME_FIXTURE".into(), mode.into())])
+    }
+
+    async fn fixture_idle(session: &Arc<Session>) {
+        for _ in 0..200 {
+            if !session.lock().transcript.busy() { return; }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        panic!("fixture turn did not finish: {}", session.snapshot());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_identity_is_saved_before_the_first_turn_and_survives_a_fresh_backend() {
+        let root = std::env::temp_dir().join(format!("tessera-agy-resume-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let session = resume_fixture(&root, "normal", None);
+        let conversation = session.ensure_ready().await.unwrap();
+        // Closing before the frontend polls or before any result still has an identity on disk.
+        let saved: Saved = serde_json::from_slice(&std::fs::read(root.join("panel.json")).unwrap()).unwrap();
+        assert_eq!(saved.conversation_id.as_deref(), Some(conversation.as_str()));
+        assert!(saved.items.is_empty());
+        session.send("code word: amber".into()).await.unwrap();
+        fixture_idle(&session).await;
+        session.stop_process();
+        assert!(session.wait_stopped(Duration::from_secs(5)).await);
+        drop(session);
+
+        // Emulate a new app with no in-memory session and a workspace missing the latest ID.
+        let restored = resume_fixture(&root, "normal", None);
+        assert_eq!(restored.snapshot()["conversationId"], conversation);
+        assert_eq!(restored.snapshot()["processAlive"], false);
+        let (pinned, warning) = restored.terminal_conversation(false).await.unwrap();
+        assert_eq!(pinned.as_deref(), Some(conversation.as_str()));
+        assert!(warning.is_none());
+        assert!(restored.lock().proc.is_none());
+        restored.send("what was the word?".into()).await.unwrap();
+        fixture_idle(&restored).await;
+        assert_eq!(restored.lock().transcript.messages(1)[0]["content"], "Remembered: code word: amber");
+        restored.stop_process();
+        assert!(restored.wait_stopped(Duration::from_secs(5)).await);
+        drop(restored);
+        assert!(root.starts_with(std::env::temp_dir()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn terminal_resume_keeps_its_id_through_sign_in_and_refuses_unrelated_fallbacks() {
+        let root = std::env::temp_dir().join(format!("tessera-agy-resume-errors-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        for mode in ["startup-error", "login-error", "missing"] {
+            let session = resume_fixture(&root, mode, Some("saved-conversation".into()));
+            let result = session.terminal_conversation(false).await;
+            if mode == "login-error" {
+                let (id, warning) = result.unwrap();
+                assert_eq!(id.as_deref(), Some("saved-conversation"));
+                assert!(warning.unwrap().contains("saved conversation ID"));
+                assert!(session.lock().config.flags(id.as_deref()).ends_with(&["--conversation".into(), "saved-conversation".into()]));
+            } else {
+                assert!(result.is_err(), "{mode} must not open an unpinned terminal");
+                assert_eq!(session.snapshot()["recovery"], if mode == "missing" { "new_conversation" } else { "retry" });
+            }
+            assert_eq!(session.snapshot()["conversationId"], "saved-conversation");
+            assert!(session.wait_stopped(Duration::from_secs(5)).await);
+        }
+        let signed_out = resume_fixture(&root, "normal", Some("saved-conversation".into()));
+        let (id, _) = signed_out.terminal_conversation(true).await.unwrap();
+        assert_eq!(id.as_deref(), Some("saved-conversation"));
+        assert!(signed_out.lock().proc.is_none(), "sign-in recovery does not start a headless process");
+        drop(signed_out);
+        assert!(root.starts_with(std::env::temp_dir()));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]

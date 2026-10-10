@@ -111,6 +111,22 @@ it('round-trips Antigravity view, model, permissions, storage and exact conversa
     config: { agentProvider: 'antigravity', panelView: 'terminal', cwd: 'C:/project', model: 'gemini-3.8-flash-low', antigravity: options } });
   expect([restored.claudeSessionId, restored.codexThreadId, restored.opencodeSessionId]).toEqual([undefined, undefined, undefined]);
 });
+it('retains a saved Antigravity conversation when its transcript storage ID is missing', () => {
+  const options = { ...DEFAULT_ANTIGRAVITY_OPTIONS };
+  for (const name of ['Original', 'Duplicate']) {
+    const id = useInstanceStore.getState().addInstance({ ...config, agentProvider: 'antigravity', antigravity: options }, name);
+    useInstanceStore.getState().updateInstance(id, { antigravityConversationId: 'saved-conversation' });
+    useLayoutStore.getState().addPanel(id);
+  }
+  deserializeWorkspace(JSON.parse(JSON.stringify(serializeWorkspace())));
+  const [original, duplicate] = serializeWorkspace().instances;
+  expect(original).toMatchObject({ antigravityConversationId: 'saved-conversation', antigravityDataId: expect.any(String) });
+  expect(duplicate.antigravityConversationId).toBeUndefined();
+  expect(duplicate.antigravityDataId).toBeUndefined();
+  // A second restart keeps the newly allocated storage identity too.
+  deserializeWorkspace(JSON.parse(JSON.stringify(serializeWorkspace())));
+  expect(serializeWorkspace().instances[0]).toMatchObject({ antigravityConversationId: original.antigravityConversationId, antigravityDataId: original.antigravityDataId });
+});
 it('never restores two panels onto one Antigravity conversation or transcript', () => {
   const options = { ...DEFAULT_ANTIGRAVITY_OPTIONS };
   const make = (name: string, dataId: string, conversation?: string) => {

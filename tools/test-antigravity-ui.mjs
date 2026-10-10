@@ -19,7 +19,7 @@ const pick = async (view) => {
 const refresh = id => page.evaluate(id => window.refresh(id, true), id);
 try {
   await mkdir(shots, { recursive: true });
-  await page.goto(`${process.argv[2] || 'http://127.0.0.1:1420'}/antigravity-ui-test`);
+  await page.goto(`${process.argv[2] || 'http://127.0.0.1:1420'}/antigravity-ui-test`, { waitUntil: 'domcontentloaded' });
   await pick('chat');
   const cli = page.getByRole('status', { name: 'Antigravity CLI status' });
   await expect(cli).toContainText('CLI found · agy 1.2.15');
@@ -45,7 +45,7 @@ try {
   await page.getByPlaceholder(/agy\.exe · found automatically/).fill('D:/tools/agy.exe');
   await page.evaluate(() => { window.discoverFail = null; window.auth = { state: 'signed-in', detail: 'A saved Antigravity sign-in was found.' }; });
   await expect(cli).toContainText('D:/tools/agy.exe');
-  await page.getByLabel('Antigravity model').selectOption('gemini-3.8-flash-low');
+  await page.getByRole('combobox', { name: 'Antigravity model', exact: true }).selectOption('gemini-3.8-flash-low');
 
   // A failed start stays in the wizard with agy's own reason, and is retryable.
   await page.evaluate(() => { window.startFail = 'You are not logged into Antigravity.'; });
@@ -160,7 +160,7 @@ try {
   // A second simultaneous panel: its own process identity, conversation, settings and transcript.
   await page.getByRole('button', { name: 'New panel', exact: true }).click();
   await pick('chat');
-  await page.getByLabel('Antigravity model').selectOption('claude-sonnet-4-6');
+  await page.getByRole('combobox', { name: 'Antigravity model', exact: true }).selectOption('claude-sonnet-4-6');
   await page.getByLabel('Permissions').selectOption('plan');
   await page.getByRole('button', { name: 'Open Antigravity chat', exact: true }).click();
   const b = page.locator('[data-panel="Antigravity · claude-sonnet-4-6"]');
@@ -251,6 +251,23 @@ try {
   await page.keyboard.press('Escape');
   await page.screenshot({ path: `${shots}/terminal.png`, fullPage: true });
   expect((await calls('pty_spawn')).length + (await calls('codex_terminal_spawn')).length + (await calls('opencode_terminal_spawn')).length).toBe(0);
+
+  // A restored terminal retains its exact identity across a failed start and retry.
+  const terminalSaved = await page.evaluate(() => JSON.parse(JSON.stringify(window.workspace.save())));
+  const terminalConversation = terminalSaved.instances[0].antigravityConversationId;
+  await page.evaluate(snapshot => {
+    window.terminalStartFailure = 'Network unavailable during conversation startup.';
+    window.workspace.load(snapshot);
+  }, terminalSaved);
+  await expect(terminal.getByRole('alert')).toContainText('Network unavailable');
+  expect((await calls('antigravity_configure')).at(-1).conversationId).toBe(terminalConversation);
+  expect(await page.evaluate(() => [...window.instances.getState().instances.values()][0].antigravityConversationId)).toBe(terminalConversation);
+  await page.evaluate(() => { window.terminalStartFailure = null; });
+  await terminal.getByRole('button', { name: 'Restart terminal', exact: true }).click();
+  await expect(terminal.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('.xterm-rows')).toContainText('Native Antigravity terminal fixture');
+  expect((await calls('antigravity_configure')).at(-1).conversationId).toBe(terminalConversation);
+  console.log('PASS restored terminal startup failure and retry preserve the saved conversation');
 
   await page.evaluate(() => window.showSettings(true));
   await expect(page.getByRole('heading', { name: 'Antigravity defaults' })).toBeVisible();
