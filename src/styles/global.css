@@ -836,7 +836,6 @@ body,
 .nsw-recent-text small { font-size: 10px; color: var(--text-muted); }
 .nsw-recent-text strong, .nsw-recent-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nsw-recent-status { font-size: 10px; color: var(--text-muted); }
-.nsw-recent-status.is-open { color: var(--accent); }
 .nsw-recents-empty { margin: 0; padding: 12px 8px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .menu-dropdown-item:disabled { opacity: .4; cursor: default; }
 

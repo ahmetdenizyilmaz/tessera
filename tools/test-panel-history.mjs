@@ -74,23 +74,21 @@ try {
 
   await page.evaluate(() => window.creation.openNewSessionWizard());
   await page.getByRole('button', { name: /Recent panels/ }).click();
-  await page.getByRole('textbox', { name: 'Search recent panels' }).fill('Timer');
-  await expect(page.locator('.nsw-recent-panel')).toHaveCount(1);
-  await expect(page.locator('.nsw-recent-panel')).toContainText('Open');
-  await page.locator('.nsw-recent-panel').click();
-  await expect(page.locator('.nsw')).toHaveCount(0);
+  await expect(page.locator('.nsw-recent-panel')).toHaveCount(0);
+  await expect(page.locator('.nsw-recents-count')).toHaveCount(0);
+  await expect(page.locator('.nsw-recents-empty')).toContainText('Recently closed panels');
   expect(await page.evaluate(() => window.plugins.getState().instances.size)).toBe(2);
   // Closing via the panel header must use the same history path as the tab X.
   await page.locator(`[data-panel-id="${timer}"] .terminal-toolbar button`).last().click();
   await expect(page.locator(`[data-tab-id="${timer}"]`)).toHaveCount(0);
-  await page.evaluate(() => window.creation.openNewSessionWizard());
-  await page.getByRole('button', { name: /Recent panels/ }).click();
+  await expect(page.locator('.nsw-recents-count')).toHaveText('1');
   await page.getByRole('textbox', { name: 'Search recent panels' }).fill('Timer');
+  await expect(page.locator('.nsw-recent-panel')).toHaveCount(1);
   await expect(page.locator('.nsw-recent-panel')).toContainText('Reopen');
   await page.locator('.nsw-recent-panel').click();
   await expect(page.locator(`[data-tab-id="${timer}"]`)).toHaveCount(1);
   await expect(page.locator('.nsw')).toHaveCount(0);
-  console.log('PASS recent search, focus existing, reopen closed, panel-header close');
+  console.log('PASS open panels hidden from recents, live close update, search and reopen');
 
   const popup = page.waitForEvent('popup');
   await page.evaluate(() => window.windows.detachPanel(window.lichess));
@@ -132,6 +130,8 @@ try {
 
   await page.evaluate(() => window.creation.openNewSessionWizard());
   await page.getByRole('button', { name: /Recent panels/ }).click();
+  await expect(page.locator('.nsw-recent-panel')).toHaveCount(0);
+  await expect(page.locator('.nsw-recents-count')).toHaveCount(0);
   await page.locator('.nsw').screenshot({ path: 'C:/Users/ady/tessera-browser-validation/recent-panels-dark.png' });
   await page.locator('.tab-bar').screenshot({ path: 'C:/Users/ady/tessera-browser-validation/tab-highlight-dark.png' });
   await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
