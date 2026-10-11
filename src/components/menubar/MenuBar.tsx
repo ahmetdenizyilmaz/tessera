@@ -17,6 +17,7 @@ interface MenuBarProps {
   onClaudeMd?: () => void;
   onNewNotepad?: () => void;
   onNewTimer?: () => void;
+  onNewLichess?: () => void;
 }
 
 interface MenuItem {
@@ -50,6 +51,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onClaudeMd,
   onNewNotepad,
   onNewTimer,
+  onNewLichess,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   ];
 
   const pluginItems: MenuEntry[] = [
+    { label: 'Lichess', action: () => onNewLichess?.() },
     { label: 'Notepad', action: () => onNewNotepad?.() },
     { label: 'Timer', action: () => onNewTimer?.() },
   ];

@@ -472,7 +472,7 @@ impl LanManager {
         let _ = app.emit("lan-pair-request", &info);
         // The prompt is modal; make sure a minimized or backgrounded window
         // is noticed without stealing focus from whatever the user is doing.
-        if let Some(window) = app.get_webview_window("main") {
+        if let Some(window) = app.get_window("main") {
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));

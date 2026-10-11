@@ -7,7 +7,7 @@
 //! as a new tab.
 
 use std::sync::Mutex;
-use tauri::{Manager, WebviewWindow};
+use tauri::{Manager, Webview};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 
@@ -50,7 +50,8 @@ pub fn take_launch_dirs(state: tauri::State<'_, LaunchQueue>) -> Vec<String> {
 /// Nudge the frontend to drain the queue, and bring the window forward — a
 /// second `cgui` invocation should surface the app, like clicking a taskbar
 /// icon.
-pub fn notify_frontend(window: &WebviewWindow) {
+pub fn notify_frontend(webview: &Webview) {
+    let window = webview.window();
     let _ = window.unminimize();
     let _ = window.show();
     // Windows suppresses focus-stealing from a background process, so a plain
@@ -60,7 +61,7 @@ pub fn notify_frontend(window: &WebviewWindow) {
     let _ = window.set_always_on_top(true);
     let _ = window.set_focus();
     let _ = window.set_always_on_top(false);
-    let _ = window.eval("window.__drainLaunchDirs && window.__drainLaunchDirs()");
+    let _ = webview.eval("window.__drainLaunchDirs && window.__drainLaunchDirs()");
 }
 
 /// The single-instance callback: a second launch lands here in the FIRST
@@ -71,7 +72,7 @@ pub fn on_second_instance(app: &tauri::AppHandle, argv: Vec<String>) {
             q.push(dir);
         }
     }
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+    if let Some(window) = app.get_webview(MAIN_WINDOW_LABEL) {
         notify_frontend(&window);
     }
 }

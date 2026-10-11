@@ -531,7 +531,7 @@ pub async fn read_local(app: &AppHandle, target_id: &str, limit: usize) -> Resul
 
 /// Best-effort UI echo so the injected turn shows up in the target's transcript.
 fn echo_into_transcript(app: &AppHandle, target_id: &str, text: &str) {
-    let Some(window) = app.get_webview_window("main") else {
+    let Some(window) = app.get_webview("main") else {
         return;
     };
     let id_json = serde_json::to_string(target_id).unwrap_or_default();

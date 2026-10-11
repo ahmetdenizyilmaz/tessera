@@ -27,4 +27,9 @@ export function registerBuiltins(): void {
   const { registerBuiltin } = usePluginStore.getState();
   registerBuiltin('notepad', NOTEPAD_MANIFEST);
   registerBuiltin('timer', TIMER_MANIFEST);
+  registerBuiltin('lichess', {
+    name: 'lichess', version: '1.0.0', description: 'Play chess on Lichess with your own account',
+    entry: '', icon: 'Globe', defaultTitle: 'Lichess', builtin: true,
+    browserSite: 'lichess', accentColor: '#82b86b',
+  });
 }

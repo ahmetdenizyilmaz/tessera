@@ -256,6 +256,7 @@ export default function App() {
           onClaudeMd={() => setShowClaudeMd(true)}
           onNewNotepad={() => handleNewPlugin('notepad')}
           onNewTimer={() => handleNewPlugin('timer')}
+          onNewLichess={() => handleNewPlugin('lichess')}
         />
 
         <div style={{ display: 'grid', flex: 1, minHeight: 0, minWidth: 0, gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' }}>

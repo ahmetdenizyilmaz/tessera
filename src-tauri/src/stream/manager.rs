@@ -17,7 +17,7 @@ use std::io::{BufRead, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, Webview};
 
 use crate::util::claude_paths;
 
@@ -156,7 +156,7 @@ fn teardown_process(instance: &mut StreamInstance, graceful: bool) {
     }
 }
 
-fn eval_batch(window: &WebviewWindow, id: &str, batch: &[String]) {
+fn eval_batch(window: &Webview, id: &str, batch: &[String]) {
     if batch.is_empty() {
         return;
     }
@@ -322,8 +322,8 @@ fn ensure_process(
 ) -> Result<(), String> {
     let claude_exe = claude_paths::find_claude_exe()
         .ok_or_else(|| "Could not find claude executable".to_string())?;
-    let window: WebviewWindow = app
-        .get_webview_window(MAIN_WINDOW_LABEL)
+    let window: Webview = app
+        .get_webview(MAIN_WINDOW_LABEL)
         .ok_or_else(|| format!("No '{}' webview window found", MAIN_WINDOW_LABEL))?;
 
     let mut instances = state.instances.lock().map_err(|e| e.to_string())?;

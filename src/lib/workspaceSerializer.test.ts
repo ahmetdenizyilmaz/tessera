@@ -8,6 +8,8 @@ import { useInstanceStore } from "../store/instanceStore";
 import { useLayoutStore } from "../store/layoutStore";
 import { useGroupStore } from "../store/groupStore";
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
+import { usePluginStore } from '../store/pluginStore';
+import { registerBuiltins } from './builtinPlugins';
 import type { InstanceConfig } from "../types/instance";
 import { DEFAULT_OPENCODE_OPTIONS } from './opencodeConfig';
 import { DEFAULT_ANTIGRAVITY_OPTIONS } from './antigravityConfig';
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("localStorage", { getItem: () => null });
   useInstanceStore.setState({ instances: new Map() });
+  usePluginStore.setState({ instances: new Map() });
   useLayoutStore.setState({
     tabOrder: [],
     panelTypes: {},
@@ -46,6 +49,24 @@ beforeEach(() => {
   useGroupStore.setState({ groups: new Map(), groupStack: [] });
   useGroupStore.getState().restoreGroups(new Map());
   usePanelShortcutStore.getState().restore({});
+});
+it('restores a Lichess panel, saved page, and group after a complete restart', () => {
+  registerBuiltins();
+  const id = usePluginStore.getState().createInstance('lichess');
+  usePluginStore.getState().setBrowserUrl(id, 'https://lichess.org/abcdefgh/white');
+  useLayoutStore.getState().addPanel(id, 'plugin');
+  const group = useGroupStore.getState().createGroup(null, 'Games');
+  useLayoutStore.getState().addPanel(group, 'group');
+  useGroupStore.getState().movePanelToLevel(id, group);
+  const saved = JSON.parse(JSON.stringify(serializeWorkspace()));
+  usePluginStore.setState({ instances: new Map() });
+  deserializeWorkspace(saved);
+  expect(usePluginStore.getState().instances.get(id)).toMatchObject({ title: 'Lichess', browserUrl: 'https://lichess.org/abcdefgh/white' });
+  expect(useGroupStore.getState().groups.get(group)?.childIds).toContain(id);
+  expect(useLayoutStore.getState().panelTypes[id]).toBe('plugin');
+  const next = serializeWorkspace();
+  deserializeWorkspace({ ...next, plugins: [], groups: {}, layout: { ...next.layout, tabOrder: [], panelTypes: {} } });
+  expect(usePluginStore.getState().instances.has(id)).toBe(false);
 });
 it("restores an unsent Codex panel without an unresumable thread ID", () => {
   const id = useInstanceStore

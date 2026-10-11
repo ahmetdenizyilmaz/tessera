@@ -37,6 +37,7 @@ interface PluginState {
 
   /** Update the title of a plugin instance */
   setInstanceTitle: (id: string, title: string) => void;
+  setBrowserUrl: (id: string, url: string) => void;
 
   /** Update the icon of a plugin instance */
   setInstanceIcon: (id: string, icon: string) => void;
@@ -146,6 +147,16 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       const next = new Map(state.instances);
       next.delete(instanceId);
       return { instances: next };
+    });
+  },
+
+  setBrowserUrl: (id, url) => {
+    set((state) => {
+      const instance = state.instances.get(id);
+      if (!instance || instance.browserUrl === url) return state;
+      const instances = new Map(state.instances);
+      instances.set(id, { ...instance, browserUrl: url });
+      return { instances };
     });
   },
 

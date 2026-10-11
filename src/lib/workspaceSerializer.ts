@@ -70,6 +70,7 @@ export interface SavedPlugin {
   id: string;
   pluginName: string;
   title?: string;
+  browserUrl?: string;
 }
 
 export interface WorkspaceSnapshotV3 {
@@ -157,6 +158,7 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
     },
     groups: serializedGroups,
     plugins: Array.from(pluginInstances.values()).map((p) => ({
+      browserUrl: p.browserUrl,
       id: p.id,
       pluginName: p.pluginName,
       title: p.title,
@@ -380,11 +382,16 @@ export function deserializeWorkspace(raw: unknown): void {
   const remapId = (id: string) => idMap.get(id) ?? id;
 
   // Recreate plugin instances under their saved (stable) panel ids
+  const retainedPlugins = new Set(snapshot.plugins.map(p => p.id));
+  for (const id of usePluginStore.getState().instances.keys()) {
+    if (!retainedPlugins.has(id)) usePluginStore.getState().destroyInstance(id);
+  }
   const deadIds = new Set<string>();
   const savedPluginIds = new Set<string>();
   for (const plugin of snapshot.plugins) {
     savedPluginIds.add(plugin.id);
     const ok = usePluginStore.getState().restoreInstance(plugin.pluginName, plugin.id, plugin.title);
+    if (ok && plugin.browserUrl) usePluginStore.getState().setBrowserUrl(plugin.id, plugin.browserUrl);
     if (!ok) deadIds.add(plugin.id);
   }
 

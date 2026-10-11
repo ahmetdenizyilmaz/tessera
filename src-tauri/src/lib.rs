@@ -4,6 +4,7 @@ pub mod analytics;
 pub mod antigravity;
 pub mod app_paths;
 pub mod auth;
+pub mod browser;
 pub mod checkpoints;
 pub mod codex;
 pub mod opencode;
@@ -28,6 +29,20 @@ use pty::manager::PtyManager;
 use relay::client::RelayClient;
 use stream::manager::StreamJsonManager;
 
+fn main_view_commands<R: tauri::Runtime>(
+    handler: impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static,
+) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    move |invoke| {
+        // App commands are unrestricted by Tauri's plugin ACL by default.
+        // Website views must never reach filesystem, agent, or account commands.
+        if invoke.message.webview().label() != "main" {
+            invoke.resolver.reject("Website panels cannot call Tessera commands");
+            return true;
+        }
+        handler(invoke)
+    }
+}
+
 pub fn run() {
     let database = Database::new().expect("Failed to initialize database");
     let lan_manager = lan::LanManager::new().expect("Failed to initialize LAN identity");
@@ -39,6 +54,7 @@ pub fn run() {
             launch::on_second_instance(app, argv);
         }))
         .manage(launch::LaunchQueue::default())
+        .manage(browser::BrowserPanels::default())
         .manage(lan_manager)
         .manage(lan::terminal::TerminalRequests::default())
         .setup(|app| {
@@ -124,7 +140,12 @@ pub fn run() {
         .register_uri_scheme_protocol("screenshot", |_ctx, request| {
             computer::handle_screenshot_protocol(request)
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(main_view_commands(tauri::generate_handler![
+            browser::browser_panel_create,
+            browser::browser_panel_bounds,
+            browser::browser_panel_action,
+            browser::browser_panel_status,
+            browser::browser_panel_close,
             // Codex commands
             codex::codex_discover,
             opencode::opencode_discover,
@@ -298,7 +319,7 @@ pub fn run() {
             analytics::posthog::posthog_flush,
             analytics::posthog::posthog_set_enabled,
             analytics::posthog::posthog_is_enabled,
-        ])
+        ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {

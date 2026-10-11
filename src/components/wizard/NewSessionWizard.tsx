@@ -635,7 +635,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         </button>
         {Array.from(pluginRegistry.keys()).map((name) => (
           <button key={name} className="btn btn-secondary btn-sm" onClick={() => replaceWizard(instanceId, () => createPluginPanel(name))}>
-            <Puzzle size={12} style={{ marginRight: 4 }} /> {name}
+            <Puzzle size={12} style={{ marginRight: 4 }} /> {pluginRegistry.get(name)?.defaultTitle ?? name}
           </button>
         ))}
       </div>

@@ -201,7 +201,7 @@ export function NewPanelMenu({
               <MenuItem
                 key={name}
                 icon={<Puzzle size={16} />}
-                label={manifest.name}
+                label={manifest.defaultTitle}
                 onClick={() => { onClose(); onNewPlugin(name); }}
               />
             ))}

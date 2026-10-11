@@ -7,6 +7,7 @@ import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
+import { BrowserPanel } from '../browser/BrowserPanel';
 
 // ─── Module-Level Bridge Registry ───────────────────────────────────────────
 // Keeps bridge references alive across React strict-mode double-mounts.
@@ -36,6 +37,14 @@ interface PluginPanelProps {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function PluginPanel({ instanceId }: PluginPanelProps) {
+  const site = usePluginStore(s => {
+    const instance = s.instances.get(instanceId);
+    return instance ? s.registry.get(instance.pluginName)?.browserSite : undefined;
+  });
+  return site ? <BrowserPanel instanceId={instanceId} site={site} /> : <IframePluginPanel instanceId={instanceId} />;
+}
+
+function IframePluginPanel({ instanceId }: PluginPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const bridgeRef = useRef<PluginBridge | null>(null);
 

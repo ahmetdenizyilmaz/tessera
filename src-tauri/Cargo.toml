@@ -15,7 +15,7 @@ path = "src/main.rs"
 preview = []
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon", "unstable"] }
 tauri-build = { version = "2", features = [] }
 portable-pty = "0.8"
 sysinfo = "0.33"

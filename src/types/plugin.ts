@@ -8,6 +8,7 @@ export interface PluginManifest {
   icon: string;                     // Lucide icon name OR filename
   defaultTitle: string;
   builtin?: boolean;                // true for built-in plugins served from /plugins/
+  browserSite?: 'lichess';           // native website module, without the plugin SDK
   titleButtons?: PluginTitleButton[];
   sidebar?: PluginSidebarConfig;
   accentColor?: string;
@@ -48,6 +49,7 @@ export interface PluginInstance {
   badge: number | null;
   accentColor: string | null;    // Plugin's default color
   userColor: string | null;      // User override color (highest priority)
+  browserUrl?: string;
 }
 
 // ─── Instance Discovery (exposed to plugins via SDK) ─────────────────────────
