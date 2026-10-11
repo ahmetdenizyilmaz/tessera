@@ -97,6 +97,30 @@ function normalizeMainWidth(width: number | undefined): number {
     : 80;
 }
 
+/** IDs in the unrotated physical slots (main, sidebar top-down, overflow).
+ * Mirroring the geometry also reverses its winding, so reverse the small
+ * panel assignments to keep panelOrder clockwise in every orientation. */
+function mainSlotOrder(config: LayoutConfig): string[] {
+  const order = config.panelOrder;
+  return config.direction === 'top' || config.direction === 'right'
+    ? [order[0], ...order.slice(1).reverse()] : order;
+}
+
+/** Older top/right snapshots used counterclockwise panelOrder. Preserve
+ * their exact rectangles and dividers, but read that saved ring clockwise
+ * before the next focus action. Already corrected snapshots are unchanged. */
+export function restoreClockwiseOrder(config: LayoutConfig, rects: Map<string, PanelRect>): LayoutConfig {
+  if ((config.type !== 'main' && config.type !== 'grid')
+    || (config.direction !== 'top' && config.direction !== 'right')) return config;
+  const points = config.panelOrder.map(id => rects.get(id));
+  if (points.some(r => !r)) return config;
+  const area = points.reduce((sum, rect, i) => {
+    const a = rect!, b = points[(i + 1) % points.length]!;
+    return sum + (a.x + a.w / 2) * (b.y + b.h / 2) - (b.x + b.w / 2) * (a.y + a.h / 2);
+  }, 0);
+  return area < 0 ? { ...config, panelOrder: [config.panelOrder[0], ...config.panelOrder.slice(1).reverse()] } : config;
+}
+
 export function computeRects(
   config: LayoutConfig,
   focusedId: string | null,
@@ -274,9 +298,10 @@ export function computeRects(
       const bottomH = 20;
       const MAX_R = 4;
 
-      const mainId = order[0];
-      const sideIds = order.slice(1, 1 + MAX_R);
-      const bottomIds = order.slice(1 + MAX_R);
+      const slots = mainSlotOrder(config);
+      const mainId = slots[0];
+      const sideIds = slots.slice(1, 1 + MAX_R);
+      const bottomIds = slots.slice(1 + MAX_R);
 
       const hasBottom = bottomIds.length > 0;
       const mainH = hasBottom ? 100 - bottomH : 100;
@@ -861,6 +886,7 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
           ?? (layoutConfig.type === 'main' ? (layoutConfig.direction === 'top' || layoutConfig.direction === 'bottom'
             ? panelRects.get(layoutConfig.panelOrder[0])?.h : panelRects.get(layoutConfig.panelOrder[0])?.w) : undefined)),
       };
+      layoutConfig = restoreClockwiseOrder(layoutConfig, panelRects);
     }
     set((state) => ({
       layout: tabOrder[0] ?? null,
@@ -985,7 +1011,7 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
     const type = state.layoutConfig.type;
     const vertical = state.layoutConfig.direction === 'top' || state.layoutConfig.direction === 'bottom';
     if ((type === 'main' || type === 'grid') && gutterAxis === (vertical ? 'y' : 'x')) {
-      const [mainId, ...otherIds] = state.layoutConfig.panelOrder;
+      const [mainId, ...otherIds] = mainSlotOrder(state.layoutConfig);
       const neighbours = gutterBefore.includes(mainId) ? gutterAfter : gutterAfter.includes(mainId) ? gutterBefore : [];
       if (otherIds.slice(0, 4).some(id => neighbours.includes(id))) {
         set({ layoutConfig: {
@@ -1001,7 +1027,7 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
     // deriveStealFraction reads the main panel here and would corrupt the
     // fraction used by the 2-4 panel layouts.
     if ((type === 'main' || type === 'grid') && gutterAxis === (vertical ? 'x' : 'y')) {
-      const sideIds = state.layoutConfig.panelOrder.slice(1, 5);
+      const sideIds = mainSlotOrder(state.layoutConfig).slice(1, 5);
       const heights = sideIds.map((id) => (vertical ? state.panelRects.get(id)?.w : state.panelRects.get(id)?.h) ?? 0);
       if (heights.every((h) => h > 0)) {
         set({ sidebarSlotFractions: heights });

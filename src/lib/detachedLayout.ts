@@ -1,4 +1,4 @@
-import { computeRects, createLayoutStore, getDefaultConfig, useLayoutStore, type LayoutStore } from '../store/layoutStore';
+import { computeRects, createLayoutStore, getDefaultConfig, restoreClockwiseOrder, useLayoutStore, type LayoutStore } from '../store/layoutStore';
 import { useGroupStore, type GroupState } from '../store/groupStore';
 
 /** A detached group uses the exact same layout actions as Main, with its own
@@ -22,6 +22,7 @@ function readGroupLayout(store: LayoutStore, group?: GroupState, previousGroup?:
   if (!config || config.panelOrder.length !== ids.length || config.panelOrder.some(id => !ids.includes(id))) {
     config = getDefaultConfig(ids, focused, current.layoutConfig);
   }
+  if (group?.panelRects) config = restoreClockwiseOrder(config, group.panelRects);
   if (changedSelection && (config.type === 'main' || config.type === 'grid') && focused) {
     config = { ...config, panelOrder: [focused, ...config.panelOrder.filter(id => id !== focused)] };
   }

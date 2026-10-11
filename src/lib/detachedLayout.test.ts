@@ -73,3 +73,26 @@ it('responds to incoming panels and external focus without changing Main, and pe
   expect(reopened.sidebarSlotFractions).toEqual([15, 25, 25, 35]);
   expect(reopened.panelRects.size).toBe(3);
 });
+
+it.each(['top', 'right'] as const)('keeps clockwise movement after reopening a legacy %s detached layout', direction => {
+  const { group, layout } = makeGroup(8);
+  const ids = layout.getState().tabOrder;
+  const config = { type: 'main' as const, direction, panelOrder: ids, mainWidthPercent: 65 };
+  const fractions = [10, 20, 30, 40];
+  const legacy = new Map([...computeRects({ ...config, direction: 'left' }, ids[0], { x: .5, y: .5 }, fractions)]
+    .map(([id, r]) => [id, direction === 'top'
+      ? { x: r.y, y: r.x, w: r.h, h: r.w } : { ...r, x: 100 - r.x - r.w }]));
+  useGroupStore.setState(s => ({ groups: new Map(s.groups).set(group, {
+    ...s.groups.get(group)!, layoutConfig: config, panelRects: legacy, sidebarSlotFractions: fractions,
+    activeChildId: ids[0], focusedChildId: ids[0],
+  }) }));
+  const reopened = createDetachedLayout(group);
+  expect(reopened.getState().panelRects).toEqual(legacy);
+  const expectedOrder = [ids[0], ...ids.slice(1).reverse()];
+  expect(reopened.getState().layoutConfig!.panelOrder).toEqual(expectedOrder);
+  // Selecting from the parent follows the same movement as a local click.
+  useGroupStore.getState().setGroupActiveChild(group, ids.at(-1)!);
+  expect(layout.getState().panelRects.get(ids[0])).toEqual(legacy.get(ids.at(-1)!));
+  expect(layout.getState().panelRects.get(ids.at(-1)!)).toEqual(legacy.get(ids[0]));
+  for (const id of ids.slice(1, -1)) expect(layout.getState().panelRects.get(id)).toEqual(legacy.get(id));
+});

@@ -62,6 +62,39 @@ try {
   await page.locator('.mosaic-gutter-x').dblclick();
   await expect.poll(dividerX).toBeCloseTo(original, 0);
   console.log('PASS double-click still restores the default 80/20 split');
+
+  for (const count of [6, 8]) for (const direction of ['left', 'top', 'right', 'bottom']) {
+    await page.reload();
+    await page.waitForFunction(() => !!window.showMosaic);
+    const order = await page.evaluate(async ({ count, direction }) => {
+      window.showMosaic(count);
+      const { useLayoutStore } = await import('/src/store/layoutStore.ts');
+      useLayoutStore.setState({ sidebarSlotFractions: [10, 20, 30, 40] });
+      useLayoutStore.getState().applySnap('codex-ui', direction);
+      return useLayoutStore.getState().layoutConfig.panelOrder;
+    }, { count, direction });
+    await page.waitForTimeout(350);
+    const boxes = await page.locator('.mosaic-tile').evaluateAll(nodes => Object.fromEntries(nodes.map(node => {
+      const r = node.getBoundingClientRect();
+      return [node.dataset.panelId, { x: r.x, y: r.y, w: r.width, h: r.height }];
+    })));
+    const points = order.map(id => ({ x: boxes[id].x + boxes[id].w / 2, y: boxes[id].y + boxes[id].h / 2 }));
+    expect(points.reduce((area, p, i) => {
+      const q = points[(i + 1) % points.length];
+      return area + p.x * q.y - q.x * p.y;
+    }, 0)).toBeGreaterThan(0);
+    await page.locator(`[data-panel-id="${order.at(-1)}"] .terminal-toolbar`).click({ position: { x: 3, y: 5 } });
+    // Check the actual rendered destinations after a header click, including
+    // movement across the sidebar/overflow boundary, not only store values.
+    for (let i = 0; i < order.length; i++) {
+      const target = boxes[order[(i + 1) % order.length]];
+      await expect.poll(async () => {
+        const r = await page.locator(`[data-panel-id="${order[i]}"]`).boundingBox();
+        return Math.max(Math.abs(r.x - target.x), Math.abs(r.y - target.y), Math.abs(r.width - target.w), Math.abs(r.height - target.h));
+      }).toBeLessThan(1);
+    }
+  }
+  console.log('PASS real header clicks rotate 6/8 panels clockwise in all four orientations, with resized slots');
 } finally {
   await browser.close();
 }

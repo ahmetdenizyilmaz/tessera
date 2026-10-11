@@ -73,4 +73,40 @@ try {
   expect(Object.values(saved.groups).some(g => g.childIds.length === 5 && g.layoutConfig.direction === 'right')).toBe(true);
   expect(errors).toEqual([]);
   console.log('PASS detached 1/2/5-panel mosaics, focus, independent dividers/maximize, exact snap preview, saved layout, visible tab borders');
+  await page.evaluate(() => {
+    for (let i = 3; i < 6; i++) {
+      const id = `extra-${i}`;
+      window.plugins.getState().restoreInstance('timer', id, `Timer ${i + 2}`);
+      window.layout.getState().addPanel(id, 'plugin');
+      window.windows.movePanelToWindow(id, window.workspaces.getState().windows[0]);
+    }
+  });
+  await expect(child.locator('.mosaic-tile')).toHaveCount(8);
+  for (const direction of ['left', 'top', 'right', 'bottom']) {
+    const order = await page.evaluate(async direction => {
+      const { computeSnapLayout } = await import('/src/store/layoutStore.ts');
+      const groupId = window.workspaces.getState().windows[0].groupId;
+      const group = window.groups.getState().groups.get(groupId);
+      const focused = group.activeChildId;
+      const next = computeSnapLayout(group.childIds, focused, direction, group.layoutConfig, group.stealFraction, [10, 20, 30, 40]);
+      window.groups.setState(s => ({ groups: new Map(s.groups).set(groupId, { ...group, ...next, sidebarSlotFractions: [10, 20, 30, 40] }) }));
+      return next.layoutConfig.panelOrder;
+    }, direction);
+    await page.waitForTimeout(350);
+    const before = Object.fromEntries((await rects(child)).map(r => [r.id, r]));
+    const points = order.map(id => ({ x: before[id].x + before[id].w / 2, y: before[id].y + before[id].h / 2 }));
+    expect(points.reduce((area, p, i) => {
+      const q = points[(i + 1) % points.length];
+      return area + p.x * q.y - q.x * p.y;
+    }, 0)).toBeGreaterThan(0);
+    await child.locator(`[data-tab-id="${order.at(-1)}"]`).click();
+    for (let i = 0; i < order.length; i++) {
+      const target = before[order[(i + 1) % order.length]];
+      await expect.poll(async () => {
+        const r = await child.locator(`[data-panel-id="${order[i]}"]`).boundingBox();
+        return Math.max(Math.abs(r.x - target.x), Math.abs(r.y - target.y), Math.abs(r.width - target.w), Math.abs(r.height - target.h));
+      }).toBeLessThan(1);
+    }
+  }
+  console.log('PASS detached tab clicks rotate eight panels clockwise in every orientation');
 } finally { await browser.close(); }
