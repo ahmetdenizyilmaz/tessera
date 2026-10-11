@@ -52,6 +52,18 @@ beforeEach(() => {
   useGroupStore.getState().restoreGroups(new Map());
   usePanelShortcutStore.getState().restore({});
 });
+it('retains a pinned Claude session ID before its first transcript is written', async () => {
+  const id = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' });
+  const sessionId = crypto.randomUUID();
+  useInstanceStore.getState().setClaudeSessionId(id, sessionId);
+  useLayoutStore.getState().addPanel(id, 'terminal');
+  const snapshot = serializeWorkspace();
+  vi.mocked(invoke).mockResolvedValueOnce(false);
+  deserializeWorkspace(snapshot);
+  await Promise.resolve(); await Promise.resolve();
+  expect([...useInstanceStore.getState().instances.values()][0].claudeSessionId).toBe(sessionId);
+  expect(invoke).not.toHaveBeenCalledWith('session_exists', expect.anything());
+});
 it('restores independent detached tabs and bounds, and recovers an invalid window to Main', () => {
   registerBuiltins();
   const browser = usePluginStore.getState().createInstance('lichess');

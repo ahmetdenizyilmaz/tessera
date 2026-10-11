@@ -17,6 +17,16 @@ impl Drop for PtyGuard {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
 async fn live_codex_empty_terminal_startup() {
+    check_empty_terminal_startup(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
+async fn live_codex_paused_goal_terminal_startup() {
+    check_empty_terminal_startup(true).await;
+}
+
+async fn check_empty_terminal_startup(paused_goal: bool) {
     let path =
         std::env::var("TESSERA_CODEX_TEST_EXECUTABLE").expect("Set TESSERA_CODEX_TEST_EXECUTABLE");
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -76,6 +86,14 @@ requires_openai_auth = false
     assert_eq!(initial["thread"]["id"], sid);
     assert_eq!(initial["thread"]["turns"], json!([]));
 
+    if paused_goal {
+        client.call("thread/goal/set", json!({
+            "threadId":sid, "objective":"Tessera isolated startup fixture",
+            "status":"paused", "origin":"user"
+        })).await.unwrap();
+    }
+    let goal_before = client.call("thread/goal/get", json!({"threadId":sid})).await.unwrap();
+
     // The real remote TUI resumes the pinned ID before any prompt is sent.
     let pair = portable_pty::native_pty_system()
         .openpty(portable_pty::PtySize {
@@ -112,7 +130,21 @@ requires_openai_auth = false
     }
     let mut child = PtyGuard(pair.slave.spawn_command(command).unwrap());
     drop(pair.slave);
-    let mut writer = pair.master.take_writer().unwrap();
+    struct ObservedWriter {
+        stream: Box<dyn Write + Send>,
+        escapes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+    impl Write for ObservedWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes == b"\x1b" { self.escapes.fetch_add(1, std::sync::atomic::Ordering::SeqCst); }
+            self.stream.write(bytes)
+        }
+        fn flush(&mut self) -> std::io::Result<()> { self.stream.flush() }
+    }
+    let escapes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let input = crate::pty::TerminalInput::with_quiet_goal_resume(Box::new(ObservedWriter {
+        stream: pair.master.take_writer().unwrap(), escapes: escapes.clone(),
+    }), paused_goal);
     let mut reader = pair.master.try_clone_reader().unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -125,28 +157,31 @@ requires_openai_auth = false
     });
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut wire = String::new();
+    let mut dismissed_at = None;
     while Instant::now() < deadline {
         if let Ok(bytes) = rx.recv_timeout(Duration::from_millis(100)) {
             let text = String::from_utf8_lossy(&bytes);
             wire.push_str(&text);
             if text.contains("\x1b[6n") {
-                writer.write_all(b"\x1b[1;1R").unwrap();
+                input.write("\x1b[1;1R").unwrap();
             }
             if text.contains("\x1b[c") {
-                writer.write_all(b"\x1b[?1;2c").unwrap();
+                input.write("\x1b[?1;2c").unwrap();
             }
             if text.contains("\x1b]11;?") {
-                writer
-                    .write_all(b"\x1b]11;rgb:1111/1111/1b1b\x1b\\")
-                    .unwrap();
+                input.write("\x1b]11;rgb:1111/1111/1b1b\x1b\\").unwrap();
             }
-            writer.flush().unwrap();
-            if wire.contains("show current session configuration")
+            input.observe_output(&text);
+            if escapes.load(std::sync::atomic::Ordering::SeqCst) > 0 && dismissed_at.is_none() {
+                dismissed_at = Some(Instant::now());
+            }
+            if !paused_goal && wire.contains("show current session configuration")
                 && wire.contains("tessera-startup-fixture")
             {
                 break;
             }
         }
+        if dismissed_at.is_some_and(|at| at.elapsed() > Duration::from_secs(2)) { break; }
         if child.0.try_wait().unwrap().is_some() {
             break;
         }
@@ -158,6 +193,10 @@ requires_openai_auth = false
         "Native TUI was not ready; see {}",
         root.display()
     );
+    if paused_goal {
+        assert_eq!(escapes.load(std::sync::atomic::Ordering::SeqCst), 1, "Startup dialog was not dismissed; see {}", root.display());
+        assert_eq!(client.call("thread/goal/get", json!({"threadId":sid})).await.unwrap(), goal_before);
+    }
     let empty = client
         .call("thread/read", json!({"threadId":sid,"includeTurns":true}))
         .await
@@ -169,7 +208,7 @@ requires_openai_auth = false
     );
     assert_eq!(empty["thread"]["id"], sid);
     drop(child);
-    drop(writer);
+    drop(input);
     drop(pair.master);
     client.stop();
 

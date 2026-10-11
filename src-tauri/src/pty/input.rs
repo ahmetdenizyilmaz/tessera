@@ -7,11 +7,12 @@ const PASTE_SETTLE: Duration = Duration::from_millis(500);
 struct Writer {
     stream: Option<Box<dyn Write + Send>>,
     revision: u64,
+    resume_prompt: Option<super::resume_prompt::ResumePrompt>,
 }
 
 /// One handle per PTY lifetime: a delayed Enter can never reach a replacement
 /// process, and simultaneous panel messages cannot interleave their input.
-pub(super) struct TerminalInput {
+pub(crate) struct TerminalInput {
     session: String,
     writer: Mutex<Writer>,
     messages: tokio::sync::Mutex<()>,
@@ -19,10 +20,30 @@ pub(super) struct TerminalInput {
 
 impl TerminalInput {
     pub fn new(stream: Box<dyn Write + Send>) -> Self {
+        Self::with_quiet_goal_resume(stream, false)
+    }
+
+    pub fn with_quiet_goal_resume(stream: Box<dyn Write + Send>, quiet: bool) -> Self {
         Self {
             session: uuid::Uuid::new_v4().to_string(),
-            writer: Mutex::new(Writer { stream: Some(stream), revision: 0 }),
+            writer: Mutex::new(Writer { stream: Some(stream), revision: 0,
+                resume_prompt: quiet.then(super::resume_prompt::ResumePrompt::new) }),
             messages: tokio::sync::Mutex::new(()),
+        }
+    }
+
+    pub fn observe_output(&self, output: &str) {
+        let Ok(mut writer) = self.writer.lock() else { return };
+        if writer.resume_prompt.as_ref().is_some_and(|prompt| prompt.expired()) {
+            writer.resume_prompt = None;
+        }
+        if writer.resume_prompt.as_mut().is_some_and(|prompt| prompt.observe(output)) {
+            writer.resume_prompt = None;
+            // Hold the same lock as keyboard input: once the user interacts,
+            // a delayed automatic Escape can never interrupt their action.
+            if let Some(stream) = writer.stream.as_mut() {
+                let _ = stream.write_all(b"\x1b").and_then(|_| stream.flush());
+            }
         }
     }
 
@@ -49,6 +70,7 @@ impl TerminalInput {
         if expected.is_some_and(|revision| revision != writer.revision) {
             return Err("The terminal input changed during delivery. The message was pasted but not submitted; do not resend it automatically.".into());
         }
+        if !super::resume_prompt::terminal_report(data) { writer.resume_prompt = None; }
         writer.revision = writer.revision.wrapping_add(1);
         let stream = writer.stream.as_mut()
             .ok_or("That panel's terminal is no longer accepting input")?;
@@ -92,6 +114,29 @@ mod tests {
             Ok(bytes.len())
         }
         fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+
+    #[test]
+    fn paused_goal_dismissal_is_once_only_and_never_overrides_user_input() {
+        let dialog = "Resume paused goal? Mark it active and continue when idle Keep it paused; use /goal resume later";
+        let capture = Capture::default();
+        let input = TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), true);
+        input.write("\x1b[?1;2c").unwrap();
+        input.observe_output(dialog);
+        input.observe_output(dialog);
+        assert_eq!(capture.0.lock().unwrap().iter().map(|(_, bytes)| bytes.clone()).collect::<Vec<_>>(),
+            vec![b"\x1b[?1;2c".to_vec(), b"\x1b".to_vec()]);
+        for key in ["hello", "\x1b[B", "\r", "\x1b"] {
+            let capture = Capture::default();
+            let input = TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), true);
+            input.write(key).unwrap();
+            input.observe_output(dialog);
+            assert_eq!(capture.0.lock().unwrap().len(), 1);
+        }
+        let capture = Capture::default();
+        let input = TerminalInput::new(Box::new(capture.clone()));
+        input.observe_output(dialog);
+        assert!(capture.0.lock().unwrap().is_empty());
     }
 
     #[test]

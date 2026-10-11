@@ -670,7 +670,7 @@ pub async fn opencode_terminal_spawn(
     for (k, v) in &s.env {
         cmd.env(k, v);
     }
-    crate::pty::manager::spawn_prepared(id, cmd, cols, rows, &app, &pty)
+    crate::pty::manager::spawn_prepared(id, cmd, cols, rows, &app, &pty, false)
 }
 
 pub async fn read_recent(app: &AppHandle, id: &str, limit: usize) -> Result<Vec<Value>, String> {

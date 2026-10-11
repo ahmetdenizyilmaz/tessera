@@ -992,7 +992,7 @@ pub async fn antigravity_terminal_spawn(
     for key in ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CODEX_THREAD_ID"] {
         command.env_remove(key);
     }
-    crate::pty::manager::spawn_prepared(id, command, cols, rows, &app, &pty)?;
+    crate::pty::manager::spawn_prepared(id, command, cols, rows, &app, &pty, false)?;
     {
         let mut inner = session.lock();
         inner.error = warning.clone();

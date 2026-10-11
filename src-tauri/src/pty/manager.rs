@@ -21,6 +21,8 @@ pub struct PtyInstance {
     kill_flag: Arc<Mutex<bool>>,
     suppress_events: Arc<AtomicBool>,
     size: Option<PtySize>,
+    // Revokes the hook credential and removes its settings on close/restart.
+    _claude_session: Option<super::claude_session::Registration>,
 }
 
 #[derive(serde::Serialize)]
@@ -67,12 +69,14 @@ fn kill_instance(instance: &mut PtyInstance) {
 
 pub struct PtyManager {
     instances: Arc<Mutex<HashMap<String, PtyInstance>>>,
+    pub claude_sessions: super::claude_session::ClaudeSessions,
 }
 
 impl PtyManager {
     pub fn new() -> Self {
         Self {
             instances: Arc::new(Mutex::new(HashMap::new())),
+            claude_sessions: Default::default(),
         }
     }
 
@@ -239,7 +243,7 @@ pub async fn pty_spawn(
             }
         });
 
-    let args = build_claude_args(
+    let mut args = build_claude_args(
         &model,
         dangerously_skip_permissions.unwrap_or(false),
         &permission_mode,
@@ -249,6 +253,12 @@ pub async fn pty_spawn(
         &effective_mcp_config,
         &crate::panelbus::spawn_config::write_for_panel(&app, &id),
     );
+
+    let port = app.state::<crate::panelbus::PanelBus>().port
+        .ok_or("Claude session tracking could not start: the local endpoint is unavailable")?;
+    let session_tracking = state.claude_sessions.prepare(&id, port)?;
+    args.push("--settings".into());
+    args.push(session_tracking.settings_path.to_string_lossy().into_owned());
 
     let claude_exe = claude_paths::find_claude_exe()
         .ok_or_else(|| "Could not find claude executable on this system. Check that claude is installed and in your PATH.".to_string())?;
@@ -290,17 +300,17 @@ pub async fn pty_spawn(
         .spawn_command(cmd)
         .map_err(|e| format!("Failed to spawn claude: {}", e))?;
 
-    install_pair(id, pair, child, &app, &state)
+    install_pair(id, pair, child, &app, &state, Some(session_tracking), false)
 }
 
 /// Codex supplies its own command; Claude argument and environment construction stays above.
-pub fn spawn_prepared(id: String, cmd: CommandBuilder, cols: u16, rows: u16, app: &AppHandle, state: &PtyManager) -> Result<(), String> {
+pub fn spawn_prepared(id: String, cmd: CommandBuilder, cols: u16, rows: u16, app: &AppHandle, state: &PtyManager, quiet_goal_resume: bool) -> Result<(), String> {
     let pair = native_pty_system().openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("Cannot start terminal: {e}"))?;
-    install_pair(id, pair, child, app, state)
+    install_pair(id, pair, child, app, state, None, quiet_goal_resume)
 }
 
-fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable_pty::Child + Send + Sync>, app: &AppHandle, state: &PtyManager) -> Result<(), String> {
+fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable_pty::Child + Send + Sync>, app: &AppHandle, state: &PtyManager, claude_session: Option<super::claude_session::Registration>, quiet_goal_resume: bool) -> Result<(), String> {
     // Drop slave after spawning - we only need the master side
     drop(pair.slave);
 
@@ -319,14 +329,17 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
     let suppress_events: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
     let size = pair.master.get_size().ok();
+    let input = Arc::new(if quiet_goal_resume { TerminalInput::with_quiet_goal_resume(writer, true) }
+        else { TerminalInput::new(writer) });
     let instance = PtyInstance {
         master: pair.master,
         child,
-        input: Arc::new(TerminalInput::new(writer)),
+        input: input.clone(),
         output_buffer: output_buffer.clone(),
         kill_flag: kill_flag.clone(),
         suppress_events: suppress_events.clone(),
         size,
+        _claude_session: claude_session,
     };
 
     {
@@ -427,6 +440,8 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
                     if text.is_empty() {
                         continue;
                     }
+
+                    input.observe_output(&text);
 
                     // Store in output buffer
                     if let Ok(mut buffer) = reader_buffer.lock() {

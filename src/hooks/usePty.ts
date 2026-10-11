@@ -15,6 +15,28 @@ const spawnedPtys = new Map<string, PtyState>();
 
 // Track exit listener cleanup functions
 const exitListeners = new Map<string, () => void>();
+const claudeSessionListeners = new Map<string, Promise<UnlistenFn>>();
+
+function stopClaudeSessionTracking(id: string) {
+  const pending = claudeSessionListeners.get(id);
+  claudeSessionListeners.delete(id);
+  void pending?.then(unlisten => unlisten()).catch(() => {});
+}
+
+async function trackClaudeSession(id: string) {
+  if (claudeSessionListeners.has(id)) return claudeSessionListeners.get(id);
+  const pending = listen<{ sessionId: string }>(`pty-claude-session-${id}`, ({ payload }) => {
+    if (claudeSessionListeners.get(id) !== pending) return;
+    const instance = useInstanceStore.getState().instances.get(id);
+    if (instance && (!instance.config.agentProvider || instance.config.agentProvider === 'claude') &&
+      instance.claudeSessionId !== payload.sessionId) {
+      useInstanceStore.getState().setClaudeSessionId(id, payload.sessionId);
+    }
+  });
+  claudeSessionListeners.set(id, pending);
+  try { await pending; }
+  catch (error) { stopClaudeSessionTracking(id); throw error; }
+}
 
 // Per-instance write chains: Tauri dispatches async commands onto a
 // multi-threaded runtime, so independent invokes have no ordering guarantee —
@@ -29,6 +51,7 @@ function registerExitListener(id: string) {
   let cancelled = false;
 
   listen<void>(`pty-exit-${id}`, () => {
+    stopClaudeSessionTracking(id);
     // PTY died — auto-clean the tracking state
     spawnedPtys.delete(id);
     // Reflect the death in the instance status so the UI stops showing a
@@ -129,6 +152,8 @@ export function usePty(instanceId: string) {
     }
 
     try {
+      // Listen before spawning: SessionStart can arrive before the first PTY byte.
+      await trackClaudeSession(instanceId);
       const env = await buildRoutingEnv(instance.config.routing, instance.config.cwd);
       await invoke('pty_spawn', {
         id: instanceId,
@@ -146,6 +171,7 @@ export function usePty(instanceId: string) {
       spawnedPtys.set(instanceId, 'running');
     } catch (err) {
       console.error(`Failed to spawn PTY for ${instanceId}:`, err);
+      stopClaudeSessionTracking(instanceId);
       spawnedPtys.delete(instanceId);
       // Clean up exit listener on spawn failure
       const cleanup = exitListeners.get(instanceId);
@@ -176,6 +202,7 @@ export function usePty(instanceId: string) {
   };
 
   const kill = async () => {
+    stopClaudeSessionTracking(instanceId);
     spawnedPtys.set(instanceId, 'killing');
     try {
       await invoke('pty_kill', { id: instanceId });
@@ -212,6 +239,7 @@ export function usePty(instanceId: string) {
  * Callers are responsible for remounting the view afterwards.
  */
 export async function restartPty(id: string) {
+  stopClaudeSessionTracking(id);
   spawnedPtys.set(id, 'killing');
   try {
     await invoke('pty_kill', { id });
@@ -246,6 +274,7 @@ export function consumeFreshMount(id: string): boolean {
 }
 
 export function cleanupPty(id: string, kill = true) {
+  stopClaudeSessionTracking(id);
   spawnedPtys.delete(id);
   writeChains.delete(id);
   // Clean up exit listener

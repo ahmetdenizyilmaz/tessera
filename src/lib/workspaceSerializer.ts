@@ -372,19 +372,8 @@ export function deserializeWorkspace(raw: unknown): void {
     }
     if (inst.claudeSessionId) {
       useInstanceStore.getState().setClaudeSessionId(newId, inst.claudeSessionId);
-      // Drop stale session ids at restore time so they stop being
-      // re-persisted forever (the Rust-side resume guard is authoritative)
-      const sid = inst.claudeSessionId;
-      invoke<boolean>('session_exists', { projectPath: inst.config.cwd || '', sessionId: sid })
-        .then((exists) => {
-          if (!exists) {
-            const cur = useInstanceStore.getState().instances.get(newId)?.claudeSessionId;
-            if (cur === sid) {
-              useInstanceStore.getState().setClaudeSessionId(newId, '');
-            }
-          }
-        })
-        .catch(() => {});
+      // Empty sessions may not have a transcript yet. Keep their pinned ID;
+      // the backend chooses --resume or --session-id when spawning Claude.
     }
   }
 

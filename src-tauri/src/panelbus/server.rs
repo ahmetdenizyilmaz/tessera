@@ -15,7 +15,7 @@ use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
 
 use super::{tools, PanelBus};
@@ -85,6 +85,28 @@ async fn handle(
     }
 
     let path = req.uri().path().to_string();
+    if let Some(panel_id) = path.strip_prefix("/claude-session/") {
+        if req.method() != Method::POST {
+            return Ok(text_response(StatusCode::METHOD_NOT_ALLOWED, "POST required"));
+        }
+        let token = req.headers().get(hyper::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).unwrap_or("").to_owned();
+        let pty = app.state::<crate::pty::manager::PtyManager>();
+        if !pty.claude_sessions.authorized(panel_id, &token) {
+            return Ok(text_response(StatusCode::UNAUTHORIZED, "unauthorized"));
+        }
+        let body = match http_body_util::Limited::new(req.into_body(), 64 * 1024).collect().await {
+            Ok(body) => body.to_bytes(),
+            Err(_) => return Ok(text_response(StatusCode::BAD_REQUEST, "invalid hook body")),
+        };
+        let event = serde_json::from_slice::<Value>(&body).ok()
+            .and_then(|event| pty.claude_sessions.accept(panel_id, &token, &event));
+        if let Some(event) = event {
+            let _ = app.emit(&format!("pty-claude-session-{panel_id}"), event);
+            return Ok(json_response(json!({})));
+        }
+        return Ok(text_response(StatusCode::BAD_REQUEST, "invalid session event"));
+    }
     let panel_id = match path.strip_prefix("/mcp/") {
         Some(rest) if !rest.is_empty() => rest.trim_end_matches('/').to_string(),
         _ => return Ok(text_response(StatusCode::NOT_FOUND, "not found")),
