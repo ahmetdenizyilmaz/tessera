@@ -1,11 +1,16 @@
 // Served only by the opt-in UI test; production builds use index.html.
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { mockIPC } from "@tauri-apps/api/mocks";
+import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { CodexPanel } from "../src/components/codex/CodexPanel";
 import { MosaicLayout } from "../src/components/layout/MosaicLayout";
+import { DetachedWindows } from '../src/components/windows/DetachedWindows';
+import { TabBar } from '../src/components/tabs/TabBar';
+import { useGroupStore } from '../src/store/groupStore';
+import { useWorkspaceWindowStore } from '../src/store/workspaceWindowStore';
+import * as workspaceWindows from '../src/lib/workspaceWindows';
 import { CodexSetup } from "../src/components/codex/CodexSetup";
 import { GeneralSettings } from "../src/components/settings/GeneralSettings";
 import { AgentPanelHeader } from "../src/components/terminal/AgentPanelHeader";
@@ -35,6 +40,9 @@ const model = {
   inputModalities: ["text", "image"],
 };
 window.calls = [];
+window.dropTarget = { label: 'main', x: 100, y: 100 };
+Object.assign(window, { layout: useLayoutStore, groups: useGroupStore, workspaces: useWorkspaceWindowStore, workspaceWindows });
+mockWindows('main');
 // Startup regressions pause configure to catch even a transient chat composer.
 const startupMode = new URLSearchParams(location.search).get("startup");
 const startupGate = startupMode ? new Promise(resolve => { window.releaseStartup = resolve; }) : Promise.resolve();
@@ -43,6 +51,8 @@ window.pick = ["C:\\images\\example.png"];
 mockIPC(
   async (command, args) => {
     window.calls.push({ command, args });
+    if (command === 'workspace_drop_target') return window.dropTarget;
+    if (command === 'workspace_window_destroy') workspaceWindows.detachedViews.get(args.label.slice(10))?.close();
     // Optional binding supplied only by an opt-in native PTY diagnostic.
     if (window.nativePtyRequest && args?.id === 'codex-ui' &&
         ['codex_terminal_spawn', 'pty_resize', 'pty_write'].includes(command))
@@ -181,7 +191,7 @@ window.showMosaic = (count = 2) => {
   }
   for (const id of ids) useLayoutStore.getState().addPanel(id, 'terminal');
   useLayoutStore.getState().setFocused('codex-ui');
-  root.render(<div style={{ width: '100vw', height: '100vh' }}><MosaicLayout /></div>);
+  root.render(<><div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}><TabBar /><div style={{ flex: 1, minHeight: 0 }}><MosaicLayout /></div></div><DetachedWindows /></>);
 };
 root.render(
   <div style={{ display: "flex", height: "600px", gap: 10, padding: 10 }}>

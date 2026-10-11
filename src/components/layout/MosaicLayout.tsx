@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
-  useLayoutStore,
+  useLayoutStore as useMainLayoutStore,
   computeGutters,
   computeSnapLayout,
   detectSnapZone,
@@ -18,6 +18,7 @@ import { RemotePanel } from '../lan/RemotePanel';
 import { SnapZoneOverlay } from './SnapZoneOverlay';
 import { beginWindowPanelDrag, endWindowPanelDrag, finishWindowTabDrag } from '../../lib/workspaceWindows';
 import { useWindowDragStore } from '../../store/windowDragStore';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
@@ -26,6 +27,12 @@ const DRAG_THRESHOLD = 6;
 const GAP = 3;
 
 export function MosaicLayout() {
+  const panelWindow = usePanelWindow();
+  const useLayoutStore = panelWindow.layout ?? useMainLayoutStore;
+  const document = panelWindow.document ?? globalThis.document;
+  const window = document.defaultView ?? globalThis.window;
+  const sourceWindow = panelWindow.label ?? 'main';
+  const enterGroup = panelWindow.enterGroup ?? useGroupStore.getState().enterGroup;
   const containerRef = useRef<HTMLDivElement>(null);
   const tabOrder = useLayoutStore((s) => s.tabOrder ?? EMPTY_TAB_ORDER);
   const focusedId = useLayoutStore((s) => s.focusedId);
@@ -89,8 +96,8 @@ export function MosaicLayout() {
   }, []);
 
   // ─── Group enter/exit panel animation ──────────────────────────────
-  const transitionDirection = useGroupStore((s) => s.transitionDirection);
-  const transitionGroupId = useGroupStore((s) => s.transitionGroupId);
+  const transitionDirection = useGroupStore((s) => sourceWindow === 'main' ? s.transitionDirection : null);
+  const transitionGroupId = useGroupStore((s) => sourceWindow === 'main' ? s.transitionGroupId : null);
   const [enterAnim, setEnterAnim] = useState<string | null>(null);
   const [exitAnim, setExitAnim] = useState<{ groupId: string; phase: 'collapse' | 'expand' } | null>(null);
   const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,9 +125,9 @@ export function MosaicLayout() {
     if (enterTimerRef.current) { clearTimeout(enterTimerRef.current); enterTimerRef.current = null; }
     let cancelled = false;
     setExitAnim({ groupId: transitionGroupId, phase: 'collapse' });
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       if (cancelled) return;
-      requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
         if (cancelled) return;
         setExitAnim((prev) => prev ? { ...prev, phase: 'expand' } : null);
         setTimeout(() => {
@@ -155,10 +162,10 @@ export function MosaicLayout() {
   const snapPreview = useMemo(() => {
     const id = sidebarDragging ? '__sidebar-preview__' : draggingId;
     const zone = sidebarDragging ? sidebarDragSnap : activeSnap;
-    if (!id || !zone || (!sidebarDragging && nativeTarget !== undefined && nativeTarget !== 'main')) return null;
+    if (!id || !zone || (!sidebarDragging && nativeTarget !== undefined && nativeTarget !== sourceWindow)) return null;
     const order = sidebarDragging ? [...tabOrder, id] : tabOrder;
     return { id, ...computeSnapLayout(order, id, zone, layoutConfig, stealFraction, sidebarSlotFractions) };
-  }, [sidebarDragging, sidebarDragSnap, draggingId, activeSnap, nativeTarget, tabOrder, layoutConfig, stealFraction, sidebarSlotFractions]);
+  }, [sidebarDragging, sidebarDragSnap, draggingId, activeSnap, nativeTarget, tabOrder, layoutConfig, stealFraction, sidebarSlotFractions, sourceWindow]);
 
   // Override rects during group enter/exit animation
   const animatedRects = useMemo((): Map<string, PanelRect> => {
@@ -219,7 +226,7 @@ export function MosaicLayout() {
     setGutterDragging(true);
     document.body.style.userSelect = 'none';
     document.body.style.cursor = gutter.axis === 'x' ? 'col-resize' : 'row-resize';
-  }, []);
+  }, [useLayoutStore, document]);
 
   // Pointer-down: start drag OR focus
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -252,7 +259,7 @@ export function MosaicLayout() {
     // Clicking a group body enters it.
     const currentPanelType = useLayoutStore.getState().panelTypes[panelId];
     if (currentPanelType === 'group') {
-      useGroupStore.getState().enterGroup(panelId);
+      enterGroup(panelId);
       return;
     }
 
@@ -270,7 +277,7 @@ export function MosaicLayout() {
       startResizeLock();
       setFocused(panelId);
     }
-  }, [setFocused, startResizeLock]);
+  }, [setFocused, startResizeLock, useLayoutStore, enterGroup]);
 
   // Global pointer listeners for drag and resize
   useEffect(() => {
@@ -329,13 +336,13 @@ export function MosaicLayout() {
           setDraggingId(ds.panelId);
           document.body.style.userSelect = 'none';
           document.body.style.cursor = 'default';
-          beginWindowPanelDrag(ds.panelId, 'main', e, 'panel');
+          beginWindowPanelDrag(ds.panelId, sourceWindow, e, 'panel');
         }
 
         // Detect drag-to-sidebar for widget panels
         const panelType = useLayoutStore.getState().panelTypes[ds.panelId];
         const isWidget = panelType === 'widget';
-        if (isWidget && e.clientX >= 0 && e.clientX < 50 && e.clientY >= 0 && e.clientY <= window.innerHeight) {
+        if (sourceWindow === 'main' && isWidget && e.clientX >= 0 && e.clientX < 50 && e.clientY >= 0 && e.clientY <= window.innerHeight) {
           ds.returnToSidebar = true;
           ds.currentSnap = null;
           setActiveSnap(null);
@@ -381,7 +388,7 @@ export function MosaicLayout() {
       if (ds) {
         dragState.current = null;
         if (ds.started) {
-          const moved = await finishWindowTabDrag(ds.panelId);
+          const moved = await finishWindowTabDrag(ds.panelId, sourceWindow);
           endWindowPanelDrag();
           if (moved) {
             setDraggingId(null); setActiveSnap(null);
@@ -400,7 +407,7 @@ export function MosaicLayout() {
           applySnapRef.current(ds.panelId, ds.currentSnap);
         } else if (!ds.started) {
           if (useLayoutStore.getState().panelTypes[ds.panelId] === 'group') {
-            useGroupStore.getState().enterGroup(ds.panelId);
+            enterGroup(ds.panelId);
             return;
           }
           // An already focused panel does not resize. Locking it here swallowed
@@ -442,7 +449,7 @@ export function MosaicLayout() {
       window.removeEventListener('pointercancel', cancel);
       window.removeEventListener('keydown', onKey);
     };
-  }, [startResizeLock]);
+  }, [startResizeLock, useLayoutStore, window, document, sourceWindow, enterGroup]);
 
   // Keep the same measured root while empty: autosave restoration happens
   // after mount, and the container observer is registered only once.

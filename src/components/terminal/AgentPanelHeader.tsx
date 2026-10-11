@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
-import { useLayoutStore } from "../../store/layoutStore";
 import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
 import { ProviderIcon } from "../icons/ProviderIcons";
 import { GitFork } from "lucide-react";
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
-import { usePanelWindow } from '../windows/PanelWindowContext';
+import { usePanelWindow, usePanelLayout } from '../windows/PanelWindowContext';
 
 /** Shared panel chrome. Provider-specific controls stay inside the same menu. */
 export function AgentPanelHeader({
@@ -35,6 +34,7 @@ export function AgentPanelHeader({
 }) {
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const panelWindow = usePanelWindow();
+  const useLayoutStore = usePanelLayout();
   const document = panelWindow.document ?? globalThis.document;
   const isMaximized = useLayoutStore((s) => s.maximizedId === instanceId);
   const [renaming, setRenaming] = useState(false);
@@ -261,7 +261,7 @@ export function AgentPanelHeader({
                 : "Maximize panel (hide the others)"
             }
             onClick={() =>
-              panelWindow.maximize ? panelWindow.maximize() : useLayoutStore.getState().toggleMaximized(instanceId)
+              useLayoutStore.getState().toggleMaximized(instanceId)
             }
           >
             <svg

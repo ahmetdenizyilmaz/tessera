@@ -50,6 +50,7 @@ export interface SerializedGroup {
   focusedChildId: string | null;
   activeChildId: string | null;
   stealFraction: StealFraction;
+  sidebarSlotFractions?: number[];
   remotePeerId?: string;
 }
 
@@ -443,6 +444,7 @@ export function deserializeWorkspace(raw: unknown): void {
       focusedChildId: focused && childIds.includes(focused) ? focused : (childIds[0] ?? null),
       activeChildId: active && childIds.includes(active) ? active : (childIds[0] ?? null),
       stealFraction: normalizeStealFraction(sg.stealFraction),
+      sidebarSlotFractions: Array.isArray(sg.sidebarSlotFractions) ? sg.sidebarSlotFractions.filter(f => Number.isFinite(f) && f > 0) : undefined,
       remotePeerId: sg.remotePeerId,
     });
   }

@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Window as NativeWindow } from '@tauri-apps/api/window';
 import { ArrowLeft, Plus, X, ExternalLink } from 'lucide-react';
 import { useWorkspaceWindowStore, type DetachedWorkspace } from '../../store/workspaceWindowStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -16,13 +15,8 @@ import { closePanel } from '../../lib/panelCleanup';
 import { notify } from '../../lib/toast';
 import { createGroupPanel, createPluginPanel, openNewSessionWizard } from '../../lib/newSessionActions';
 import { captureGroupSnapshot, getPanelLocations } from '../../store/groupStore';
-import { TerminalPanel } from '../terminal/TerminalPanel';
-import { PluginPanel } from '../plugins/PluginPanel';
-import { WidgetPanel } from '../widget/WidgetPanel';
-import { ComputerPanel } from '../computer/ComputerPanel';
-import { LlmPanel } from '../llm/LlmPanel';
-import { RemotePanel } from '../lan/RemotePanel';
-import { GroupPreview } from '../groups/GroupPreview';
+import { MosaicLayout } from '../layout/MosaicLayout';
+import { connectDetachedLayout, createDetachedLayout } from '../../lib/detachedLayout';
 import { PanelWindowContext } from './PanelWindowContext';
 import './windows.css';
 
@@ -46,51 +40,19 @@ function DetachedTab({ id, active, select, menu }: { id: string; active: boolean
 
 function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorkspace; child: Window }) {
   const groups = useGroupStore(s => s.groups);
-  const panelTypes = useLayoutStore(s => s.panelTypes);
   const [path, setPath] = useState<string[]>([]);
   const [newMenu, setNewMenu] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const groupId = path.filter(id => groups.has(id)).at(-1) ?? workspace.groupId;
-  const group = groups.get(groupId);
-  const ids = group?.childIds ?? [];
-  const active = ids.includes(group?.activeChildId ?? '') ? group!.activeChildId! : ids[0];
+  const layout = useMemo(() => createDetachedLayout(groupId), [groupId]);
+  useLayoutEffect(() => connectDetachedLayout(layout, groupId), [layout, groupId]);
+  const ids = layout(s => s.tabOrder);
+  const active = layout(s => s.activeTabId);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const select = (id: string) => useGroupStore.getState().setGroupActiveChild(groupId, id);
+  const select = (id: string) => { layout.getState().setActiveTab(id); layout.getState().setFocused(id); };
   const label = windowLabel(workspace.id);
-  const maximize = () => { void new NativeWindow(label).toggleMaximize(); };
-  const enterGroup = (id: string) => setPath(previous => [...previous, id]);
-  const headerDragCleanup = useRef<(() => void) | null>(null);
-  useEffect(() => () => headerDragCleanup.current?.(), [child]);
-  const headerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    if (event.button !== 0 || !target.closest('.terminal-toolbar') || target.closest('button, input, textarea, select')) return;
-    const panelId = target.closest<HTMLElement>('[data-panel-id]')?.dataset.panelId;
-    if (!panelId) return;
-    event.preventDefault();
-    target.setPointerCapture(event.pointerId);
-    const x = event.clientX, y = event.clientY;
-    let started = false;
-    const cleanup = () => {
-      child.removeEventListener('pointermove', move); child.removeEventListener('pointerup', up);
-      child.removeEventListener('pointercancel', cancel); child.removeEventListener('keydown', key);
-      headerDragCleanup.current = null;
-    };
-    const move = (e: PointerEvent) => {
-      if (!started && Math.hypot(e.clientX - x, e.clientY - y) >= 6) {
-        started = true; setDragging(true); beginWindowPanelDrag(panelId, label, e, 'panel');
-      }
-    };
-    const up = async () => {
-      cleanup();
-      if (started) { await finishWindowTabDrag(panelId, label); endWindowPanelDrag(); setDragging(false); }
-    };
-    const cancel = () => { cleanup(); if (started) endWindowPanelDrag(); setDragging(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); } };
-    child.addEventListener('pointermove', move); child.addEventListener('pointerup', up);
-    child.addEventListener('pointercancel', cancel); child.addEventListener('keydown', key);
-    headerDragCleanup.current = cancel;
-  };
+  const enterGroup = useCallback((id: string) => setPath(previous => [...previous, id]), []);
   useEffect(() => {
     child.document.documentElement.dataset.workspaceGroup = groupId;
     return () => { delete child.document.documentElement.dataset.workspaceGroup; };
@@ -121,30 +83,31 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
         if (event.shiftKey) void closeDetachedWorkspace(workspace.id); else if (active) void closePanel(active);
       }
       if (event.ctrlKey && event.key === 'Tab' && ids.length) {
-        event.preventDefault(); select(ids[(ids.indexOf(active) + (event.shiftKey ? ids.length - 1 : 1)) % ids.length]);
+        event.preventDefault(); layout.getState().cycleFocus(event.shiftKey ? -1 : 1);
       }
     };
     child.addEventListener('keydown', key);
     return () => child.removeEventListener('keydown', key);
-  }, [child, active, ids.join('|'), workspace.id, groupId]);
+  }, [child, active, ids.join('|'), workspace.id, groupId, layout]);
   const dragEnd = async (event: DragEndEvent) => {
     setDragging(false);
     const moved = await finishWindowTabDrag(String(event.active.id), label);
     endWindowPanelDrag();
     if (moved || !event.over || event.active.id === event.over.id) return;
-    const current = useGroupStore.getState().groups.get(groupId);
-    if (!current) return;
-    const childIds = [...current.childIds];
-    const from = childIds.indexOf(String(event.active.id)), to = childIds.indexOf(String(event.over.id));
+    const target = String(event.over.id);
+    if (useLayoutStore.getState().panelTypes[target] === 'group') {
+      useGroupStore.getState().movePanelToLevel(String(event.active.id), target);
+      return;
+    }
+    const from = ids.indexOf(String(event.active.id)), to = ids.indexOf(target);
     if (from < 0 || to < 0) return;
-    childIds.splice(to, 0, childIds.splice(from, 1)[0]);
-    useGroupStore.setState(s => ({ groups: new Map(s.groups).set(groupId, { ...current, childIds, layoutConfig: null, panelRects: new Map() }) }));
+    layout.getState().moveTab(from, to);
   };
   const newPlugin = (name: string) => {
     createPluginPanel(name, groupId);
     setNewMenu(false);
   };
-  return <PanelWindowContext.Provider value={{ document: child.document, label, enterGroup, maximize }}>
+  return <PanelWindowContext.Provider value={{ document: child.document, label, enterGroup, layout }}>
     <div className="detached-workspace" onPointerDown={() => { if (contextMenu) setContextMenu(null); }}>
       <div className="detached-tabs" role="tablist" data-window-tabstrip={label}>
         {path.length > 0 && <button className="detached-tool" title="Back to parent group" onClick={() => setPath(p => p.slice(0, -1))}><ArrowLeft size={15} /></button>}
@@ -169,17 +132,8 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
         <button className="menu-dropdown-item" onClick={() => { movePanelToWindow(contextMenu.id, null); setContextMenu(null); }}>Move to main window</button>
         <button className="menu-dropdown-item" onClick={() => { void closePanel(contextMenu.id); setContextMenu(null); }}>Close panel</button>
       </div>}
-      <div className="detached-content mosaic-container" onPointerDown={headerDown}>
-        {ids.map(id => <div key={id} data-panel-id={id} className="detached-panel" style={{ visibility: id === active ? 'visible' : 'hidden', pointerEvents: id === active && !dragging ? undefined : 'none' }} inert={id !== active}>
-          {panelTypes[id] === 'group' ? <GroupPreview groupId={id} />
-            : panelTypes[id] === 'plugin' ? <PluginPanel instanceId={id} />
-            : panelTypes[id] === 'widget' ? <WidgetPanel instanceId={id} />
-            : panelTypes[id] === 'computer' ? <ComputerPanel instanceId={id} />
-            : panelTypes[id] === 'llm' ? <LlmPanel instanceId={id} />
-            : panelTypes[id] === 'remote' ? <RemotePanel instanceId={id} />
-            : <TerminalPanel instanceId={id} />}
-        </div>)}
-        {!ids.length && <div className="mosaic-empty">Drag a tab into this window</div>}
+      <div className="detached-content" style={{ pointerEvents: dragging ? 'none' : undefined }}>
+        <MosaicLayout key={groupId} />
       </div>
     </div>
   </PanelWindowContext.Provider>;

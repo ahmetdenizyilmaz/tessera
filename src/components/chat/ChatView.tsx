@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useStreamJson } from '../../hooks/useStreamJson';
 import { useCheckpointStore } from '../../store/checkpointStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { usePanelLayout } from '../windows/PanelWindowContext';
 import { useChatStore } from '../../store/chatStore';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -26,6 +26,7 @@ interface ChatViewProps {
 }
 
 const ChatView: React.FC<ChatViewProps> = ({ instanceId, isVisible }) => {
+  const useLayoutStore = usePanelLayout();
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const accentColor = instance?.color ?? '#4a9eff';
   const projectDir = instance?.config?.cwd ?? '';

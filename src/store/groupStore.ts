@@ -17,6 +17,7 @@ export interface GroupState {
   focusedChildId: string | null;
   activeChildId: string | null;
   stealFraction: StealFraction;
+  sidebarSlotFractions?: number[];
   /** Paired LAN computer represented by this otherwise-normal group. */
   remotePeerId?: string;
 }

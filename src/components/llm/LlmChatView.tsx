@@ -3,7 +3,7 @@ import { takeForkOpeningMessage } from '../../lib/forkActions';
 import { useLlmChat } from '../../hooks/useLlmChat';
 import { usePanelDraft } from '../../hooks/usePanelDraft';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { usePanelLayout } from '../windows/PanelWindowContext';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
 import type { LlmProvider } from '../../types/instance';
 import MarkdownRenderer from '../chat/MarkdownRenderer';
@@ -14,6 +14,7 @@ interface LlmChatViewProps {
 }
 
 export default function LlmChatView({ instanceId }: LlmChatViewProps) {
+  const useLayoutStore = usePanelLayout();
   const { messages, isStreaming, error, sendMessage, cancelStream } = useLlmChat(instanceId);
   const forkOpening = useInstanceStore((st) => st.instances.get(instanceId)?.config.fork?.openingMessage);
   useEffect(() => {

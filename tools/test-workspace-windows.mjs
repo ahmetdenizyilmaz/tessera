@@ -24,7 +24,7 @@ try {
   await expect(child.locator('.detached-tab')).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => window.views[window.lichess]?.label)).toMatch(/^workspace-/);
   // Host dialogs must open in the child document and hide its native website.
-  await child.getByRole('button', { name: 'Move to group', exact: true }).click();
+  await child.locator('.browser-panel').getByRole('button', { name: 'Move to group', exact: true }).click();
   await expect(child.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await child.keyboard.press('Escape');

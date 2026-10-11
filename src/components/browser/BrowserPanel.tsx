@@ -2,15 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, Maximize2, Minimize2, RefreshCw, X } from 'lucide-react';
 import { browserCommand, browserNeedsFocus, measureBrowserSurface } from '../../lib/browserPanels';
 import { usePluginStore } from '../../store/pluginStore';
-import { useLayoutStore } from '../../store/layoutStore';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import './browser.css';
-import { usePanelWindow } from '../windows/PanelWindowContext';
+import { usePanelLayout } from '../windows/PanelWindowContext';
 import { closePanel } from '../../lib/panelCleanup';
 
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: 'lichess' }) {
-  const panelWindow = usePanelWindow();
+  const useLayoutStore = usePanelLayout();
   const instance = usePluginStore(s => s.instances.get(instanceId));
   const maximized = useLayoutStore(s => s.maximizedId === instanceId);
   const surface = useRef<HTMLDivElement>(null);
@@ -77,7 +76,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
       <button title="Reload Lichess" aria-label="Reload Lichess" disabled={!ready} onClick={() => action('reload')}><RefreshCw size={14} /></button>
       <MovePanelButton panelId={instanceId} />
       <button title={maximized ? 'Restore panel size' : 'Maximize panel'} aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
-        onClick={() => panelWindow.maximize ? panelWindow.maximize() : useLayoutStore.getState().toggleMaximized(instanceId)}>{maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
+        onClick={() => useLayoutStore.getState().toggleMaximized(instanceId)}>{maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
       <button title="Open in default browser" aria-label="Open in default browser" disabled={!ready} onClick={() => action('external')}><ExternalLink size={14} /></button>
       <button title="Close Lichess panel" aria-label="Close Lichess panel" onClick={close}><X size={14} /></button>
     </div>

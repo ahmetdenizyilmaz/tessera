@@ -10,14 +10,23 @@ page.on('pageerror', e => errors.push(e.message));
 page.on('console', message => { if (message.type() === 'error') console.log('native console:', message.text()); });
 const drag = (from, to) => execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'tools/drag-native-tab.ps1', '-StartX', String(Math.round(from.x)), '-StartY', String(Math.round(from.y)), '-EndX', String(Math.round(to.x)), '-EndY', String(Math.round(to.y)), ...(process.argv.includes('--fast') ? ['-Steps', '2', '-StepDelayMs', '10'] : [])]);
 const point = async (p, label, selector) => {
+  // Focus expands mosaic panels. Measure only after those CSS transitions end.
+  await p.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {})));
+  });
   const pos = await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|inner_position', { label }), label);
   const rect = await p.locator(selector).boundingBox();
   const scale = await p.evaluate(() => devicePixelRatio);
-  return { x: pos.x + (rect.x + 30) * scale, y: pos.y + (rect.y + 14) * scale };
+  return { x: pos.x + (rect.x + Math.min(30, rect.width / 2)) * scale, y: pos.y + (rect.y + Math.min(14, rect.height / 2)) * scale };
 };
 try {
   await page.waitForFunction(() => !!window.workspaces);
   if (process.argv.includes('--reload')) {
+    // Destroy the previous fixture's child windows before resetting its stores.
+    for (const label of await page.evaluate(() => window.workspaces.getState().windows.map(w => window.windows.windowLabel(w.id)))) {
+      await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('workspace_window_destroy', { label }), label);
+    }
     await page.evaluate(async () => { for (const [id, p] of window.plugins.getState().instances) if (p.pluginName === 'lichess') await window.__TAURI_INTERNALS__.invoke('browser_panel_close', { id }); });
     await page.reload();
   }
@@ -28,6 +37,15 @@ try {
   });
   await expect(page.locator('.tab-item')).toHaveCount(3);
   await page.evaluate(() => { window.pointerLog = []; for (const type of ['pointerdown','pointerup','pointercancel']) document.addEventListener(type, e => window.pointerLog.push({ type, x:e.clientX, y:e.clientY, target:e.target.className })); });
+  await page.evaluate(() => {
+    window.dropLog = [];
+    const invoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = async (command, args, options) => {
+      const result = await invoke(command, args, options);
+      if (command === 'workspace_drop_target') window.dropLog.push(result);
+      return result;
+    };
+  });
   await page.evaluate(maximized => { window.__testMaximized = maximized; }, process.argv.includes('--maximized'));
   await page.evaluate(async () => {
     const call = window.__TAURI_INTERNALS__.invoke;
@@ -57,13 +75,28 @@ try {
     label: window.windows.windowLabel(window.workspaces.getState().windows[0].id),
     bounds: { x: 1900, y: 100, width: 850, height: 1000 },
   }));
+  // Put both fixture windows above unrelated desktop apps before physical input.
+  await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|set_focus', { label }), label1);
   await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('plugin:window|set_focus', { label: 'main' }));
   const timerFrom = await point(page, 'main', '.tab-item:last-child');
   const childTo = await point(child, label1, '.detached-tabs');
   console.log('drag into child', timerFrom, childTo);
   drag(timerFrom, childTo);
-  await expect(child.locator('.detached-tab')).toHaveCount(2);
+  try { await expect(child.locator('.detached-tab')).toHaveCount(2); }
+  catch (error) { console.log('drop targets', await page.evaluate(() => window.dropLog)); throw error; }
   await expect(child.locator('.detached-tab').first()).toContainText('Timer');
+  await expect(child.locator('.mosaic-tile')).toHaveCount(2);
+  for (const tile of await child.locator('.mosaic-tile').all()) {
+    await expect(tile).toBeVisible();
+    const bounds = await tile.boundingBox();
+    expect(bounds.width).toBeGreaterThan(80);
+    expect(bounds.height).toBeGreaterThan(80);
+  }
+  const borders = await child.locator('.detached-tab').evaluateAll(tabs => tabs.map(tab => {
+    const style = getComputedStyle(tab);
+    return { width: style.borderTopWidth, color: style.borderTopColor, background: style.backgroundColor };
+  }));
+  for (const border of borders) { expect(border.width).toBe('1px'); expect(border.color).not.toBe(border.background); }
   console.log('native merge passed');
   await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|set_focus', { label }), label1);
   await child.locator('.detached-tab:has-text("Lichess")').click();

@@ -629,7 +629,7 @@ export function deriveStealFraction(
 // Layout persistence is owned by lib/workspaceSerializer.ts (the single
 // source of truth for the whole workspace).
 
-interface LayoutState {
+export interface LayoutState {
   layout: string | null;
   tabOrder: string[];
   activeTabId: string | null;
@@ -694,7 +694,7 @@ function recompute(
   return { layoutConfig: config, panelRects: rects };
 }
 
-export const useLayoutStore = create<LayoutState>((set, get) => ({
+export const createLayoutStore = () => create<LayoutState>((set, get) => ({
   layout: null,
   tabOrder: [],
   activeTabId: null,
@@ -1039,3 +1039,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const geometry = computeSnapLayout(state.tabOrder, snappedId, zone, state.layoutConfig, state.stealFraction, state.sidebarSlotFractions);
     set({ ...geometry, focusedId: snappedId, activeTabId: snappedId, maximizedId: null });  },
 }));
+
+export const useLayoutStore = createLayoutStore();
+export type LayoutStore = ReturnType<typeof createLayoutStore>;

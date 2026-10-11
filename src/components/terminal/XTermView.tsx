@@ -8,7 +8,7 @@ import '@xterm/xterm/css/xterm.css';
 import { usePty, isPtySpawned, consumeFreshMount } from '../../hooks/usePty';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useInstanceStore } from '../../store/instanceStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { usePanelLayout } from '../windows/PanelWindowContext';
 import { useCodexStore } from '../../store/codexStore';
 import { installTerminalCursorGuard } from '../../lib/terminalCursor';
 import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
@@ -29,9 +29,26 @@ const terminalBuffers: Map<string, string> =
 const terminalScrollStates = new Map<string, TerminalScrollState>();
 const terminalSizes = new Map<string, { cols: number; rows: number }>();
 
-/** Background PTY data listeners that buffer output while component is unmounted */
-const bgPtyBuffers: Map<string, { chunks: string[]; cancel: () => void }> =
-  (globalThis as Record<string, unknown>).__bgPtyBuffers as Map<string, { chunks: string[]; cancel: () => void }> ??
+// Keep one native subscription across moves. Replacing a listener per React
+// mount creates a gap where the running TUI can emit an unrecoverable frame.
+const outputStreams = new Map<string, { receive: (data: string) => void; ready: Promise<void>; stop: () => void }>();
+function routeOutput(instanceId: string, receive: (data: string) => void): Promise<void> {
+  const existing = outputStreams.get(instanceId);
+  if (existing) { existing.receive = receive; return existing.ready; }
+  let stopped = false;
+  let unlisten: (() => void) | undefined;
+  const stream = { receive, ready: Promise.resolve(), stop: () => { stopped = true; unlisten?.(); } };
+  stream.ready = listen<string>(`pty-data-${instanceId}`, event => {
+    if (!stopped) stream.receive(event.payload);
+  }).then(fn => { if (stopped) fn(); else unlisten = fn; });
+  outputStreams.set(instanceId, stream);
+  return stream.ready;
+}
+
+/** Output buffered while the component is unmounted. */
+type BackgroundBuffer = { chunks: string[]; bytes: number; cancel: () => void };
+const bgPtyBuffers: Map<string, BackgroundBuffer> =
+  (globalThis as Record<string, unknown>).__bgPtyBuffers as Map<string, BackgroundBuffer> ??
   ((globalThis as Record<string, unknown>).__bgPtyBuffers = new Map());
 
 /** Cap for output buffered while a panel is unmounted — Claude's TUI redraws
@@ -43,39 +60,24 @@ const BG_TRIM_MARKER = '\r\n\x1b[2m[… output trimmed while panel was hidden �
 
 function startBackgroundBuffering(instanceId: string, release: () => void) {
   if (bgPtyBuffers.has(instanceId)) { release(); return; }
-
   const chunks: string[] = [];
-  let totalBytes = 0;
+  bgPtyBuffers.set(instanceId, { chunks, bytes: 0, cancel: release });
+}
+
+function bufferBackgroundOutput(instanceId: string, data: string) {
+  const bg = bgPtyBuffers.get(instanceId);
+  if (!bg) return;
+  bg.chunks.push(data);
+  bg.bytes += data.length;
   let trimmed = false;
-  let unlistenFn: (() => void) | null = null;
-  let cancelled = false;
-
-  listen<string>(`pty-data-${instanceId}`, (event) => {
-    if (cancelled) return;
-    chunks.push(event.payload);
-    totalBytes += event.payload.length;
-    while (totalBytes > BG_BUFFER_MAX_BYTES && chunks.length > 1) {
-      totalBytes -= chunks[0].length;
-      chunks.shift();
-      trimmed = true;
-    }
-    if (trimmed && chunks[0] !== BG_TRIM_MARKER) {
-      chunks.unshift(BG_TRIM_MARKER);
-      totalBytes += BG_TRIM_MARKER.length;
-    }
-  }).then((fn) => {
-    if (cancelled) { fn(); return; }
-    unlistenFn = fn;
-  });
-
-  bgPtyBuffers.set(instanceId, {
-    chunks,
-    cancel: () => {
-      cancelled = true;
-      unlistenFn?.();
-      release();
-    },
-  });
+  while (bg.bytes > BG_BUFFER_MAX_BYTES && bg.chunks.length > 1) {
+    bg.bytes -= bg.chunks.shift()!.length;
+    trimmed = true;
+  }
+  if (trimmed && bg.chunks[0] !== BG_TRIM_MARKER) {
+    bg.chunks.unshift(BG_TRIM_MARKER);
+    bg.bytes += BG_TRIM_MARKER.length;
+  }
 }
 
 function consumeBackgroundBuffer(instanceId: string): string[] {
@@ -88,6 +90,8 @@ function consumeBackgroundBuffer(instanceId: string): string[] {
 
 /** Call on explicit panel close to clean up saved state */
 export function clearTerminalState(instanceId: string) {
+  outputStreams.get(instanceId)?.stop();
+  outputStreams.delete(instanceId);
   terminalBuffers.delete(instanceId);
   terminalScrollStates.delete(instanceId);
   terminalSizes.delete(instanceId);
@@ -103,6 +107,7 @@ interface XTermViewProps {
 }
 
 export function XTermView({ instanceId, isVisible }: XTermViewProps) {
+  const useLayoutStore = usePanelLayout();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const resizeCoordinatorRef = useRef<ReturnType<typeof createTerminalResize> | null>(null);
@@ -113,7 +118,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
   const activeRef = useRef(isActive);
   activeRef.current = isActive;
 
-  const { spawn, write, resize, onData } = usePty(instanceId);
+  const { spawn, write, resize } = usePty(instanceId);
 
   useEffect(() => {
     let active = true;
@@ -213,6 +218,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     });
     termRef.current = terminal;
     const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize, () => activeRef.current);
+    resizeCoordinator.pauseForRestore();
     resizeCoordinatorRef.current = resizeCoordinator;
 
     // ─── Clipboard ─────────────────────────────────────────────────────
@@ -310,12 +316,21 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     // A restart/fresh-start marks this id so we DON'T replay the previous
     // conversation's scrollback (the old view's unmount re-saved it after
     // restartPty ran). Clear it and start clean.
+    const pendingWrites: { data: string }[] = [];
+    const writeOutput = (data: string) => {
+      const pending = { data };
+      pendingWrites.push(pending);
+      terminal.write(data, () => {
+        const index = pendingWrites.indexOf(pending);
+        if (index >= 0) pendingWrites.splice(index, 1);
+      });
+    };
     if (freshMount) {
       terminalBuffers.delete(instanceId);
     } else {
       const savedBuffer = terminalBuffers.get(instanceId);
       if (savedBuffer) {
-        terminal.write(savedBuffer);
+        writeOutput(savedBuffer);
         terminalBuffers.delete(instanceId);
       }
     }
@@ -323,8 +338,14 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     // Replay any PTY output buffered while component was unmounted
     const bgChunks = consumeBackgroundBuffer(instanceId);
     for (const chunk of bgChunks) {
-      terminal.write(chunk);
+      writeOutput(chunk);
     }
+    // Serialized escape sequences describe the old terminal dimensions.
+    // Fitting before xterm has parsed them can leave a TUI partially redrawn.
+    const restored = new Promise<void>(resolve => terminal.write('', () => {
+      resizeCoordinator.finishRestore();
+      resolve();
+    }));
 
     // ─── Data listeners ────────────────────────────────────────────────
 
@@ -335,20 +356,13 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
     // The mount-local flag also rejects callbacks from a disposed view when
     // React immediately mounts a replacement for the same panel.
-    let unlisten: (() => void) | null = null;
-    const listening = (async () => {
-      const fn = await onData((data) => {
+    const listening = routeOutput(instanceId, (data) => {
         // Keep the actual parser alive while hidden: serializing in the
         // middle of a split escape sequence loses parser state.
         if (disposed) return;
-        terminal.write(data);
-      });
-      if (disposed) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    })();
+        if (!mounted) bufferBackgroundOutput(instanceId, data);
+        writeOutput(data);
+    });
 
     const startTerminal = async (cols: number, rows: number) => {
       // The initial transcript must not race the listener registration.
@@ -365,7 +379,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     if (!alreadyRunning) {
       // Double-RAF spawn sequence
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+        requestAnimationFrame(async () => {
+          await restored;
           if (!mounted) return;
 
           try {
@@ -439,10 +454,12 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       });
     } else {
       // PTY already running (remount after group move) — just fit
-      requestAnimationFrame(() => {
+      requestAnimationFrame(async () => {
+        await restored;
+        await listening;
         if (!mounted) return;
         try {
-          resizeCoordinator.ready();
+          resizeCoordinator.ready(terminalSizes.get(instanceId));
           resizeCoordinator.fitNow();
         } catch {
           // Ignore fit errors
@@ -454,6 +471,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (mounted) resizeCoordinator.requestFit();
     });
     resizeObserver.observe(container);
+    const repaintAfterMove = () => { if (mounted) resizeCoordinator.requestFit(); };
+    const tile = container.closest('[data-panel-id]');
+    tile?.addEventListener('transitionend', repaintAfterMove);
+    view.addEventListener('focus', repaintAfterMove);
 
     // Cleanup — preserve PTY process for potential group-move remount
     return () => {
@@ -466,6 +487,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('paste', handleNativePaste, true);
       resizeObserver.disconnect();
+      tile?.removeEventListener('transitionend', repaintAfterMove);
+      view.removeEventListener('focus', repaintAfterMove);
 
       // Save terminal buffer content before disposing. SerializeAddon
       // preserves colors/attributes and avoids the O(scrollback) manual
@@ -473,7 +496,9 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       try {
         terminalScrollStates.set(instanceId, scrollGuard.snapshot());
         terminalSizes.set(instanceId, { cols: terminal.cols, rows: terminal.rows });
-        const serialized = serializeAddon.serialize();
+        // xterm parses writes asynchronously. Preserve the queued tail as well
+        // as the parsed screen; a move must not drop the TUI's latest repaint.
+        const serialized = serializeAddon.serialize() + pendingWrites.map(p => p.data).join('');
         if (serialized.trim()) {
           terminalBuffers.set(instanceId, serialized);
         }
@@ -485,7 +510,6 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       terminal.options.cursorBlink = false;
       const release = () => {
         disposed = true;
-        if (unlisten) unlisten();
         unshare();
         terminal.dispose();
       };
