@@ -1,0 +1,87 @@
+// Run the isolated window_validation Rust example with CDP on 9231 first.
+import { chromium, expect } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+const browser = await chromium.connectOverCDP('http://127.0.0.1:9231');
+const page = browser.contexts().flatMap(c => c.pages()).find(p => p.url().includes('window-fixture'));
+const errors = [];
+let childBrowser;
+let secondBrowser;
+page.on('pageerror', e => errors.push(e.message));
+page.on('console', message => { if (message.type() === 'error') console.log('native console:', message.text()); });
+const drag = (from, to) => execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'tools/drag-native-tab.ps1', '-StartX', String(Math.round(from.x)), '-StartY', String(Math.round(from.y)), '-EndX', String(Math.round(to.x)), '-EndY', String(Math.round(to.y))]);
+const point = async (p, label, selector) => {
+  const pos = await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|inner_position', { label }), label);
+  const rect = await p.locator(selector).boundingBox();
+  const scale = await p.evaluate(() => devicePixelRatio);
+  return { x: pos.x + (rect.x + 30) * scale, y: pos.y + (rect.y + 14) * scale };
+};
+try {
+  await page.waitForFunction(() => !!window.workspaces);
+  if (process.argv.includes('--reload')) {
+    await page.evaluate(async () => { for (const [id, p] of window.plugins.getState().instances) if (p.pluginName === 'lichess') await window.__TAURI_INTERNALS__.invoke('browser_panel_close', { id }); });
+    await page.reload();
+  }
+  await page.evaluate(() => {
+    for (const workspace of window.workspaces.getState().windows) {
+      for (const id of window.groups.getState().groups.get(workspace.groupId)?.childIds ?? []) window.windows.movePanelToWindow(id, null);
+    }
+  });
+  await expect(page.locator('.tab-item')).toHaveCount(3);
+  await page.evaluate(() => { window.pointerLog = []; for (const type of ['pointerdown','pointerup','pointercancel']) document.addEventListener(type, e => window.pointerLog.push({ type, x:e.clientX, y:e.clientY, target:e.target.className })); });
+  await page.evaluate(async () => {
+    const call = window.__TAURI_INTERNALS__.invoke;
+    if (await call('plugin:window|is_maximized', { label: 'main' })) await call('plugin:window|toggle_maximize', { label: 'main' });
+    await call('plugin:window|set_focus', { label: 'main' });
+  });
+  const from = await point(page, 'main', process.argv.includes('--header') ? '.browser-title' : '.tab-item:has-text("Lichess")');
+  const outside = await page.evaluate(() => ({ x: screen.availWidth * devicePixelRatio - 40, y: screen.availHeight * devicePixelRatio - 100 }));
+  console.log('drag outside', from, outside);
+  drag(from, outside);
+  console.log('pointer log', await page.evaluate(() => window.pointerLog));
+  await expect.poll(() => page.evaluate(() => window.workspaces.getState().windows.length), { timeout: 18000 }).toBe(1);
+  const [w1] = await page.evaluate(() => window.workspaces.getState().windows);
+  const label1 = `workspace-${w1.id}`;
+  childBrowser = await chromium.connectOverCDP('http://127.0.0.1:9231');
+  const child = childBrowser.contexts().flatMap(c => c.pages()).find(p => p.url().includes(w1.id));
+  await expect(child.locator('.detached-tab')).toHaveCount(1);
+  await expect(child.locator('.browser-error')).toHaveCount(0);
+  console.log('native detach passed');
+  // Move Main's timer to the detached window using physical mouse input.
+  await page.evaluate(async () => window.__TAURI_INTERNALS__.invoke('workspace_window_place', {
+    label: window.windows.windowLabel(window.workspaces.getState().windows[0].id),
+    bounds: { x: 1900, y: 100, width: 850, height: 1000 },
+  }));
+  await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('plugin:window|set_focus', { label: 'main' }));
+  const timerFrom = await point(page, 'main', '.tab-item:last-child');
+  const childTo = await point(child, label1, '.detached-tabs');
+  console.log('drag into child', timerFrom, childTo);
+  drag(timerFrom, childTo);
+  await expect(child.locator('.detached-tab')).toHaveCount(2);
+  console.log('native merge passed');
+  await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|set_focus', { label }), label1);
+  drag(await point(child, label1, '.detached-tab:has-text("Lichess")'), { x: 60, y: 1100 });
+  await expect.poll(() => page.evaluate(() => window.workspaces.getState().windows.length)).toBe(2);
+  const w2 = await page.evaluate(() => window.workspaces.getState().windows[1]);
+  secondBrowser = await chromium.connectOverCDP('http://127.0.0.1:9231');
+  const second = secondBrowser.contexts().flatMap(c => c.pages()).find(p => p.url().includes(w2.id));
+  await expect(second.locator('.detached-tab')).toHaveCount(1);
+  drag(await point(second, `workspace-${w2.id}`, '.detached-tab'), childTo);
+  await expect(child.locator('.detached-tab')).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => window.workspaces.getState().windows.length)).toBe(1);
+  console.log('native child detach and window-to-window merge passed');
+  // Return Lichess using the child toolbar, retaining its live native webview.
+  await child.locator('.detached-tab').filter({ hasText: 'Lichess' }).click();
+  const before = await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('browser_panel_status', { id: window.lichess }));
+  await child.getByTitle('Move active panel back to main window').click();
+  await expect(page.locator('.tab-item').filter({ hasText: 'Lichess' })).toBeVisible();
+  expect(await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('browser_panel_status', { id: window.lichess }))).toEqual(before);
+  // Native close request must reach Main's listener and close only child tabs.
+  await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|close', { label }), label1);
+  await expect.poll(() => page.evaluate(() => window.workspaces.getState().windows.length)).toBe(0);
+  expect(await page.evaluate(() => window.plugins.getState().instances.has(window.timer))).toBe(false);
+  expect(await page.evaluate(() => window.plugins.getState().instances.has(window.lichess))).toBe(true);
+  await page.waitForTimeout(750);
+  await expect(page.locator('.tab-item').filter({ hasText: 'Lichess' })).toBeVisible();
+  expect(errors).toEqual([]);
+  console.log('PASS native outside drag, native merge, live Lichess reparent, native close cleanup');
+} finally { await secondBrowser?.close(); await childBrowser?.close(); await browser.close(); }

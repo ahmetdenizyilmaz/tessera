@@ -25,9 +25,11 @@ import { markForkConsumed, peekForkContext, startFork, submitForkOpeningToTermin
 import { CodexItemView } from "./CodexItemView";
 import { ForkNotice } from "../chat/ForkNotice";
 import { Loader2 } from "lucide-react";
+import { usePanelWindow } from '../windows/PanelWindowContext';
 
 
 export function CodexPanel({ instanceId }: { instanceId: string }) {
+  const document = usePanelWindow().document ?? globalThis.document;
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const session = useCodexStore((s) => s.sessions[instanceId]);
   const [ready, setReady] = useState(false),

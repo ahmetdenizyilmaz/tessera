@@ -33,6 +33,7 @@ export function createBridge(
   iframe: HTMLIFrameElement,
 ): PluginBridge {
   let destroyed = false;
+  const hostWindow = iframe.ownerDocument.defaultView ?? window;
 
   // ─── Send a message to the plugin iframe ──────────────────────────────────
 
@@ -306,7 +307,7 @@ export function createBridge(
     }
   }
 
-  window.addEventListener('message', onMessage);
+  hostWindow.addEventListener('message', onMessage);
 
   // ─── Event Bus Subscriptions (forward incoming events to the iframe) ─────
 
@@ -366,7 +367,7 @@ export function createBridge(
 
     destroy() {
       destroyed = true;
-      window.removeEventListener('message', onMessage);
+      hostWindow.removeEventListener('message', onMessage);
       // Clean up bridge-owned event bus subscriptions
       for (const unsub of unsubs) unsub();
       unsubs.length = 0;

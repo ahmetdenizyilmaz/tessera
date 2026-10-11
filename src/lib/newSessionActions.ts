@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { homeDir } from '@tauri-apps/api/path';
-import { useLayoutStore, canAddPanel, notifyPanelLimit, MAX_PANELS } from '../store/layoutStore';
+import { useLayoutStore, notifyPanelLimit } from '../store/layoutStore';
 import { useInstanceStore } from '../store/instanceStore';
 import { useGroupStore } from '../store/groupStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -11,47 +11,43 @@ import type { InstanceConfig, LlmConfig, LlmProvider, ClaudeRouting } from '../t
 import type { LastSessionPreset } from '../types/session';
 import { applyForkToInstance } from './forkActions';
 import { focusShortcutPanel } from './panelShortcuts';
+import { canPlacePanel, panelDestination, placePanel } from './panelPlacement';
 
 /** THE creation entry point: every +/Ctrl+N/menu trigger funnels here. */
-export function openNewSessionWizard(): void {
+export function openNewSessionWizard(destination = useGroupStore.getState().getCurrentGroupId()): void {
   const existingId = Object.entries(useLayoutStore.getState().widgetKinds)
     .find(([, kind]) => kind === 'new-session')?.[0];
   // Reuse normal panel navigation: recompute focus sizing, reveal maximized
   // panels, and enter the wizard's group without resetting its selections.
   if (existingId && focusShortcutPanel(existingId)) return;
 
-  const id = useLayoutStore.getState().addWidgetPanel('new-session');
-  // Empty id = duplicate (refocused the existing wizard, keep its picks) or
-  // panel limit (toast already shown) — only a genuinely new panel resets.
-  if (id) useWizardStore.getState().reset();
+  if (!canPlacePanel(destination)) { notifyPanelLimit(); return; }
+  const id = `widget-new-session-${Date.now()}`;
+  useLayoutStore.setState(s => ({ widgetKinds: { ...s.widgetKinds, [id]: 'new-session' } }));
+  placePanel(id, 'widget', destination);
+  useWizardStore.getState().reset();
 }
 
-export function createGroupPanel(): void {
-  if (!canAddPanel()) { notifyPanelLimit(); return; }
-  const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-  const groupId = useGroupStore.getState().createGroup(currentGroupId);
-  useLayoutStore.getState().addPanel(groupId, 'group');
+export function createGroupPanel(destination = useGroupStore.getState().getCurrentGroupId(), replacingId?: string): void {
+  if (!canPlacePanel(destination, replacingId)) { notifyPanelLimit(); return; }
+  const groupId = useGroupStore.getState().createGroup(destination);
+  placePanel(groupId, 'group', destination, replacingId);
 }
 
-export function createPluginPanel(pluginName: string): void {
-  if (!canAddPanel()) { notifyPanelLimit(); return; }
+export function createPluginPanel(pluginName: string, destination = useGroupStore.getState().getCurrentGroupId(), replacingId?: string): void {
+  if (!canPlacePanel(destination, replacingId)) { notifyPanelLimit(); return; }
   const instanceId = usePluginStore.getState().createInstance(pluginName);
   if (instanceId) {
-    useLayoutStore.getState().addPanel(instanceId, 'plugin');
-    const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-    if (currentGroupId) {
-      useGroupStore.getState().addToGroup(currentGroupId, instanceId);
-    }
+    placePanel(instanceId, 'plugin', destination, replacingId);
   }
 }
 
 /** Guard tolerating the wizard's own slot, then remove-the-wizard FIRST so
  *  addPanel's internal limit check can't refuse and orphan the new instance. */
-export function replaceWizard(wizardId: string, fn: () => void): void {
-  const others = useLayoutStore.getState().tabOrder.filter((id) => id !== wizardId);
-  if (others.length >= MAX_PANELS) { notifyPanelLimit(); return; }
-  useLayoutStore.getState().removePanel(wizardId);
-  fn();
+export function replaceWizard(wizardId: string, fn: (destination: string | null, replacingId: string) => void): void {
+  const destination = panelDestination(wizardId);
+  if (!canPlacePanel(destination, wizardId)) { notifyPanelLimit(); return; }
+  fn(destination, wizardId);
 }
 
 /** Which keyring provider (if any) a route needs, and its display identity. */
@@ -119,9 +115,8 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
   const meta = routeMeta(s.route);
   if (meta.branch === 'codex' || meta.branch === 'opencode' || meta.branch === 'antigravity') return;
 
-  const others = useLayoutStore.getState().tabOrder.filter((id) => id !== wizardPanelId);
-  if (others.length >= MAX_PANELS) { notifyPanelLimit(); return; }
-  useLayoutStore.getState().removePanel(wizardPanelId);
+  const destination = panelDestination(wizardPanelId);
+  if (!canPlacePanel(destination, wizardPanelId)) { notifyPanelLimit(); return; }
 
   const settings = useSettingsStore.getState().settings;
   let preset: LastSessionPreset;
@@ -153,9 +148,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
     };
     const id = useInstanceStore.getState().addInstance(config);
     await applyForkToInstance(id);
-    useLayoutStore.getState().addPanel(id);
-    const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-    if (currentGroupId) useGroupStore.getState().addToGroup(currentGroupId, id);
+    placePanel(id, 'terminal', destination, wizardPanelId);
 
     preset = {
       kind: 'claude',
@@ -218,9 +211,7 @@ export async function createFromWizard(wizardPanelId: string): Promise<void> {
   } catch (err) {
     console.error('Failed to create LLM session:', err);
   }
-  useLayoutStore.getState().addPanel(id, 'llm');
-  const currentGroupId = useGroupStore.getState().getCurrentGroupId();
-  if (currentGroupId) useGroupStore.getState().addToGroup(currentGroupId, id);
+  placePanel(id, 'llm', destination, wizardPanelId);
 
   preset = {
     kind: 'llm',

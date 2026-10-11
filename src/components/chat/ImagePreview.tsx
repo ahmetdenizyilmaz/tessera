@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 
 interface ImagePreviewProps {
   src: string;
@@ -7,6 +8,7 @@ interface ImagePreviewProps {
 }
 
 export const ImagePreview: React.FC<ImagePreviewProps> = ({ src, alt, onClose }) => {
+  const document = usePanelWindow().document ?? globalThis.document;
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();

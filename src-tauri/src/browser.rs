@@ -82,11 +82,18 @@ impl BrowserBounds {
 }
 
 #[tauri::command]
-pub async fn browser_panel_bounds(caller: Webview, app: tauri::AppHandle, id: String, bounds: Option<BrowserBounds>) -> Result<(), String> {
+pub async fn browser_panel_bounds(caller: Webview, app: tauri::AppHandle, id: String, bounds: Option<BrowserBounds>, window_label: Option<String>) -> Result<(), String> {
     authorize(&caller)?;
     let Some(view) = app.get_webview(&label(&id)?) else { return Ok(()); };
     match bounds {
         Some(b) if b.valid() => {
+            let label = window_label.as_deref().unwrap_or("main");
+            if label != "main" && !label.starts_with("workspace-") { return Err("Invalid parent window".into()); }
+            if view.window().label() != label {
+                let parent = app.get_window(label).ok_or("Parent window is unavailable")?;
+                view.hide().map_err(|e| e.to_string())?;
+                view.reparent(&parent).map_err(|e| e.to_string())?;
+            }
             view.set_bounds(tauri::Rect {
                 position: tauri::PhysicalPosition::new((b.x * b.scale).round() as i32, (b.y * b.scale).round() as i32).into(),
                 size: tauri::PhysicalSize::new((b.width * b.scale).round() as u32, (b.height * b.scale).round() as u32).into(),

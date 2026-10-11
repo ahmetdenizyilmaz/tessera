@@ -3,6 +3,8 @@ import { GitFork } from 'lucide-react';
 import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
+import { removePanelsFromWorkspace } from '../../store/groupStore';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { useLlmChatStore } from '../../store/llmChatStore';
@@ -53,6 +55,8 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export function LlmPanel({ instanceId }: LlmPanelProps) {
+  const panelWindow = usePanelWindow();
+  const document = panelWindow.document ?? globalThis.document;
   const instance = useInstanceStore((s) => s.instances.get(instanceId));
   const removePanel = useLayoutStore((s) => s.removePanel);
   const toggleMaximized = useLayoutStore((s) => s.toggleMaximized);
@@ -97,7 +101,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
       // Session may not exist
     }
     useLlmChatStore.getState().removeConversation(instanceId);
-    removePanel(instanceId);
+    removePanelsFromWorkspace([instanceId]);
     removeInstance(instanceId);
   }, [instanceId, removePanel, removeInstance]);
 
@@ -277,7 +281,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
           </button>
           <button
             className="toolbar-btn"
-            onClick={(e) => { e.stopPropagation(); toggleMaximized(instanceId); }}
+            onClick={(e) => { e.stopPropagation(); if (panelWindow.maximize) panelWindow.maximize(); else toggleMaximized(instanceId); }}
             title={isMaximized ? 'Restore panel (show all)' : 'Maximize panel (hide the others)'}
           >
             {isMaximized ? (

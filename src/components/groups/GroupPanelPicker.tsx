@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 import { Folder, FolderInput, LayoutGrid, Plus, Search, X } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -18,6 +19,7 @@ function useWorkspaceMembership() {
 }
 
 export function GroupPanelPicker({ onClose, ...target }: PickerTarget & { onClose: () => void }) {
+  const document = usePanelWindow().document ?? globalThis.document;
   useWorkspaceMembership();
   useInstanceStore(s => s.instances);
   usePluginStore(s => s.instances);

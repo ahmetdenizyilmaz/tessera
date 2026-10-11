@@ -13,6 +13,9 @@ export function createTerminalResize(
   resize: (cols: number, rows: number) => Promise<void>,
   isActive: () => boolean = () => true,
 ) {
+  const view = terminal.element?.ownerDocument.defaultView ?? window;
+  const requestAnimationFrame = view.requestAnimationFrame.bind(view);
+  const cancelAnimationFrame = view.cancelAnimationFrame.bind(view);
   let frame = 0;
   let started = false;
   let disposed = false;

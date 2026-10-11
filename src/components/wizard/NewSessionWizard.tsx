@@ -7,6 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp, Monitor, GitFork } from 'lucide-react';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
+import { removePanelsFromWorkspace } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { usePluginStore } from '../../store/pluginStore';
@@ -115,7 +116,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   const close = useCallback(() => {
     cancelFork();
-    useLayoutStore.getState().removePanel(instanceId);
+    removePanelsFromWorkspace([instanceId]);
   }, [instanceId]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -634,7 +635,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           <FolderIcon size={12} style={{ marginRight: 4 }} /> Group
         </button>
         {Array.from(pluginRegistry.keys()).map((name) => (
-          <button key={name} className="btn btn-secondary btn-sm" onClick={() => replaceWizard(instanceId, () => createPluginPanel(name))}>
+          <button key={name} className="btn btn-secondary btn-sm" onClick={() => replaceWizard(instanceId, (destination, replacingId) => createPluginPanel(name, destination, replacingId))}>
             <Puzzle size={12} style={{ marginRight: 4 }} /> {pluginRegistry.get(name)?.defaultTitle ?? name}
           </button>
         ))}

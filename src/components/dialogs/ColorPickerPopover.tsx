@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 import { INSTANCE_COLORS } from '../../types/instance';
 
 interface ColorPickerPopoverProps {
@@ -17,6 +18,8 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
   onColorChange,
   anchorEl,
 }) => {
+  const document = usePanelWindow().document ?? globalThis.document;
+  const window = document.defaultView ?? globalThis.window;
   const [customHex, setCustomHex] = useState('');
 
   if (!isOpen) return null;

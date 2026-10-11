@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../store/layoutStore';
-import { useGroupStore } from '../store/groupStore';
+import { panelDestination, placePanel } from './panelPlacement';
 import { useSettingsStore } from '../store/settingsStore';
 import { ensureOpenCode, stopOpenCodeWatch } from './opencodeBridge';
 import { applyForkToInstance } from './forkActions';
@@ -10,9 +10,9 @@ import { clearTerminalState } from '../components/terminal/XTermView';
 import type { OpenCodeOptions } from '../types/opencode';
 
 export async function openOpenCodeSession(options: OpenCodeOptions, cwd: string, panelView: 'chat' | 'terminal', wizardId?: string): Promise<string> {
+  const destination = panelDestination(wizardId);
   if (!wizardId && !canAddPanel()) { notifyPanelLimit(); throw new Error('Panel limit reached'); }
   const store = useInstanceStore.getState();
-  const group = useGroupStore.getState().getCurrentGroupId();
   const id = store.addInstance({ agentProvider: 'opencode', opencode: { ...options }, model: options.model, cwd, panelView,
     systemPrompt: '', dangerouslySkipPermissions: false, permissionMode: 'default', allowedTools: [], maxBudget: 0, agentMode: false,
   }, `OpenCode · ${options.model.split('/').pop()}`);
@@ -31,9 +31,7 @@ export async function openOpenCodeSession(options: OpenCodeOptions, cwd: string,
   // The mounted panel seeds this pending context through ensureOpenCode, and a
   // transient import failure stays retryable on that panel instead of losing it.
   await applyForkToInstance(id);
-  if (wizardId) useLayoutStore.getState().removePanel(wizardId);
-  useLayoutStore.getState().addPanel(id);
-  if (group) useGroupStore.getState().addToGroup(group, id);
+  placePanel(id, 'terminal', destination, wizardId);
   useSettingsStore.getState().updateSettings({ lastCwd: cwd, lastPanelView: panelView,
     lastSessionPreset: { kind: 'opencode', opencode: { ...options }, model: options.model, cwd, panelView } });
   return id;

@@ -34,6 +34,7 @@ import { useGroupStore } from './store/groupStore';
 import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
 import { registerBuiltins } from './lib/builtinPlugins';
+import { DetachedWindows } from './components/windows/DetachedWindows';
 import { openNewSessionWizard, createPluginPanel } from './lib/newSessionActions';
 import { focusShortcutPanel, installPanelShortcuts } from './lib/panelShortcuts';
 import type { LlmProvider } from './types/instance';
@@ -283,6 +284,7 @@ export default function App() {
           onNewInstance={openNewSessionWizard}
           onUsageClick={() => setShowUsage(true)}
         />
+        <DetachedWindows />
 
         {/* Mount conditionally so useState initializers run fresh on every open
             (stale name/cwd otherwise persist for the app's lifetime) */}

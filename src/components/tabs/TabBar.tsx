@@ -28,6 +28,7 @@ import { useInstanceStore } from '../../store/instanceStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { INSTANCE_COLORS } from '../../types/instance';
 import { closePanel } from '../../lib/panelCleanup';
+import { finishWindowTabDrag, setWindowTabDragging } from '../../lib/workspaceWindows';
 
 // Shared drag state for cross-group operations
 // Anchored to globalThis to survive HMR
@@ -118,6 +119,7 @@ export function TabBar() {
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    setWindowTabDragging(true);
     const dragId = String(event.active.id);
     setActiveDragId(dragId);
     crossGroupDragState.activeDragId = dragId;
@@ -182,7 +184,7 @@ export function TabBar() {
   }, []);
 
   const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
+    async (event: DragEndEvent) => {
       const { active, over } = event;
 
       // Clear navigate-up timer
@@ -197,7 +199,9 @@ export function TabBar() {
       crossGroupDragState.overDropTargetId = null;
       crossGroupDragState.overDropTargetType = null;
 
-      if (!over || active.id === over.id) return;
+      const movedWindow = await finishWindowTabDrag(String(active.id));
+      setWindowTabDragging(false);
+      if (movedWindow || !over || active.id === over.id) return;
 
       const activeId = String(active.id);
       const overId = String(over.id);
@@ -238,6 +242,7 @@ export function TabBar() {
   );
 
   const handleDragCancel = useCallback(() => {
+    setWindowTabDragging(false);
     setActiveDragId(null);
     crossGroupDragState.activeDragId = null;
     crossGroupDragState.overDropTargetId = null;
@@ -342,7 +347,7 @@ export function TabBar() {
         </SortableContext>
         <DragOverlay dropAnimation={null}>
           {activeDragId ? (
-            <div className="tab-item tab-item-active" style={{ opacity: 0.8, cursor: 'grabbing' }}>
+            <div className="tab-item tab-item-active" style={{ opacity: 0.8, cursor: 'default' }}>
               <span className="tab-name" style={{ fontSize: 12 }}>
                 {(() => {
                   const pt = panelTypes[activeDragId];
@@ -392,7 +397,7 @@ export function TabBar() {
       <div style={{ position: 'relative' }}>
         <button
           className="tab-bar-add"
-          onClick={openNewSessionWizard}
+          onClick={() => openNewSessionWizard()}
           title="New session"
         >
           +

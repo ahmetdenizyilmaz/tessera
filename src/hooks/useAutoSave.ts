@@ -7,6 +7,8 @@ import { usePluginStore } from '../store/pluginStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSessionStore } from '../store/sessionStore';
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
+import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
+import { closeWindowViewsForExit } from '../lib/workspaceWindows';
 import { restoreOnce, saveNow, scheduleSave } from '../lib/workspaceSerializer';
 
 const AUTOSAVE_INTERVAL = 30000; // 30 seconds
@@ -68,6 +70,7 @@ export function useAutoSave() {
       // core:window:allow-destroy permission) the close stays prevented and
       // the window becomes impossible to close.
       try {
+        await closeWindowViewsForExit();
         await getCurrentWindow().destroy();
       } catch (err) {
         console.error('Window destroy failed — forcing exit:', err);
@@ -97,6 +100,7 @@ export function useAutoSave() {
       useLayoutStore.subscribe(scheduleSave),
       useGroupStore.subscribe(scheduleSave),
       usePluginStore.subscribe(scheduleSave),
+      useWorkspaceWindowStore.subscribe(scheduleSave),
       usePanelShortcutStore.subscribe((state, previous) => {
         if (state.bindings !== previous.bindings) scheduleSave();
       }),

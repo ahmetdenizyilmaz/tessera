@@ -1,5 +1,6 @@
 import { X, FolderOpen, Bot, Server, BarChart3, GitBranch, Plus, Activity } from 'lucide-react';
 import { useLayoutStore } from '../../store/layoutStore';
+import { removePanelsFromWorkspace } from '../../store/groupStore';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import AgentList from '../agents/AgentList';
 import { McpManager } from '../mcp/McpManager';
@@ -109,7 +110,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
           onClick={(e) => {
             e.stopPropagation();
             usePanelShortcutStore.getState().removePanels([instanceId]);
-            removePanel(instanceId);
+            removePanelsFromWorkspace([instanceId]);
           }}
           style={{
             background: 'none',

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 
 export type ThinkingMode = 'auto' | 'think' | 'think_hard' | 'think_harder' | 'ultrathink';
 
@@ -18,6 +19,7 @@ const MODES: { id: ThinkingMode; label: string; tokens: number | null; color: st
 ];
 
 export const ThinkingModeSelector: React.FC<ThinkingModeSelectorProps> = ({ instanceId, value, onChange }) => {
+  const document = usePanelWindow().document ?? globalThis.document;
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 

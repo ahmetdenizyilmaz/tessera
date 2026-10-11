@@ -15,7 +15,7 @@ export function installTerminalCursorGuard(
   const element = terminal.element;
   const screen = element?.querySelector<HTMLElement>(".xterm-screen");
   if (!element || !screen) return { dispose() {} };
-  const caret = document.createElement("div");
+  const caret = element.ownerDocument.createElement("div");
   caret.className = "terminal-input-caret";
   caret.setAttribute("aria-hidden", "true");
   screen.append(caret);

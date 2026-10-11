@@ -1,35 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, Maximize2, Minimize2, RefreshCw, X } from 'lucide-react';
-import { browserCommand, measureBrowserSurface } from '../../lib/browserPanels';
+import { browserCommand, browserNeedsFocus, measureBrowserSurface } from '../../lib/browserPanels';
 import { usePluginStore } from '../../store/pluginStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import './browser.css';
+import { usePanelWindow } from '../windows/PanelWindowContext';
+import { closePanel } from '../../lib/panelCleanup';
 
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: 'lichess' }) {
+  const panelWindow = usePanelWindow();
   const instance = usePluginStore(s => s.instances.get(instanceId));
   const maximized = useLayoutStore(s => s.maximizedId === instanceId);
   const surface = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [clickToFocus, setClickToFocus] = useState(false);
 
   useEffect(() => {
+    const view = surface.current?.ownerDocument.defaultView ?? window;
     let disposed = false, frame = 0, busy = false, lastBounds = '', nextStatus = 0;
     setReady(false);
     setError('');
     const tick = async () => {
       if (disposed) return;
-      frame = requestAnimationFrame(() => void tick());
+      frame = view.requestAnimationFrame(() => void tick());
       if (busy || !surface.current) return;
+      setClickToFocus(browserNeedsFocus(surface.current));
       const bounds = measureBrowserSurface(surface.current);
       const key = JSON.stringify(bounds);
       busy = true;
       try {
         if (key !== lastBounds) {
-          await browserCommand(instanceId, 'browser_panel_bounds', { bounds });
+          await browserCommand(instanceId, 'browser_panel_bounds', { bounds, windowLabel: surface.current.ownerDocument.documentElement.dataset.workspaceWindow ?? 'main' });
           lastBounds = key;
         }
         if (Date.now() >= nextStatus) {
@@ -50,7 +55,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
     }).catch(e => { if (!disposed) setError(String(e)); });
     return () => {
       disposed = true;
-      cancelAnimationFrame(frame);
+      view.cancelAnimationFrame(frame);
       void browserCommand(instanceId, 'browser_panel_bounds', { bounds: null }).catch(() => {});
     };
   }, [instanceId, site, attempt]);
@@ -60,9 +65,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
     void browserCommand(instanceId, 'browser_panel_action', { action }).catch(e => setError(String(e)));
   };
   const close = () => {
-    usePluginStore.getState().destroyInstance(instanceId);
-    usePanelShortcutStore.getState().removePanels([instanceId]);
-    useLayoutStore.getState().removePanel(instanceId);
+    void closePanel(instanceId);
   };
   return <div className="browser-panel">
     <div className="terminal-toolbar browser-toolbar">
@@ -74,14 +77,14 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
       <button title="Reload Lichess" aria-label="Reload Lichess" disabled={!ready} onClick={() => action('reload')}><RefreshCw size={14} /></button>
       <MovePanelButton panelId={instanceId} />
       <button title={maximized ? 'Restore panel size' : 'Maximize panel'} aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
-        onClick={() => useLayoutStore.getState().toggleMaximized(instanceId)}>{maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
+        onClick={() => panelWindow.maximize ? panelWindow.maximize() : useLayoutStore.getState().toggleMaximized(instanceId)}>{maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
       <button title="Open in default browser" aria-label="Open in default browser" disabled={!ready} onClick={() => action('external')}><ExternalLink size={14} /></button>
       <button title="Close Lichess panel" aria-label="Close Lichess panel" onClick={close}><X size={14} /></button>
     </div>
     {error && <div className="browser-error" role="alert">{error}<button onClick={() => setAttempt(n => n + 1)}>Retry</button></div>}
     <div ref={surface} className="browser-surface" data-browser-surface={instanceId}>
       <div className="browser-placeholder"><Globe size={32} /><strong>Lichess</strong>
-        <span>{error ? 'The browser could not be opened.' : ready ? 'Your chess session stays open while you use Tessera.' : 'Opening Lichess…'}</span>
+        <span>{error ? 'The browser could not be opened.' : clickToFocus ? 'Click to focus and play' : ready ? 'Your chess session stays open while you use Tessera.' : 'Opening Lichess…'}</span>
       </div>
     </div>
   </div>;

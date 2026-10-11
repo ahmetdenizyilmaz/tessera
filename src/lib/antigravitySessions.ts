@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore, canAddPanel, notifyPanelLimit } from '../store/layoutStore';
-import { useGroupStore } from '../store/groupStore';
+import { panelDestination, placePanel } from './panelPlacement';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAntigravityStore } from '../store/antigravityStore';
 import { ensureAntigravity, refreshAntigravity, stopAntigravityWatch } from './antigravityBridge';
@@ -16,9 +16,9 @@ import type { AntigravityOptions } from '../types/antigravity';
 const TERMINAL_PROMPT_MAX_CHARS = 12_000;
 
 export async function openAntigravitySession(options: AntigravityOptions, cwd: string, panelView: 'chat' | 'terminal', wizardId?: string): Promise<string> {
+  const destination = panelDestination(wizardId);
   if (!wizardId && !canAddPanel()) { notifyPanelLimit(); throw new Error('Panel limit reached'); }
   const store = useInstanceStore.getState();
-  const group = useGroupStore.getState().getCurrentGroupId();
   const id = store.addInstance({ agentProvider: 'antigravity', antigravity: { ...options }, model: options.model, cwd, panelView,
     systemPrompt: '', dangerouslySkipPermissions: false, permissionMode: 'default', allowedTools: [], maxBudget: 0, agentMode: false,
   }, `Antigravity · ${antigravityModelLabel(options.model)}`);
@@ -37,9 +37,7 @@ export async function openAntigravitySession(options: AntigravityOptions, cwd: s
     throw e;
   }
   await applyForkToInstance(id);
-  if (wizardId) useLayoutStore.getState().removePanel(wizardId);
-  useLayoutStore.getState().addPanel(id);
-  if (group) useGroupStore.getState().addToGroup(group, id);
+  placePanel(id, 'terminal', destination, wizardId);
   useSettingsStore.getState().updateSettings({ lastCwd: cwd, lastPanelView: panelView,
     lastSessionPreset: { kind: 'antigravity', antigravity: { ...options }, model: options.model, cwd, panelView } });
   return id;

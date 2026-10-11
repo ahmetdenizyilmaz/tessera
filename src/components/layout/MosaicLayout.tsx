@@ -17,6 +17,7 @@ import { GroupPreview } from '../groups/GroupPreview';
 import { PluginPanel } from '../plugins/PluginPanel';
 import { RemotePanel } from '../lan/RemotePanel';
 import { SnapZoneOverlay } from './SnapZoneOverlay';
+import { finishWindowTabDrag, setWindowTabDragging } from '../../lib/workspaceWindows';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
@@ -328,7 +329,8 @@ export function MosaicLayout() {
           ds.started = true;
           setDraggingId(ds.panelId);
           document.body.style.userSelect = 'none';
-          document.body.style.cursor = 'grabbing';
+          document.body.style.cursor = 'default';
+          setWindowTabDragging(true);
         }
 
         // Detect drag-to-sidebar for widget panels
@@ -362,7 +364,7 @@ export function MosaicLayout() {
       // Sidebar widget drag is now handled by Sidebar component directly
     };
 
-    const onUp = () => {
+    const onUp = async () => {
       // Gutter resize end
       if (resizeRef.current) {
         const { gutter } = resizeRef.current;
@@ -378,6 +380,17 @@ export function MosaicLayout() {
       // Panel drag end
       const ds = dragState.current;
       if (ds) {
+        dragState.current = null;
+        if (ds.started) {
+          const moved = await finishWindowTabDrag(ds.panelId);
+          setWindowTabDragging(false);
+          if (moved) {
+            setDraggingId(null); setActiveSnap(null);
+            useLayoutStore.getState().setDragReturnToSidebar(false);
+            document.body.style.userSelect = ''; document.body.style.cursor = '';
+            return;
+          }
+        }
         if (ds.started && ds.returnToSidebar) {
           // Widget panel dragged back to sidebar - remove it
           startResizeLock();

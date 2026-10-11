@@ -9,6 +9,7 @@ import { useLayoutStore } from "../store/layoutStore";
 import { useGroupStore } from "../store/groupStore";
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import { usePluginStore } from '../store/pluginStore';
+import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
 import { registerBuiltins } from './builtinPlugins';
 import type { InstanceConfig } from "../types/instance";
 import { DEFAULT_OPENCODE_OPTIONS } from './opencodeConfig';
@@ -37,6 +38,7 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", { getItem: () => null });
   useInstanceStore.setState({ instances: new Map() });
   usePluginStore.setState({ instances: new Map() });
+  useWorkspaceWindowStore.setState({ windows: [] });
   useLayoutStore.setState({
     tabOrder: [],
     panelTypes: {},
@@ -49,6 +51,30 @@ beforeEach(() => {
   useGroupStore.setState({ groups: new Map(), groupStack: [] });
   useGroupStore.getState().restoreGroups(new Map());
   usePanelShortcutStore.getState().restore({});
+});
+it('restores independent detached tabs and bounds, and recovers an invalid window to Main', () => {
+  registerBuiltins();
+  const browser = usePluginStore.getState().createInstance('lichess');
+  useLayoutStore.getState().addPanel(browser, 'plugin');
+  const agent = useInstanceStore.getState().addInstance(config);
+  useLayoutStore.getState().addPanel(agent);
+  const root = useGroupStore.getState().createGroup(null, 'Window 1');
+  useGroupStore.getState().movePanelToLevel(browser, root);
+  useGroupStore.getState().movePanelToLevel(agent, root);
+  const workspace = { id: '55e746ba-ab41-4544-8ab0-631886b024ac', groupId: root, bounds: { x: -1200, y: 50, width: 1100, height: 700 } };
+  useWorkspaceWindowStore.getState().add(workspace);
+  const saved = JSON.parse(JSON.stringify(serializeWorkspace()));
+  expect(saved.layout.tabOrder).toEqual([]);
+  deserializeWorkspace(saved);
+  expect(useWorkspaceWindowStore.getState().windows).toEqual([workspace]);
+  const children = useGroupStore.getState().groups.get(root)!.childIds;
+  expect(children).toContain(browser);
+  expect(children).toHaveLength(2);
+  expect(useInstanceStore.getState().instances.has(children.find(id => id !== browser)!)).toBe(true);
+  expect(useLayoutStore.getState().tabOrder).toEqual([]);
+  deserializeWorkspace({ ...saved, windows: [{ ...workspace, id: 'broken' }] });
+  expect(useWorkspaceWindowStore.getState().windows).toEqual([]);
+  expect(useLayoutStore.getState().tabOrder).toContain(root);
 });
 it('restores a Lichess panel, saved page, and group after a complete restart', () => {
   registerBuiltins();

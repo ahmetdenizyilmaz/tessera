@@ -10,6 +10,9 @@ export type TerminalScrollState = {
  * user's viewport only across a resize, transcript erase/replay, or remount. */
 export function installTerminalScrollGuard(terminal: Terminal, saved?: TerminalScrollState) {
   const element = terminal.element;
+  const window = element?.ownerDocument.defaultView ?? globalThis.window;
+  const requestAnimationFrame = window.requestAnimationFrame.bind(window);
+  const cancelAnimationFrame = window.cancelAnimationFrame.bind(window);
   let state: TerminalScrollState = saved ? { ...saved, anchor: [...saved.anchor] }
     : { following: true, top: 0, anchor: [] };
   let needsRestore = !!saved;

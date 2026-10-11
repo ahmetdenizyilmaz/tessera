@@ -13,6 +13,19 @@ try {
   await page.goto(`${process.argv[2] || 'http://127.0.0.1:1420'}/browser-panel-test`, { waitUntil: 'domcontentloaded' });
   await visible();
   await expect(page.getByRole('button', { name: 'Reload Lichess' })).toBeEnabled();
+  await page.evaluate(() => window.layout.getState().setFocused(window.gameGroup));
+  await hidden();
+  await page.evaluate(() => {
+    window.layout.getState().setRawPanelRects(new Map([
+      [window.lichess, { x: 0, y: 0, w: 50, h: 100 }],
+      [window.gameGroup, { x: 50, y: 0, w: 50, h: 100 }],
+    ]));
+  });
+  await visible(); // Half-screen is playable even while the other panel has focus.
+  await page.evaluate(() => window.layout.getState().setFocused(window.gameGroup));
+  await hidden();
+  await page.getByText('Click to focus and play').click({ force: true });
+  await visible();
   await page.getByRole('button', { name: 'Maximize panel', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.views[window.lichess].bounds?.width)).toBeGreaterThan(1300);
   await page.setViewportSize({ width: 900, height: 650 });

@@ -2,6 +2,7 @@ import { captureGroupSnapshot, useGroupStore } from '../store/groupStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { isShortcutNumber, usePanelShortcutStore } from '../store/panelShortcutStore';
 import { notify } from './toast';
+import { focusDetachedPanel } from './workspaceWindows';
 
 /** Navigation path to an open panel; orphaned/closed instances are not targets. */
 export function panelGroupPath(panelId: string): string[] | null {
@@ -23,6 +24,7 @@ export function panelGroupPath(panelId: string): string[] | null {
 
 /** Select an assigned panel without changing its conversation or terminal. */
 export function focusShortcutPanel(panelId: string): boolean {
+  if (focusDetachedPanel(panelId)) return true;
   const path = panelGroupPath(panelId);
   if (!path) return false;
   const current = useGroupStore.getState().groupStack;

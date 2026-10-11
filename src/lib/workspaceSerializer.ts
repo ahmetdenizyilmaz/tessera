@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
 import { useLayoutStore, getDefaultConfig, computeRects, type PanelType } from '../store/layoutStore';
-import { useGroupStore, captureGroupSnapshot, type GroupState } from '../store/groupStore';
+import { useGroupStore, captureGroupSnapshot, ensurePanelAtLevel, type GroupState } from '../store/groupStore';
 import { usePluginStore } from '../store/pluginStore';
+import { useWorkspaceWindowStore, type DetachedWorkspace } from '../store/workspaceWindowStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useCodexStore } from '../store/codexStore';
 import { useOfficeGameStore } from '../store/officeGameStore';
@@ -81,6 +82,7 @@ export interface WorkspaceSnapshotV3 {
   groups: Record<string, SerializedGroup>;
   plugins: SavedPlugin[];
   panelShortcuts?: PanelShortcutBindings;
+  windows?: DetachedWorkspace[];
 }
 
 /** Internal: legacy v2 snapshots may lack a layout section entirely */
@@ -90,6 +92,7 @@ interface NormalizedSnapshot {
   groups: Record<string, SerializedGroup>;
   plugins: SavedPlugin[];
   panelShortcuts?: PanelShortcutBindings;
+  windows?: DetachedWorkspace[];
 }
 
 // ─── Serialize ───────────────────────────────────────────────────────────────
@@ -125,6 +128,7 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
 
   return {
     version: 3,
+    windows: useWorkspaceWindowStore.getState().windows,
     savedAt: Date.now(),
     panelShortcuts: Object.fromEntries(Object.entries(usePanelShortcutStore.getState().bindings).filter(([, id]) => openPanels.has(id))),
     instances: Array.from(instances.values()).map((inst) => ({
@@ -250,6 +254,7 @@ function normalizeSnapshot(raw: unknown): NormalizedSnapshot | null {
       groups: snap.groups ?? {},
       plugins: snap.plugins ?? [],
       panelShortcuts: normalizePanelShortcuts(snap.panelShortcuts),
+      windows: snap.windows ?? [],
     };
   }
 
@@ -442,6 +447,8 @@ export function deserializeWorkspace(raw: unknown): void {
     });
   }
   useGroupStore.getState().restoreGroups(newGroups);
+  useWorkspaceWindowStore.setState({ windows: (snapshot.windows ?? []).filter(w =>
+    typeof w.id === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(w.id) && newGroups.has(w.groupId)) });
 
   // Restore layout with remapped IDs
   if (snapshot.layout) {
@@ -520,6 +527,12 @@ export function deserializeWorkspace(raw: unknown): void {
         useLayoutStore.getState().addPanel(newId);
       }
     }
+  }
+
+  // An invalid window entry must never strand its hidden root group.
+  const windowRoots = new Set(useWorkspaceWindowStore.getState().windows.map(w => w.groupId));
+  for (const saved of snapshot.windows ?? []) {
+    if (newGroups.has(saved.groupId) && !windowRoots.has(saved.groupId)) ensurePanelAtLevel(saved.groupId, null, 'group');
   }
 
   // LLM panel transcripts are persisted by instance id, but restore mints new

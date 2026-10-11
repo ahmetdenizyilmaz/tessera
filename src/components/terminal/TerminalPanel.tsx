@@ -4,6 +4,7 @@ import { AntigravityPanel } from "../antigravity/AntigravityPanel";
 import { useState, useEffect, useCallback } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useLayoutStore } from "../../store/layoutStore";
+import { removePanelsFromWorkspace } from '../../store/groupStore';
 import { cleanupPty, restartPty } from "../../hooks/usePty";
 import { useEventBusStore } from "../../store/eventBusStore";
 import { destroyTerminal } from "../../hooks/useTerminal";
@@ -90,7 +91,7 @@ function ClaudeTerminalPanel({ instanceId }: { instanceId: string }) {
     } catch {
       /* already stopped */
     }
-    useLayoutStore.getState().removePanel(instanceId);
+    removePanelsFromWorkspace([instanceId]);
     useInstanceStore.getState().removeInstance(instanceId);
   }, [instanceId]);
   if (!instance) return null;

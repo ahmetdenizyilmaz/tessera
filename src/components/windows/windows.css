@@ -1,0 +1,13 @@
+.detached-workspace { display:flex; flex-direction:column; height:100vh; color:var(--text-primary); background:var(--bg-primary); overflow:hidden; }
+.detached-tabs { display:flex; flex-shrink:0; align-items:center; gap:4px; min-height:42px; padding:4px 8px; border-bottom:1px solid var(--border); background:var(--bg-surface); }
+.detached-tab { display:flex; align-items:center; gap:8px; min-width:70px; max-width:230px; flex:0 1 200px; padding:7px 9px; border-radius:7px; color:var(--text-secondary); font-size:12px; cursor:default; touch-action:none; user-select:none; }
+.detached-tab-active { background:var(--bg-hover); color:var(--text-primary); }
+.detached-tab > span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.detached-tab button,.detached-tool { border:0; background:none; color:var(--text-muted); display:flex; align-items:center; justify-content:center; padding:4px; border-radius:4px; cursor:default; }
+.detached-tab button:hover,.detached-tool:hover { background:var(--bg-hover); color:var(--text-primary); }
+.detached-content { flex:1; min-height:0; position:relative; }
+.detached-panel { position:absolute; inset:0; overflow:hidden; }
+.detached-new { position:relative; }
+.detached-new .menu-dropdown { left:0; right:auto; }
+html[data-tab-dragging], html[data-tab-dragging] * { cursor:default !important; }
+.mosaic-tile .terminal-toolbar,.mosaic-tile-dragging,.mosaic-tile-dragging .terminal-toolbar { cursor:default !important; }

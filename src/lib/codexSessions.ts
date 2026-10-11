@@ -13,6 +13,9 @@ import { cleanupPty } from "../hooks/usePty";
 import { clearTerminalState } from "../components/terminal/XTermView";
 import type { CodexConfig } from "../types/codex";
 import { applyForkToInstance } from "./forkActions";
+import { panelDestination, placePanel } from './panelPlacement';
+import { focusDetachedPanel } from './workspaceWindows';
+import { removePanelsFromWorkspace } from '../store/groupStore';
 
 export function findCodexPanel(threadId: string): string | undefined {
   const live = new Set(useLayoutStore.getState().tabOrder);
@@ -26,6 +29,7 @@ export function findCodexPanel(threadId: string): string | undefined {
   )?.id;
 }
 export function focusCodexPanel(id: string): void {
+  if (focusDetachedPanel(id)) return;
   if (!useLayoutStore.getState().tabOrder.includes(id)) {
     const store = useGroupStore.getState();
     store.jumpToLevel(null);
@@ -49,10 +53,11 @@ export async function openCodexSession(
   threadId?: string,
   wizardId?: string,
 ): Promise<string> {
+  const destination = panelDestination(wizardId);
   if (threadId) {
     const existing = findCodexPanel(threadId);
     if (existing) {
-      if (wizardId) useLayoutStore.getState().removePanel(wizardId);
+      if (wizardId) removePanelsFromWorkspace([wizardId]);
       focusCodexPanel(existing);
       return existing;
     }
@@ -98,10 +103,7 @@ export async function openCodexSession(
     await invoke("codex_close", { id }).catch(() => {});
     throw e;
   }
-  if (wizardId) useLayoutStore.getState().removePanel(wizardId);
-  useLayoutStore.getState().addPanel(id);
-  const group = useGroupStore.getState().getCurrentGroupId();
-  if (group) useGroupStore.getState().addToGroup(group, id);
+  placePanel(id, 'terminal', destination, wizardId);
   useSettingsStore.getState().updateSettings({
     lastSessionPreset: {
       kind: "codex",

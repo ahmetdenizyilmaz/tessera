@@ -8,6 +8,7 @@ import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
 import { BrowserPanel } from '../browser/BrowserPanel';
+import { removePanelsFromWorkspace } from '../../store/groupStore';
 
 // ─── Module-Level Bridge Registry ───────────────────────────────────────────
 // Keeps bridge references alive across React strict-mode double-mounts.
@@ -66,12 +67,12 @@ function IframePluginPanel({ instanceId }: PluginPanelProps) {
       // Send destroy, wait 500ms, then clean up
       bridge.sendDestroy().then(() => {
         bridge.destroy();
-        bridgeRegistry.delete(instanceId);
+        if (bridgeRegistry.get(instanceId) === bridge) bridgeRegistry.delete(instanceId);
       });
     }
     destroyInstance(instanceId);
     usePanelShortcutStore.getState().removePanels([instanceId]);
-    removePanel(instanceId);
+    removePanelsFromWorkspace([instanceId]);
   }, [instanceId, removePanel, destroyInstance]);
 
   // ─── Toolbar button handler ────────────────────────────────────────────
@@ -140,7 +141,7 @@ function IframePluginPanel({ instanceId }: PluginPanelProps) {
       if (bridge) {
         bridge.sendDestroy().then(() => {
           bridge.destroy();
-          bridgeRegistry.delete(instanceId);
+          if (bridgeRegistry.get(instanceId) === bridge) bridgeRegistry.delete(instanceId);
         });
       }
     };

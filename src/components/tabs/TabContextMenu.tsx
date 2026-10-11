@@ -5,6 +5,7 @@ import { Folder, ChevronRight } from 'lucide-react';
 import { useGroupStore } from '../../store/groupStore';
 import { getGroupMoveOptions } from '../../lib/groupPanelOptions';
 import { isClaudePanel } from '../../lib/sessionActions';
+import { detachPanel } from '../../lib/workspaceWindows';
 
 interface TabContextMenuProps {
   x: number;
@@ -160,6 +161,7 @@ export function TabContextMenu({
         zIndex: 1000,
       }}
     >
+      <button className="context-menu-item" onClick={() => { onDismiss(); void detachPanel(tabId); }}>Move to new window</button>
       {!isRemoteGroup && <button
         className="context-menu-item"
         onClick={() => { onRename(); onDismiss(); }}

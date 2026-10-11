@@ -152,6 +152,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     let disposed = false;
     const container = containerRef.current;
     if (!container || !platform) return;
+    const view = container.ownerDocument.defaultView ?? window;
+    const requestAnimationFrame = view.requestAnimationFrame.bind(view);
 
     const settings = useSettingsStore.getState().settings;
     const freshMount = consumeFreshMount(instanceId);

@@ -41,6 +41,7 @@ export default defineConfig({
     target: 'esnext',
     minify: 'esbuild',
     rollupOptions: {
+      input: { main: path.resolve(__dirname, 'index.html'), detached: path.resolve(__dirname, 'detached.html') },
       output: {
         manualChunks: {
           pixi: ['pixi.js'],

@@ -22,6 +22,7 @@ pub mod stream;
 pub mod system;
 pub mod util;
 pub mod ws;
+pub mod workspace_windows;
 
 use analytics::posthog::PostHogTracker;
 use db::Database;
@@ -58,6 +59,7 @@ pub fn run() {
         .manage(lan_manager)
         .manage(lan::terminal::TerminalRequests::default())
         .setup(|app| {
+            workspace_windows::create_main(app)?;
             // First launch: `cgui <dir>` passes the directory in our own argv.
             if let Some(dir) = launch::dir_from_argv(&std::env::args().collect::<Vec<_>>()) {
                 app.state::<launch::LaunchQueue>().push(dir);
@@ -141,6 +143,9 @@ pub fn run() {
             computer::handle_screenshot_protocol(request)
         })
         .invoke_handler(main_view_commands(tauri::generate_handler![
+            workspace_windows::workspace_drop_target,
+            workspace_windows::workspace_window_place,
+            workspace_windows::workspace_window_destroy,
             browser::browser_panel_create,
             browser::browser_panel_bounds,
             browser::browser_panel_action,

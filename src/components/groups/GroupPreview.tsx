@@ -8,6 +8,7 @@ import { closePanel } from '../../lib/panelCleanup';
 import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { AddExistingPanelButton, MovePanelButton } from './GroupPanelPicker';
+import { usePanelWindow } from '../windows/PanelWindowContext';
 
 interface GroupPreviewProps {
   groupId: string;
@@ -150,6 +151,7 @@ function ChildTile({ childId }: { childId: string }) {
 }
 
 export function GroupPreview({ groupId }: GroupPreviewProps) {
+  const panelWindow = usePanelWindow();
   const group = useGroupStore((s) => s.groups.get(groupId));
   const remotePeer = useLanStore((s) => s.status?.peers.find((p) => p.deviceId === group?.remotePeerId));
   const childIds = group?.childIds ?? EMPTY_CHILD_IDS;
@@ -159,7 +161,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
   );
 
   const handleEnter = () => {
-    enterGroup(groupId);
+    if (panelWindow.enterGroup) panelWindow.enterGroup(groupId); else enterGroup(groupId);
   };
 
   return (

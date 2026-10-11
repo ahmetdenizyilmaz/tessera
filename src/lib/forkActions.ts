@@ -11,7 +11,8 @@ import { ensureAntigravity, refreshAntigravity } from './antigravityBridge';
 import { useAntigravityStore } from '../store/antigravityStore';
 import { antigravityTranscript } from './antigravityConfig';
 import { useLlmChatStore } from '../store/llmChatStore';
-import { canAddPanel, notifyPanelLimit } from '../store/layoutStore';
+import { notifyPanelLimit } from '../store/layoutStore';
+import { panelDestination, canPlacePanel } from './panelPlacement';
 import { useSettingsStore } from '../store/settingsStore';
 import { notify } from './toast';
 import { openNewSessionWizard } from './newSessionActions';
@@ -88,7 +89,8 @@ export async function collectTranscript(instanceId: string): Promise<ForkMessage
 export async function startFork(sourceId: string): Promise<void> {
   const inst = useInstanceStore.getState().instances.get(sourceId);
   if (!inst) return;
-  if (!canAddPanel()) { notifyPanelLimit(); return; }
+  const destination = panelDestination(sourceId);
+  if (!canPlacePanel(destination)) { notifyPanelLimit(); return; }
   let transcript: ForkMessage[];
   try {
     transcript = await collectTranscript(sourceId);
@@ -101,7 +103,7 @@ export async function startFork(sourceId: string): Promise<void> {
     return;
   }
   pendingForks.set(sourceId, transcript);
-  openNewSessionWizard();
+  openNewSessionWizard(destination);
   useWizardStore.getState().set({
     fork: {
       sourceId,
