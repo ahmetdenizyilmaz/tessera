@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { recentPanelKey, type ClosedPanel, type RecentPanel, type RememberedPanel } from '../types/panelHistory';
 
 export const RECENT_PANELS_KEY = 'tessera-recent-panels';
-export const RECENT_PANEL_LIMIT = 40;
+export const RECENT_PANEL_LIMIT = 50;
 
 function load(): RecentPanel[] {
   try {

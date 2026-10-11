@@ -813,7 +813,7 @@ body,
 
 /* ── Panel context menu ── */
 
-.nsw-recents { margin-bottom: 14px; }
+.nsw-recents { flex-shrink: 0; }
 .nsw-recents-toggle {
   display: flex; align-items: center; gap: 7px; padding: 7px 9px;
   border: 1px solid var(--border); border-radius: 8px;
@@ -2231,7 +2231,7 @@ body,
   outline: none;
   width: 100%;
   max-width: 560px;
-  /* Centered column; full height so the More row can sit at the bottom */
+  /* Centered column; full height so More and Recents sit at the bottom */
   margin: 0 auto;
   min-height: 100%;
   box-sizing: border-box;
@@ -2341,7 +2341,7 @@ body,
   flex-wrap: wrap;
   padding-top: 10px;
   border-top: 1px solid var(--border);
-  /* Out of the way: pinned to the panel bottom, quiet until hovered */
+  /* Bottom controls, followed by the scrollable recent-panel section */
   margin-top: auto;
   opacity: 0.55;
   transition: opacity 0.15s;

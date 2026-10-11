@@ -288,7 +288,6 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   return (
     <div className="nsw" tabIndex={-1} onKeyDown={handleKeyDown}>
-      {!s.fork && <RecentPanels wizardId={instanceId} />}
       {s.fork && (
         <div className="nsw-fork-banner">
           <GitFork size={14} />
@@ -642,6 +641,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           </button>
         ))}
       </div>
+      {!s.fork && <RecentPanels wizardId={instanceId} />}
     </div>
   );
 }

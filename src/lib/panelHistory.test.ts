@@ -263,14 +263,14 @@ it('remaps live recent panels across workspace reload and clears obsolete undo h
 
 it('bounds the persistent recent list and refreshes provider identity without duplicating a panel', () => {
   const id = agent(); const saved = captureClosedPanel(id)!;
-  for (let i = 0; i < 45; i++) recents.getState().remember({ ...saved,
+  for (let i = 0; i < 55; i++) recents.getState().remember({ ...saved,
     panel: { ...saved.panel, id: `panel-${i}`, instance: { ...saved.panel.instance!, id: `panel-${i}`, claudeSessionId: `conversation-${i}` } } });
-  expect(recents.getState().entries).toHaveLength(40);
+  expect(recents.getState().entries).toHaveLength(50);
   recents.getState().remember(saved);
   const updated = { ...saved, panel: { ...saved.panel, instance: { ...saved.panel.instance!, claudeSessionId: 'changed' } } };
   recents.getState().remember(updated);
   expect(recents.getState().entries.filter(e => e.saved.panel.id === id)).toHaveLength(1);
-  expect(JSON.parse(localStorage.getItem(RECENT_PANELS_KEY)!).entries).toHaveLength(40);
+  expect(JSON.parse(localStorage.getItem(RECENT_PANELS_KEY)!).entries).toHaveLength(50);
 });
 
 it('seeds existing panels into recents and updates renamed panels without recording undo', async () => {
