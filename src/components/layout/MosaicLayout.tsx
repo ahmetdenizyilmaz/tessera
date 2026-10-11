@@ -80,19 +80,26 @@ export function MosaicLayout() {
     startRects: Map<string, PanelRect>;
   } | null>(null);
 
-  // Track container dimensions for snap zone overlay
+  // Panel bodies use final pixel dimensions while their outer tiles animate.
+  // Observe in the container's own window: an observer created in Main does
+  // not receive resize deliveries for an element in a detached document.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const view = el.ownerDocument.defaultView ?? globalThis.window;
 
     const updateSize = () => {
       setContainerSize({ width: el.clientWidth, height: el.clientHeight });
     };
     updateSize();
 
-    const observer = new ResizeObserver(updateSize);
+    const observer = new view.ResizeObserver(updateSize);
     observer.observe(el);
-    return () => observer.disconnect();
+    view.addEventListener('resize', updateSize);
+    return () => {
+      observer.disconnect();
+      view.removeEventListener('resize', updateSize);
+    };
   }, []);
 
   // ─── Group enter/exit panel animation ──────────────────────────────

@@ -467,7 +467,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       });
     }
 
-    const resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new view.ResizeObserver(() => {
       if (mounted) resizeCoordinator.requestFit();
     });
     resizeObserver.observe(container);
@@ -475,6 +475,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const tile = container.closest('[data-panel-id]');
     tile?.addEventListener('transitionend', repaintAfterMove);
     view.addEventListener('focus', repaintAfterMove);
+    view.addEventListener('resize', repaintAfterMove);
 
     // Cleanup — preserve PTY process for potential group-move remount
     return () => {
@@ -489,6 +490,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       resizeObserver.disconnect();
       tile?.removeEventListener('transitionend', repaintAfterMove);
       view.removeEventListener('focus', repaintAfterMove);
+      view.removeEventListener('resize', repaintAfterMove);
 
       // Save terminal buffer content before disposing. SerializeAddon
       // preserves colors/attributes and avoids the O(scrollback) manual

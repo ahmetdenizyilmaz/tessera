@@ -36,6 +36,23 @@ try {
   await expect(child.locator('.xterm')).toHaveCount(2);
   await child.locator('[data-tab-id="codex-ui"]').click();
   await page.waitForTimeout(400);
+  // Resizing the native window changes both the panel body and the active
+  // terminal's character grid, without a tab click or focus toggle to repair it.
+  for (const [width, height] of [[1280, 880], [760, 540], [980, 740]]) {
+    const before = await page.evaluate(() => window.terminals.get('codex-ui').cols);
+    await child.setViewportSize({ width, height });
+    await expect.poll(() => child.locator('.mosaic-tile').evaluateAll(tiles => tiles.every(tile => {
+      const body = tile.firstElementChild.getBoundingClientRect();
+      return Math.abs(body.width - tile.clientWidth) < 1.5 && Math.abs(body.height - tile.clientHeight) < 1.5;
+    }))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.terminals.get('codex-ui').cols)).not.toBe(before);
+    await expect.poll(() => page.evaluate(() => {
+      const term = window.terminals.get('codex-ui');
+      const sent = window.calls.filter(c => c.command === 'pty_resize' && c.args.id === 'codex-ui').at(-1)?.args;
+      return sent?.cols === term.cols && sent?.rows === term.rows;
+    })).toBe(true);
+  }
+  console.log('PASS detached window resize updates every panel body and active PTY size without refocus');
   // Layout changes during live output must repaint without a focus toggle.
   await page.evaluate(() => { window.calls = []; window.resizeBeforeParse = []; });
   const gutter = await child.locator('.mosaic-gutter-x').boundingBox();

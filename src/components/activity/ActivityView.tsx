@@ -157,7 +157,8 @@ function FlowGraph({ records, selected, onSelect }: { records: ActivityRecord[];
   const fitted = useRef(false);
   useEffect(() => {
     const element = viewport.current; if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    const view = element.ownerDocument.defaultView ?? window;
+    const observer = new view.ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
     observer.observe(element); return () => observer.disconnect();
   }, []);
   const fit = useCallback(() => {
