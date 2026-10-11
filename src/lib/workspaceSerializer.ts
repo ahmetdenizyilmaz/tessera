@@ -12,6 +12,8 @@ import { stopAntigravityWatch } from './antigravityBridge';
 import { normalizePanelShortcuts, usePanelShortcutStore, type PanelShortcutBindings } from '../store/panelShortcutStore';
 import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
+import { useWorkspaceHistoryStore } from '../store/workspaceHistoryStore';
+import { useRecentPanelStore } from '../store/recentPanelStore';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -271,6 +273,7 @@ function normalizeSnapshot(raw: unknown): NormalizedSnapshot | null {
 export function deserializeWorkspace(raw: unknown): void {
   const snapshot = normalizeSnapshot(raw);
   if (!snapshot) return;
+  useWorkspaceHistoryStore.getState().clear();
 
   // Mid-session load (SaveLoadDialog): kill the processes of whatever is open
   // and clear the stores first. Without this, old instances linger as
@@ -386,6 +389,7 @@ export function deserializeWorkspace(raw: unknown): void {
   }
 
   const remapId = (id: string) => idMap.get(id) ?? id;
+  useRecentPanelStore.getState().remap(idMap);
 
   // Recreate plugin instances under their saved (stable) panel ids
   const retainedPlugins = new Set(snapshot.plugins.map(p => p.id));

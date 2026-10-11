@@ -13,18 +13,24 @@ import { destroyTerminal } from '../hooks/useTerminal';
 import { clearTerminalState } from '../components/terminal/XTermView';
 import { invoke } from '@tauri-apps/api/core';
 import { closeRemoteGroup, closeRemotePanel, splitRemotePanelId } from '../store/lanStore';
+import { captureClosedPanel, recordPanelClose } from './panelHistory';
 
-const closing = new Set<string>();
+const closing = new Map<string, Promise<void>>();
 
 /**
  * Shared panel close/cleanup logic used by TabBar and TabItem.
  * Handles resource teardown based on panel type, then removes the panel.
  */
-export async function closePanel(id: string): Promise<void> {
-  if (closing.has(id)) return;
-  closing.add(id);
-  try { await closePanelContents(id); }
-  finally { closing.delete(id); }
+export function closePanel(id: string, recordHistory = true): Promise<void> {
+  const pending = closing.get(id);
+  if (pending) return pending;
+  const task = Promise.resolve().then(async () => {
+    const saved = recordHistory ? captureClosedPanel(id) : null;
+    await closePanelContents(id);
+    if (saved) recordPanelClose(saved, panelId => closePanel(panelId, false));
+  }).finally(() => closing.delete(id));
+  closing.set(id, task);
+  return task;
 }
 
 async function closePanelContents(id: string): Promise<void> {
@@ -47,7 +53,7 @@ async function closePanelContents(id: string): Promise<void> {
     if (group && useGroupStore.getState().groupStack.includes(id)) {
       useGroupStore.getState().jumpToLevel(group.parentId);
     }
-    for (const childId of snapshot.groups.get(id)?.childIds ?? []) await closePanel(childId);
+    for (const childId of snapshot.groups.get(id)?.childIds ?? []) await closePanel(childId, false);
     removePanelsFromWorkspace([id]);
     return;
   }

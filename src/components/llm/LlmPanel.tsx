@@ -2,12 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GitFork } from 'lucide-react';
 import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
-import { removePanelsFromWorkspace } from '../../store/groupStore';
+import { closePanel } from '../../lib/panelCleanup';
 import { usePanelWindow, usePanelLayout } from '../windows/PanelWindowContext';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { useLlmChatStore } from '../../store/llmChatStore';
-import { invoke } from '@tauri-apps/api/core';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
 import type { LlmProvider } from '../../types/instance';
 import { ColorPickerPopover } from '../dialogs/ColorPickerPopover';
@@ -61,7 +60,6 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
   const removePanel = useLayoutStore((s) => s.removePanel);
   const toggleMaximized = useLayoutStore((s) => s.toggleMaximized);
   const isMaximized = useLayoutStore((s) => s.maximizedId === instanceId);
-  const removeInstance = useInstanceStore((s) => s.removeInstance);
   const setName = useInstanceStore((s) => s.setName);
   const setColor = useInstanceStore((s) => s.setColor);
 
@@ -94,16 +92,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
     }
   }, [instance, instanceId, removePanel]);
 
-  const handleClose = useCallback(async () => {
-    try {
-      await invoke('llm_destroy_session', { id: instanceId });
-    } catch {
-      // Session may not exist
-    }
-    useLlmChatStore.getState().removeConversation(instanceId);
-    removePanelsFromWorkspace([instanceId]);
-    removeInstance(instanceId);
-  }, [instanceId, removePanel, removeInstance]);
+  const handleClose = useCallback(() => closePanel(instanceId), [instanceId]);
 
   // Rename
   const startRename = useCallback(() => {

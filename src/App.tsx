@@ -37,6 +37,8 @@ import { registerBuiltins } from './lib/builtinPlugins';
 import { DetachedWindows } from './components/windows/DetachedWindows';
 import { openNewSessionWizard, createPluginPanel } from './lib/newSessionActions';
 import { focusShortcutPanel, installPanelShortcuts } from './lib/panelShortcuts';
+import { installRecentPanelTracking } from './lib/panelHistory';
+import { installWorkspaceHistoryShortcuts } from './lib/workspaceHistoryShortcuts';
 import type { LlmProvider } from './types/instance';
 
 // Register built-in plugins at module load (before any render)
@@ -115,6 +117,8 @@ export default function App() {
   }, []);
 
   // Global keyboard shortcuts
+  useEffect(() => installRecentPanelTracking(), []);
+  useEffect(() => installWorkspaceHistoryShortcuts(window, () => showSplash || viewMode !== 'panels'), [showSplash, viewMode]);
   useEffect(() => installPanelShortcuts({
     isBlocked: () => showSplash || showNewInstance || showSettings || !!showSaveLoad || showClaudeMd ||
       showAbout || showResumeSession || showSessionHistory || !!showNewLlm || attachSession.open || showUsage,

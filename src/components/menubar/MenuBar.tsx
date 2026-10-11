@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useWorkspaceHistoryStore } from '../../store/workspaceHistoryStore';
 
 interface MenuBarProps {
   onNewInstance: () => void;
@@ -55,6 +56,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const history = useWorkspaceHistoryStore();
 
   const close = useCallback(() => setOpenMenu(null), []);
 
@@ -83,6 +85,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({
     { label: 'CLAUDE.md Editor', shortcut: 'Ctrl+M', action: () => onClaudeMd?.() },
   ];
 
+  const editItems: MenuEntry[] = [
+    { label: history.past.length ? `Undo: ${history.past.at(-1)!.label}` : 'Undo close / resize', shortcut: 'Ctrl+Z',
+      action: () => void history.undo(), disabled: history.busy || !history.past.length },
+    { label: history.future.length ? `Redo: ${history.future.at(-1)!.label}` : 'Redo close / resize', shortcut: 'Ctrl+Y',
+      action: () => void history.redo(), disabled: history.busy || !history.future.length },
+  ];
+
   const pluginItems: MenuEntry[] = [
     { label: 'Lichess', action: () => onNewLichess?.() },
     { label: 'Notepad', action: () => onNewNotepad?.() },
@@ -96,6 +105,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 
   const menus: { label: string; key: string; items: MenuEntry[] }[] = [
     { label: 'File', key: 'file', items: fileItems },
+    { label: 'Edit', key: 'edit', items: editItems },
     { label: 'View', key: 'view', items: viewItems },
     { label: 'Plugins', key: 'plugins', items: pluginItems },
     { label: 'Help', key: 'help', items: helpItems },
@@ -154,6 +164,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
                     <button
                       key={(entry as MenuItem).label}
                       className="menu-dropdown-item"
+                      disabled={(entry as MenuItem).disabled}
                       onClick={() => !(entry as MenuItem).disabled && handleItemClick((entry as MenuItem).action)}
                       style={(entry as MenuItem).disabled ? { opacity: 0.4, cursor: 'default' } : undefined}
                     >

@@ -49,6 +49,7 @@ export interface SavedLayoutState {
   stealFraction: StealFraction;
   panelTypes: Record<string, PanelType>;
   widgetKinds: Record<string, string>;
+  sidebarSlotFractions?: number[];
 }
 
 const MAX_LAYOUT_STACK_DEPTH = 50;
@@ -67,6 +68,7 @@ function captureLayout(): SavedLayoutState {
     stealFraction: ls.stealFraction,
     panelTypes: { ...ls.panelTypes },
     widgetKinds: { ...ls.widgetKinds },
+    sidebarSlotFractions: ls.sidebarSlotFractions,
   };
 }
 
@@ -97,6 +99,7 @@ function applyLayoutFromGroup(group: GroupState) {
     group.stealFraction,
     ls.panelTypes,
     ls.widgetKinds,
+    group.sidebarSlotFractions ?? ls.sidebarSlotFractions,
   );
 }
 
@@ -129,6 +132,7 @@ function restoreLayoutFromSaved(saved: SavedLayoutState) {
     saved.stealFraction,
     mergedTypes,
     mergedKinds,
+    saved.sidebarSlotFractions ?? ls.sidebarSlotFractions,
   );
 }
 
@@ -150,6 +154,7 @@ function syncLayoutToGroup(
     layoutConfig: ls.layoutConfig,
     panelRects: ls.panelRects,
     stealFraction: ls.stealFraction,
+    sidebarSlotFractions: ls.sidebarSlotFractions,
   });
   return updated;
 }
@@ -182,6 +187,7 @@ export function captureGroupSnapshot(): {
       focusedChildId: saved.focusedId,
       activeChildId: saved.activeTabId,
       stealFraction: saved.stealFraction,
+      sidebarSlotFractions: saved.sidebarSlotFractions,
     });
   });
   const rootLayout = savedLayoutStack.length > 0 ? savedLayoutStack[0] : null;
@@ -198,6 +204,27 @@ export function getPanelLocations(snapshot = captureGroupSnapshot()): Map<string
     for (const id of group.childIds) locations.set(id, group.id);
   }
   return locations;
+}
+
+/** Update one level without navigating away from the user's current panel.
+ * Also updates saved ancestors so history survives entering/exiting groups. */
+export function updateLevelLayout(parentId: string | null, patch: Partial<Pick<SavedLayoutState,
+  'tabOrder' | 'layoutConfig' | 'panelRects' | 'stealFraction' | 'sidebarSlotFractions'>>) {
+  const state = useGroupStore.getState();
+  if (parentId === state.getCurrentGroupId()) {
+    useLayoutStore.setState(patch);
+    return;
+  }
+  const stackIndex = parentId === null ? 0 : state.groupStack.indexOf(parentId) + 1;
+  if ((parentId === null || stackIndex > 0) && savedLayoutStack[stackIndex]) {
+    savedLayoutStack[stackIndex] = { ...savedLayoutStack[stackIndex], ...patch };
+  }
+  if (parentId !== null && state.groups.has(parentId)) {
+    const { tabOrder, ...geometry } = patch;
+    useGroupStore.setState(current => ({ groups: new Map(current.groups).set(parentId, {
+      ...current.groups.get(parentId)!, ...geometry, ...(tabOrder ? { childIds: tabOrder } : {}),
+    }) }));
+  }
 }
 
 export function canMovePanelToLevel(

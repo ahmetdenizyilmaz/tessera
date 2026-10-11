@@ -18,6 +18,8 @@ import { captureGroupSnapshot, getPanelLocations } from '../../store/groupStore'
 import { MosaicLayout } from '../layout/MosaicLayout';
 import { connectDetachedLayout, createDetachedLayout } from '../../lib/detachedLayout';
 import { PanelWindowContext } from './PanelWindowContext';
+import { installWorkspaceHistoryShortcuts } from '../../lib/workspaceHistoryShortcuts';
+import { useWorkspaceHistoryStore } from '../../store/workspaceHistoryStore';
 import './windows.css';
 
 function panelName(id: string): string {
@@ -39,6 +41,7 @@ function DetachedTab({ id, active, select, menu }: { id: string; active: boolean
 }
 
 function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorkspace; child: Window }) {
+  const history = useWorkspaceHistoryStore();
   const groups = useGroupStore(s => s.groups);
   const [path, setPath] = useState<string[]>([]);
   const [newMenu, setNewMenu] = useState(false);
@@ -53,6 +56,7 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
   const select = (id: string) => { layout.getState().setActiveTab(id); layout.getState().setFocused(id); };
   const label = windowLabel(workspace.id);
   const enterGroup = useCallback((id: string) => setPath(previous => [...previous, id]), []);
+  useEffect(() => installWorkspaceHistoryShortcuts(child), [child]);
   useEffect(() => {
     child.document.documentElement.dataset.workspaceGroup = groupId;
     return () => { delete child.document.documentElement.dataset.workspaceGroup; };
@@ -120,6 +124,11 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
         </DndContext>
         <div className="detached-new"><button className="detached-tool" title="Add a panel" onClick={() => setNewMenu(v => !v)}><Plus size={16} /></button>
           {newMenu && <div className="menu-dropdown" data-browser-overlay>
+            <button className="menu-dropdown-item" disabled={history.busy || !history.past.length}
+              onClick={() => { void history.undo(); setNewMenu(false); }}>Undo close / resize <span className="menu-dropdown-shortcut">Ctrl+Z</span></button>
+            <button className="menu-dropdown-item" disabled={history.busy || !history.future.length}
+              onClick={() => { void history.redo(); setNewMenu(false); }}>Redo close / resize <span className="menu-dropdown-shortcut">Ctrl+Y</span></button>
+            <div className="menu-dropdown-sep" />
             <button className="menu-dropdown-item" onClick={() => { openNewSessionWizard(groupId); setNewMenu(false); }}>New session</button>
             <button className="menu-dropdown-item" onClick={() => { createGroupPanel(groupId); setNewMenu(false); }}>New group</button>
             {[...usePluginStore.getState().registry.values()].map(plugin => <button key={plugin.name} className="menu-dropdown-item" onClick={() => newPlugin(plugin.name)}>{plugin.defaultTitle}</button>)}

@@ -161,14 +161,9 @@ body,
   gap: 6px;
   height: 28px;
   padding: 0 10px;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 45%, var(--bg-surface));
   box-sizing: border-box;
   /* Shrink with ellipsis when the bar gets tight instead of overflowing */
   flex: 0 1 auto;
@@ -176,16 +171,31 @@ body,
   overflow: hidden;
 }
 
-.tab-item:hover {
+/* Shared tab appearance keeps selection consistent across native windows. */
+.tab-item,
+.detached-tab {
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 32%, var(--bg-surface));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-surface));
+  color: var(--text-secondary);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.tab-item:hover,
+.detached-tab:hover {
   background: var(--bg-elevated);
+  border-color: color-mix(in srgb, var(--text-secondary) 50%, var(--bg-surface));
   color: var(--text-primary);
 }
 
-.tab-item-active {
-  background: var(--bg-elevated);
+.tab-item-active,
+.detached-tab-active,
+.tab-item-active:hover,
+.detached-tab-active:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
   color: var(--text-primary);
-  border-color: var(--accent);
-  box-shadow: inset 0 -2px var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--bg-elevated));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%), inset 0 1px 0 color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .tab-color-dot {
@@ -201,15 +211,13 @@ body,
   flex-shrink: 0;
   border-radius: 2px;
   object-fit: contain;
-  transition: filter 0.2s;
+  opacity: 0.8;
+  transition: opacity 160ms ease;
 }
 
-.tab-item:hover .tab-provider-icon {
-  filter: drop-shadow(0 0 5px currentColor) brightness(1.2);
-}
-
+.tab-item:hover .tab-provider-icon,
 .tab-item-active .tab-provider-icon {
-  filter: drop-shadow(0 0 5px currentColor) brightness(1.3);
+  opacity: 1;
 }
 
 .tab-name {
@@ -804,6 +812,33 @@ body,
 }
 
 /* ── Panel context menu ── */
+
+.nsw-recents { margin-bottom: 14px; }
+.nsw-recents-toggle {
+  display: flex; align-items: center; gap: 7px; padding: 7px 9px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; cursor: pointer;
+}
+.nsw-recents-toggle:hover, .nsw-recents-toggle[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated)); color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.nsw-recents-count { font-size: 10px; color: var(--text-muted); }
+.nsw-recents-content { margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface); }
+.nsw-recents-search { display: flex; align-items: center; gap: 7px; padding: 9px 11px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.nsw-recents-search input { min-width: 0; flex: 1; background: transparent; color: var(--text-primary); border: 0; font-size: 12px; outline-offset: 3px; }
+.nsw-recents-list { max-height: 260px; overflow-y: auto; padding: 4px; }
+.nsw-recent-panel { width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); text-align: left; cursor: pointer; }
+.nsw-recent-panel:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.nsw-recent-icon { display: flex; flex: 0 0 20px; align-items: center; justify-content: center; }
+.nsw-recent-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.nsw-recent-text strong { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.nsw-recent-text small { font-size: 10px; color: var(--text-muted); }
+.nsw-recent-text strong, .nsw-recent-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nsw-recent-status { font-size: 10px; color: var(--text-muted); }
+.nsw-recent-status.is-open { color: var(--accent); }
+.nsw-recents-empty { margin: 0; padding: 12px 8px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.menu-dropdown-item:disabled { opacity: .4; cursor: default; }
 
 .panel-context-menu {
   position: fixed;

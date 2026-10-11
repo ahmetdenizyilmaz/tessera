@@ -282,7 +282,10 @@ export function focusDetachedPanel(panelId: string): boolean {
   const seen = new Set<string>();
   while (locations.get(top) && locations.get(top) !== owner.groupId && !seen.has(top)) { seen.add(top); top = locations.get(top)!; }
   groups.setGroupActiveChild(owner.groupId, top);
-  detachedViews.get(owner.id)?.dispatchEvent(new CustomEvent('tessera-focus-panel', { detail: panelId }));
-  void new NativeWindow(windowLabel(owner.id)).setFocus();
+  const child = detachedViews.get(owner.id);
+  child?.dispatchEvent(new CustomEvent('tessera-focus-panel', { detail: panelId }));
+  // Undo can restore the workspace record before its native window is open.
+  // Opening the view will focus it; only address existing native windows here.
+  if (child && !child.closed) void new NativeWindow(windowLabel(owner.id)).setFocus().catch(() => {});
   return true;
 }

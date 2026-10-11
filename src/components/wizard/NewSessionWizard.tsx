@@ -22,6 +22,7 @@ import {
   createGroupPanel, createPluginPanel,
 } from '../../lib/newSessionActions';
 import type { LastSessionPreset } from '../../types/session';
+import { RecentPanels } from './RecentPanels';
 
 const CLAUDE_TIERS = ['opus', 'sonnet', 'fable', 'haiku'];
 
@@ -287,6 +288,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
 
   return (
     <div className="nsw" tabIndex={-1} onKeyDown={handleKeyDown}>
+      {!s.fork && <RecentPanels wizardId={instanceId} />}
       {s.fork && (
         <div className="nsw-fork-banner">
           <GitFork size={14} />

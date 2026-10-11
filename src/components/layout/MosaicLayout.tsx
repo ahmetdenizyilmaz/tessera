@@ -19,6 +19,7 @@ import { SnapZoneOverlay } from './SnapZoneOverlay';
 import { beginWindowPanelDrag, endWindowPanelDrag, finishWindowTabDrag } from '../../lib/workspaceWindows';
 import { useWindowDragStore } from '../../store/windowDragStore';
 import { usePanelWindow } from '../windows/PanelWindowContext';
+import { beginPanelResize } from '../../lib/layoutHistory';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
@@ -78,6 +79,7 @@ export function MosaicLayout() {
     gutter: Gutter;
     startPos: number;
     startRects: Map<string, PanelRect>;
+    commit: () => void;
   } | null>(null);
 
   // Panel bodies use final pixel dimensions while their outer tiles animate.
@@ -224,11 +226,13 @@ export function MosaicLayout() {
     e.stopPropagation();
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
     const currentRects = useLayoutStore.getState().panelRects;
     resizeRef.current = {
       gutter,
       startPos: gutter.axis === 'x' ? e.clientX : e.clientY,
       startRects: new Map(currentRects),
+      commit: beginPanelResize(useLayoutStore),
     };
     setGutterDragging(true);
     document.body.style.userSelect = 'none';
@@ -380,13 +384,14 @@ export function MosaicLayout() {
     const onUp = async () => {
       // Gutter resize end
       if (resizeRef.current) {
-        const { gutter } = resizeRef.current;
+        const { gutter, commit } = resizeRef.current;
         resizeRef.current = null;
         setGutterDragging(false);
         document.body.style.userSelect = '';
         document.body.style.cursor = '';
         window.getSelection()?.removeAllRanges();
         finishResizeRef.current(gutter.axis, gutter.panelsBefore, gutter.panelsAfter);
+        commit();
         return;
       }
 
@@ -585,6 +590,7 @@ export function MosaicLayout() {
           <div
             key={`gutter-${i}`}
             className={`mosaic-gutter mosaic-gutter-${g.axis}`}
+            tabIndex={-1}
             style={isV ? {
               position: 'absolute',
               zIndex: 10,
@@ -603,7 +609,12 @@ export function MosaicLayout() {
               cursor: 'row-resize',
             }}
             onPointerDown={(e) => handleGutterDown(e, g)}
-            onDoubleClick={(e) => { e.stopPropagation(); resetStealFraction(); }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              const commit = beginPanelResize(useLayoutStore);
+              resetStealFraction();
+              commit();
+            }}
           />
         );
       })}

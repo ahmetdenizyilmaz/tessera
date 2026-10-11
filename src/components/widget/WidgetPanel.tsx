@@ -1,6 +1,6 @@
 import { X, FolderOpen, Bot, Server, BarChart3, GitBranch, Plus, Activity } from 'lucide-react';
 import { useLayoutStore } from '../../store/layoutStore';
-import { removePanelsFromWorkspace } from '../../store/groupStore';
+import { closePanel } from '../../lib/panelCleanup';
 import { ProjectBrowser } from '../projects/ProjectBrowser';
 import AgentList from '../agents/AgentList';
 import { McpManager } from '../mcp/McpManager';
@@ -11,7 +11,6 @@ import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import NewSessionWizard from '../wizard/NewSessionWizard';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
-import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
   projects: { icon: <FolderOpen size={14} />, label: 'Projects' },
@@ -29,7 +28,6 @@ interface WidgetPanelProps {
 
 export function WidgetPanel({ instanceId }: WidgetPanelProps) {
   const kind = useLayoutStore(s => s.widgetKinds[instanceId]);
-  const removePanel = useLayoutStore(s => s.removePanel);
   const focusedId = useLayoutStore(s => s.focusedId);
 
   const info = WIDGET_INFO[kind] ?? { icon: null, label: 'Widget' };
@@ -109,8 +107,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            usePanelShortcutStore.getState().removePanels([instanceId]);
-            removePanelsFromWorkspace([instanceId]);
+            void closePanel(instanceId);
           }}
           style={{
             background: 'none',

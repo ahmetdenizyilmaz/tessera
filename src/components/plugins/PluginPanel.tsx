@@ -4,11 +4,10 @@ import { usePluginStore } from '../../store/pluginStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
-import { usePanelShortcutStore } from '../../store/panelShortcutStore';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
 import { BrowserPanel } from '../browser/BrowserPanel';
-import { removePanelsFromWorkspace } from '../../store/groupStore';
+import { closePanel } from '../../lib/panelCleanup';
 
 // ─── Module-Level Bridge Registry ───────────────────────────────────────────
 // Keeps bridge references alive across React strict-mode double-mounts.
@@ -57,23 +56,11 @@ function IframePluginPanel({ instanceId }: PluginPanelProps) {
   );
 
   const removePanel = useLayoutStore((s) => s.removePanel);
-  const destroyInstance = usePluginStore((s) => s.destroyInstance);
 
   // ─── Close handler ─────────────────────────────────────────────────────
 
-  const handleClose = useCallback(() => {
-    const bridge = bridgeRef.current ?? bridgeRegistry.get(instanceId);
-    if (bridge) {
-      // Send destroy, wait 500ms, then clean up
-      bridge.sendDestroy().then(() => {
-        bridge.destroy();
-        if (bridgeRegistry.get(instanceId) === bridge) bridgeRegistry.delete(instanceId);
-      });
-    }
-    destroyInstance(instanceId);
-    usePanelShortcutStore.getState().removePanels([instanceId]);
-    removePanelsFromWorkspace([instanceId]);
-  }, [instanceId, removePanel, destroyInstance]);
+  // Unmount owns bridge cleanup, regardless of which close button was used.
+  const handleClose = useCallback(() => { void closePanel(instanceId); }, [instanceId]);
 
   // ─── Toolbar button handler ────────────────────────────────────────────
 

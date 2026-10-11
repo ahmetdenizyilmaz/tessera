@@ -3,7 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { Monitor, RefreshCw, Send, WifiOff, X } from 'lucide-react';
 import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { ProviderIcon } from '../icons/ProviderIcons';
-import { closeRemotePanel, splitRemotePanelId, useLanStore } from '../../store/lanStore';
+import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
+import { closePanel } from '../../lib/panelCleanup';
 import { RemoteTerminalView } from './RemoteTerminalView';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 
@@ -105,7 +106,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
         <button className="btn btn-secondary" onClick={() => void refresh()} disabled={!peer.connected || loading} style={{ padding: 4 }} title={isTerminal ? 'Refresh terminal screen' : 'Refresh transcript'}>
           <RefreshCw size={13} className={loading ? 'spin' : ''} />
         </button>
-        <button className="btn btn-secondary" onClick={(event) => { event.stopPropagation(); closeRemotePanel(instanceId); }}
+        <button className="btn btn-secondary" onClick={(event) => { event.stopPropagation(); void closePanel(instanceId); }}
           onPointerDown={(event) => event.stopPropagation()} style={{ padding: 4 }}
           aria-label="Close remote panel locally" title="Close locally (keeps running on host)">
           <X size={13} />

@@ -4,12 +4,11 @@ import { AntigravityPanel } from "../antigravity/AntigravityPanel";
 import { useState, useEffect, useCallback } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
 import { useLayoutStore } from "../../store/layoutStore";
-import { removePanelsFromWorkspace } from '../../store/groupStore';
-import { cleanupPty, restartPty } from "../../hooks/usePty";
+import { closePanel } from '../../lib/panelCleanup';
+import { restartPty } from "../../hooks/usePty";
 import { useEventBusStore } from "../../store/eventBusStore";
-import { destroyTerminal } from "../../hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
-import { XTermView, clearTerminalState } from "./XTermView";
+import { XTermView } from "./XTermView";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import ChatView from "../chat/ChatView";
 import { History } from "lucide-react";
@@ -77,23 +76,7 @@ function ClaudeTerminalPanel({ instanceId }: { instanceId: string }) {
       setRestarting(false);
     }
   }, [instanceId, restarting]);
-  const handleClose = useCallback(async () => {
-    clearTerminalState(instanceId);
-    cleanupPty(instanceId);
-    destroyTerminal(instanceId);
-    try {
-      await invoke("pty_kill", { id: instanceId });
-    } catch {
-      /* already stopped */
-    }
-    try {
-      await invoke("stream_kill", { id: instanceId });
-    } catch {
-      /* already stopped */
-    }
-    removePanelsFromWorkspace([instanceId]);
-    useInstanceStore.getState().removeInstance(instanceId);
-  }, [instanceId]);
+  const handleClose = useCallback(() => closePanel(instanceId), [instanceId]);
   if (!instance) return null;
   return (
     <div
