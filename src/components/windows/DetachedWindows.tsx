@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Window as NativeWindow } from '@tauri-apps/api/window';
@@ -10,7 +10,8 @@ import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { usePluginStore } from '../../store/pluginStore';
-import { detachedViews, ensureDetachedView, closeDetachedWorkspace, copyWindowStyles, finishWindowTabDrag, setWindowTabDragging, detachPanel, movePanelToWindow, windowLabel, isExitingWindows } from '../../lib/workspaceWindows';
+import { detachedViews, ensureDetachedView, closeDetachedWorkspace, copyWindowStyles, beginWindowPanelDrag, endWindowPanelDrag, finishWindowTabDrag, detachPanel, movePanelToWindow, windowLabel, isExitingWindows } from '../../lib/workspaceWindows';
+import { useWindowDragStore } from '../../store/windowDragStore';
 import { closePanel } from '../../lib/panelCleanup';
 import { notify } from '../../lib/toast';
 import { createGroupPanel, createPluginPanel, openNewSessionWizard } from '../../lib/newSessionActions';
@@ -35,6 +36,7 @@ function DetachedTab({ id, active, select, menu }: { id: string; active: boolean
   usePluginStore(s => s.instances.get(id)?.title);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return <div ref={setNodeRef} {...attributes} {...listeners} role="tab" aria-selected={active}
+    onPointerDown={e => { if (e.button === 0) e.currentTarget.setPointerCapture(e.pointerId); listeners?.onPointerDown?.(e); }}
     className={`detached-tab ${active ? 'detached-tab-active' : ''}`} data-tab-id={id}
     style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? .5 : 1 }}
     onClick={select} onContextMenu={e => { e.preventDefault(); menu(e.clientX, e.clientY); }} title={`${panelName(id)} — drag to move between windows`}>
@@ -58,6 +60,41 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
   const label = windowLabel(workspace.id);
   const maximize = () => { void new NativeWindow(label).toggleMaximize(); };
   const enterGroup = (id: string) => setPath(previous => [...previous, id]);
+  const headerDragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => headerDragCleanup.current?.(), [child]);
+  const headerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (event.button !== 0 || !target.closest('.terminal-toolbar') || target.closest('button, input, textarea, select')) return;
+    const panelId = target.closest<HTMLElement>('[data-panel-id]')?.dataset.panelId;
+    if (!panelId) return;
+    event.preventDefault();
+    target.setPointerCapture(event.pointerId);
+    const x = event.clientX, y = event.clientY;
+    let started = false;
+    const cleanup = () => {
+      child.removeEventListener('pointermove', move); child.removeEventListener('pointerup', up);
+      child.removeEventListener('pointercancel', cancel); child.removeEventListener('keydown', key);
+      headerDragCleanup.current = null;
+    };
+    const move = (e: PointerEvent) => {
+      if (!started && Math.hypot(e.clientX - x, e.clientY - y) >= 6) {
+        started = true; setDragging(true); beginWindowPanelDrag(panelId, label, e, 'panel');
+      }
+    };
+    const up = async () => {
+      cleanup();
+      if (started) { await finishWindowTabDrag(panelId, label); endWindowPanelDrag(); setDragging(false); }
+    };
+    const cancel = () => { cleanup(); if (started) endWindowPanelDrag(); setDragging(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); } };
+    child.addEventListener('pointermove', move); child.addEventListener('pointerup', up);
+    child.addEventListener('pointercancel', cancel); child.addEventListener('keydown', key);
+    headerDragCleanup.current = cancel;
+  };
+  useEffect(() => {
+    child.document.documentElement.dataset.workspaceGroup = groupId;
+    return () => { delete child.document.documentElement.dataset.workspaceGroup; };
+  }, [child, groupId]);
   useEffect(() => {
     const focus = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;
@@ -77,7 +114,7 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
   }, [child, workspace.groupId]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setNewMenu(false); setContextMenu(null); setWindowTabDragging(false); }
+      if (event.key === 'Escape') { setNewMenu(false); setContextMenu(null); }
       if (event.ctrlKey && event.key.toLowerCase() === 'n') { event.preventDefault(); openNewSessionWizard(groupId); }
       if (event.ctrlKey && event.key.toLowerCase() === 'w') {
         event.preventDefault();
@@ -93,7 +130,7 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
   const dragEnd = async (event: DragEndEvent) => {
     setDragging(false);
     const moved = await finishWindowTabDrag(String(event.active.id), label);
-    setWindowTabDragging(false);
+    endWindowPanelDrag();
     if (moved || !event.over || event.active.id === event.over.id) return;
     const current = useGroupStore.getState().groups.get(groupId);
     if (!current) return;
@@ -111,8 +148,9 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
     <div className="detached-workspace" onPointerDown={() => { if (contextMenu) setContextMenu(null); }}>
       <div className="detached-tabs" role="tablist" data-window-tabstrip={label}>
         {path.length > 0 && <button className="detached-tool" title="Back to parent group" onClick={() => setPath(p => p.slice(0, -1))}><ArrowLeft size={15} /></button>}
-        <DndContext sensors={sensors} onDragStart={() => { setDragging(true); setWindowTabDragging(true); }} onDragEnd={dragEnd}
-          onDragCancel={() => { setDragging(false); setWindowTabDragging(false); }}>
+        <DndContext sensors={sensors} collisionDetection={pointerWithin}
+          onDragStart={event => { setDragging(true); beginWindowPanelDrag(String(event.active.id), label, event.activatorEvent); }} onDragEnd={dragEnd}
+          onDragCancel={() => { setDragging(false); endWindowPanelDrag(); }}>
           <SortableContext items={ids} strategy={horizontalListSortingStrategy}>
             {ids.map(id => <DetachedTab key={id} id={id} active={id === active} select={() => select(id)} menu={(x, y) => setContextMenu({ id, x, y })} />)}
           </SortableContext>
@@ -131,7 +169,7 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
         <button className="menu-dropdown-item" onClick={() => { movePanelToWindow(contextMenu.id, null); setContextMenu(null); }}>Move to main window</button>
         <button className="menu-dropdown-item" onClick={() => { void closePanel(contextMenu.id); setContextMenu(null); }}>Close panel</button>
       </div>}
-      <div className="detached-content mosaic-container">
+      <div className="detached-content mosaic-container" onPointerDown={headerDown}>
         {ids.map(id => <div key={id} data-panel-id={id} className="detached-panel" style={{ visibility: id === active ? 'visible' : 'hidden', pointerEvents: id === active && !dragging ? undefined : 'none' }} inert={id !== active}>
           {panelTypes[id] === 'group' ? <GroupPreview groupId={id} />
             : panelTypes[id] === 'plugin' ? <PluginPanel instanceId={id} />
@@ -145,6 +183,15 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
       </div>
     </div>
   </PanelWindowContext.Provider>;
+}
+
+function WindowDragHint() {
+  const drag = useWindowDragStore(s => s.drag);
+  if (!drag?.hint) return null;
+  const child = [...detachedViews.entries()].find(([id]) => windowLabel(id) === drag.source)?.[1];
+  const doc = drag.source === 'main' ? document : child?.document;
+  if (!doc) return null;
+  return createPortal(<div className="window-drag-hint" style={{ left: Math.max(8, Math.min(drag.x + 18, (doc.defaultView?.innerWidth ?? 800) - 220)), top: Math.max(8, Math.min(drag.y + 26, (doc.defaultView?.innerHeight ?? 600) - 40)) }}>{drag.hint}</div>, doc.body);
 }
 
 export function DetachedWindows() {
@@ -179,11 +226,11 @@ export function DetachedWindows() {
     const observer = new MutationObserver(() => {
       for (const child of detachedViews.values()) if (!child.closed) copyWindowStyles(child.document);
     });
-    observer.observe(document.documentElement, { attributes: true });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
     observer.observe(document.head, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
-  return <>{workspaces.map(workspace => {
+  return <><WindowDragHint />{workspaces.map(workspace => {
     const child = detachedViews.get(workspace.id);
     const root = child && !child.closed ? child.document.getElementById('detached-root') : null;
     return root ? createPortal(<DetachedWorkspaceView workspace={workspace} child={child!} />, root, workspace.id) : null;

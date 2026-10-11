@@ -146,6 +146,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
   return (
     <div
       ref={setNodeRef}
+      data-tab-id={id}
       className={`tab-item ${isActive ? 'tab-item-active' : ''}${dropTargetClass}`}
       style={{
         transform: CSS.Transform.toString(transform),
@@ -159,6 +160,10 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
       // Disabling drag must not disable the tab's focus/close controls.
       aria-disabled={undefined}
       {...listeners}
+      onPointerDown={e => {
+        if (e.button === 0 && listeners?.onPointerDown) e.currentTarget.setPointerCapture(e.pointerId);
+        listeners?.onPointerDown?.(e);
+      }}
     >
       {isGroup ? (
         <span className="tab-provider-icon" style={{

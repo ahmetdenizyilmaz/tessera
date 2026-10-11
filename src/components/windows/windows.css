@@ -11,3 +11,5 @@
 .detached-new .menu-dropdown { left:0; right:auto; }
 html[data-tab-dragging], html[data-tab-dragging] * { cursor:default !important; }
 .mosaic-tile .terminal-toolbar,.mosaic-tile-dragging,.mosaic-tile-dragging .terminal-toolbar { cursor:default !important; }
+.window-drag-hint { position: fixed; z-index: 10001; pointer-events: none; padding: 7px 10px; border: 1px solid var(--accent); border-radius: 5px; background: var(--bg-secondary, #20202a); color: var(--text-primary); font-size: 12px; box-shadow: 0 3px 12px #0005; }
+html[data-window-drop-target] .tab-bar, html[data-window-drop-target] .detached-tabs { box-shadow: inset 0 -3px var(--accent); }

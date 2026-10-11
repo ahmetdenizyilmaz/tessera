@@ -80,6 +80,7 @@ export function Sidebar() {
 
     const startX = e.clientX;
     const startY = e.clientY;
+    e.currentTarget.setPointerCapture(e.pointerId);
     const DRAG_THRESHOLD = 6;
     let started = false;
 
@@ -98,15 +99,12 @@ export function Sidebar() {
         sidebarDragState.started = true;
         useLayoutStore.getState().setSidebarDrag(true, null);
         document.body.style.userSelect = 'none';
-        document.body.style.cursor = 'grabbing';
+        document.body.style.cursor = 'default';
       }
 
       const container = document.querySelector('.mosaic-container') as HTMLElement | null;
       const currentCount = useLayoutStore.getState().tabOrder.length;
-      if (currentCount === 0) {
-        sidebarDragState.currentSnap = 'center';
-        useLayoutStore.getState().setSidebarDrag(true, null);
-      } else if (container) {
+      if (container) {
         const b = container.getBoundingClientRect();
         const zone = detectSnapZone(
           ev.clientX - b.left, ev.clientY - b.top,
@@ -122,13 +120,11 @@ export function Sidebar() {
       if (started) {
         const currentCount = useLayoutStore.getState().tabOrder.length;
         if (currentCount < MAX_PANELS) {
-          const zone = currentCount === 0
-            ? undefined
-            : (sidebarDragState.currentSnap ?? undefined);
-          if (currentCount === 0 || zone) {
+          const zone = sidebarDragState.currentSnap;
+          if (zone) {
             useLayoutStore.getState().addWidgetPanel(
               tabId,
-              zone as any,
+              zone,
             );
           }
         }
@@ -142,15 +138,19 @@ export function Sidebar() {
       document.body.style.cursor = '';
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', key);
       dragCleanup.current = null;
     };
 
+    const cancel = () => { sidebarDragState.currentSnap = null; onUp(); };
+    const key = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { ev.preventDefault(); cancel(); } };
+
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-    dragCleanup.current = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', key);
+    dragCleanup.current = cancel;
   }, []);
 
   const renderContent = () => {
@@ -215,7 +215,7 @@ export function Sidebar() {
                 borderRadius: 6,
                 background: activeTab === tab.id && isOpen ? 'var(--bg-elevated)' : 'transparent',
                 color: isInPanel ? 'var(--accent)' : (activeTab === tab.id && isOpen ? 'var(--accent)' : 'var(--text-muted)'),
-                cursor: isInPanel ? 'pointer' : 'grab',
+                cursor: isInPanel ? 'pointer' : 'default',
                 transition: 'all 0.15s',
                 opacity: isInPanel ? 0.5 : 1,
               }}

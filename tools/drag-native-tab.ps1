@@ -1,4 +1,4 @@
-param([int]$StartX, [int]$StartY, [int]$EndX, [int]$EndY)
+param([int]$StartX, [int]$StartY, [int]$EndX, [int]$EndY, [int]$Steps = 24, [int]$StepDelayMs = 30)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
@@ -14,9 +14,9 @@ $null = [TestMouse]::SetCursorPos($StartX, $StartY)
 Start-Sleep -Milliseconds 100
 [TestMouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
 try {
-  for ($step = 1; $step -le 24; $step++) {
-    $null = [TestMouse]::SetCursorPos([int]($StartX + ($EndX - $StartX) * $step / 24), [int]($StartY + ($EndY - $StartY) * $step / 24))
-    Start-Sleep -Milliseconds 30
+  for ($step = 1; $step -le $Steps; $step++) {
+    $null = [TestMouse]::SetCursorPos([int]($StartX + ($EndX - $StartX) * $step / $Steps), [int]($StartY + ($EndY - $StartY) * $step / $Steps))
+    Start-Sleep -Milliseconds $StepDelayMs
   }
 } finally {
   [TestMouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)

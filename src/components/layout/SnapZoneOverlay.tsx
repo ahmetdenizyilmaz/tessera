@@ -1,38 +1,26 @@
-import type { SnapZone } from '../../types/session';
+import type { PanelRect } from '../../types/session';
+import { useInstanceStore } from '../../store/instanceStore';
+import { usePluginStore } from '../../store/pluginStore';
+import { useGroupStore } from '../../store/groupStore';
+import { sidebarDragState, useLayoutStore } from '../../store/layoutStore';
+import { remotePanelByCompositeId } from '../../store/lanStore';
 
-interface SnapZoneOverlayProps {
-  zone: SnapZone;
-  containerRect: { width: number; height: number };
+function panelLabel(id: string) {
+  const widget = id === '__sidebar-preview__' ? sidebarDragState.kind : useLayoutStore.getState().widgetKinds[id];
+  return useInstanceStore.getState().instances.get(id)?.name
+    ?? usePluginStore.getState().instances.get(id)?.title
+    ?? useGroupStore.getState().groups.get(id)?.name
+    ?? remotePanelByCompositeId(id)?.panel.name
+    ?? (widget ? widget.charAt(0).toUpperCase() + widget.slice(1).replaceAll('-', ' ') : 'Panel');
 }
 
-function getZoneRect(zone: SnapZone): { x: number; y: number; w: number; h: number } {
-  switch (zone) {
-    case 'left':         return { x: 0,  y: 0,  w: 50,  h: 100 };
-    case 'right':        return { x: 50, y: 0,  w: 50,  h: 100 };
-    case 'top':          return { x: 0,  y: 0,  w: 100, h: 50 };
-    case 'bottom':       return { x: 0,  y: 50, w: 100, h: 50 };
-    case 'top-left':     return { x: 0,  y: 0,  w: 50,  h: 50 };
-    case 'top-right':    return { x: 50, y: 0,  w: 50,  h: 50 };
-    case 'bottom-left':  return { x: 0,  y: 50, w: 50,  h: 50 };
-    case 'bottom-right': return { x: 50, y: 50, w: 50,  h: 50 };
-    case 'center':       return { x: 10, y: 10, w: 80,  h: 80 };
-  }
-}
-
-export function SnapZoneOverlay({ zone, containerRect }: SnapZoneOverlayProps) {
-  const zr = getZoneRect(zone);
-
-  // Visual styling (background, border, z-index, transition) comes from the
-  // .snap-zone-preview class in mosaic.css — only the geometry is inline
-  return (
-    <div
-      className="snap-zone-preview"
-      style={{
-        left: `${(zr.x / 100) * containerRect.width}px`,
-        top: `${(zr.y / 100) * containerRect.height}px`,
-        width: `${(zr.w / 100) * containerRect.width}px`,
-        height: `${(zr.h / 100) * containerRect.height}px`,
-      }}
-    />
-  );
+/** One preview slot per real panel, using the exact committed geometry. */
+export function SnapZoneOverlay({ rects, targetId }: { rects: Map<string, PanelRect>; targetId: string }) {
+  return <div className="snap-layout-preview" aria-hidden="true">
+    {[...rects].map(([id, r]) => <div key={id} data-preview-panel-id={id}
+      className={`snap-zone-preview${id === targetId ? ' snap-zone-preview-target' : ''}`}
+      style={{ left: `calc(${r.x}% + 3px)`, top: `calc(${r.y}% + 3px)`, width: `calc(${r.w}% - 6px)`, height: `calc(${r.h}% - 6px)` }}>
+      <div className="snap-preview-label"><span>{panelLabel(id)}</span>{id === targetId && <small>Drop here</small>}</div>
+    </div>)}
+  </div>;
 }

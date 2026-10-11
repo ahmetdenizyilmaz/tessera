@@ -28,7 +28,7 @@ import { useInstanceStore } from '../../store/instanceStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { INSTANCE_COLORS } from '../../types/instance';
 import { closePanel } from '../../lib/panelCleanup';
-import { finishWindowTabDrag, setWindowTabDragging } from '../../lib/workspaceWindows';
+import { beginWindowPanelDrag, endWindowPanelDrag, finishWindowTabDrag } from '../../lib/workspaceWindows';
 
 // Shared drag state for cross-group operations
 // Anchored to globalThis to survive HMR
@@ -43,7 +43,7 @@ export const crossGroupDragState: {
 };
 
 // Custom collision detection: prioritize breadcrumb/group droppables over sortable tabs
-// when the pointer is directly over them. Falls back to closestCenter for tab reordering.
+// when the pointer is directly over them. Mouse drops outside real targets do nothing.
 const crossGroupCollision: CollisionDetection = (args) => {
   // First, check if pointer is directly within any droppable
   const pointerCollisions = pointerWithin(args);
@@ -63,8 +63,8 @@ const crossGroupCollision: CollisionDetection = (args) => {
   });
   if (pointerGroupCollision) return [pointerGroupCollision];
 
-  // Fall back to closestCenter for regular tab sorting
-  return closestCenter(args);
+  // A mouse drop must hit a real target, including when leaving the strip.
+  return args.pointerCoordinates ? pointerCollisions : closestCenter(args);
 };
 
 const EMPTY_TAB_ORDER: string[] = [];
@@ -72,7 +72,6 @@ const EMPTY_TAB_ORDER: string[] = [];
 export function TabBar() {
   const tabOrder = useLayoutStore((s) => s.tabOrder ?? EMPTY_TAB_ORDER);
   const moveTab = useLayoutStore((s) => s.moveTab);
-  const panelTypes = useLayoutStore((s) => s.panelTypes);
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const activeTabId = useLayoutStore((s) => s.activeTabId);
@@ -119,8 +118,8 @@ export function TabBar() {
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setWindowTabDragging(true);
     const dragId = String(event.active.id);
+    beginWindowPanelDrag(dragId, 'main', event.activatorEvent);
     setActiveDragId(dragId);
     crossGroupDragState.activeDragId = dragId;
   }, []);
@@ -200,7 +199,7 @@ export function TabBar() {
       crossGroupDragState.overDropTargetType = null;
 
       const movedWindow = await finishWindowTabDrag(String(active.id));
-      setWindowTabDragging(false);
+      endWindowPanelDrag();
       if (movedWindow || !over || active.id === over.id) return;
 
       const activeId = String(active.id);
@@ -242,7 +241,7 @@ export function TabBar() {
   );
 
   const handleDragCancel = useCallback(() => {
-    setWindowTabDragging(false);
+    endWindowPanelDrag();
     setActiveDragId(null);
     crossGroupDragState.activeDragId = null;
     crossGroupDragState.overDropTargetId = null;
@@ -333,7 +332,7 @@ export function TabBar() {
           items={tabOrder}
           strategy={horizontalListSortingStrategy}
         >
-          <div className="tab-bar-tabs" ref={tabsRef}>
+          <div className="tab-bar-tabs" ref={tabsRef} data-window-tabstrip="main">
             {tabOrder.map((id) => (
               <TabItem
                 key={id}
@@ -349,16 +348,7 @@ export function TabBar() {
           {activeDragId ? (
             <div className="tab-item tab-item-active" style={{ opacity: 0.8, cursor: 'default' }}>
               <span className="tab-name" style={{ fontSize: 12 }}>
-                {(() => {
-                  const pt = panelTypes[activeDragId];
-                  if (pt === 'group') {
-                    const g = useGroupStore.getState().groups.get(activeDragId);
-                    return g?.name ?? 'Group';
-                  }
-                  if (pt === 'widget') return 'Widget';
-                  const inst = useInstanceStore.getState().getInstance(activeDragId);
-                  return inst?.name ?? activeDragId;
-                })()}
+                {getTabLabel(activeDragId)}
               </span>
             </div>
           ) : null}

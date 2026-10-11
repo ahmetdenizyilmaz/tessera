@@ -5,10 +5,12 @@ import { captureGroupSnapshot, getPanelLocations, removePanelsFromWorkspace, use
 import { useLayoutStore } from '../store/layoutStore';
 import { closePanel } from './panelCleanup';
 import { notify } from './toast';
+import { outsideTabStrip, useWindowDragStore } from '../store/windowDragStore';
 
 export const detachedViews = new Map<string, Window>();
 const opening = new Map<string, Promise<Window>>();
 const disposing = new Set<string>();
+const detaching = new Set<string>();
 const cleanupListeners = new Map<string, () => void>();
 let exiting = false;
 export const isExitingWindows = () => exiting;
@@ -37,7 +39,7 @@ export function copyWindowStyles(target: Document) {
   target.documentElement.className = document.documentElement.className;
   target.documentElement.style.cssText = document.documentElement.style.cssText;
   for (const { name, value } of [...document.documentElement.attributes]) {
-    if (name.startsWith('data-')) target.documentElement.setAttribute(name, value);
+    if (name.startsWith('data-') && !name.startsWith('data-window-') && !name.startsWith('data-workspace-')) target.documentElement.setAttribute(name, value);
   }
 }
 
@@ -111,7 +113,8 @@ export async function closeWindowViewsForExit() {
 }
 
 export async function detachPanel(panelId: string, point?: { x: number; y: number }) {
-  if (exiting) return;
+  if (exiting || detaching.has(panelId)) return;
+  detaching.add(panelId);
   const id = crypto.randomUUID();
   const workspace: DetachedWorkspace = { id, groupId: '', ...(point ? { bounds: { x: Math.round(point.x - 80), y: Math.round(point.y - 20), width: Math.round(1000 * devicePixelRatio), height: Math.round(700 * devicePixelRatio) } } : {}) };
   try {
@@ -128,23 +131,135 @@ export async function detachPanel(panelId: string, point?: { x: number; y: numbe
   } catch (e) {
     await destroyView(id);
     notify(String(e));
+  } finally { detaching.delete(panelId); }
+}
+
+export function movePanelToWindow(panelId: string, target: DetachedWorkspace | null, placement?: { groupId?: string; index?: number }) {
+  const groupId = placement?.groupId ?? target?.groupId ?? useGroupStore.getState().getCurrentGroupId();
+  useGroupStore.getState().movePanelToLevel(panelId, groupId);
+  if (groupId) useGroupStore.getState().setGroupActiveChild(groupId, panelId);
+  if (placement?.index !== undefined) {
+    if (groupId === useGroupStore.getState().getCurrentGroupId()) {
+      const layout = useLayoutStore.getState();
+      const from = layout.tabOrder.indexOf(panelId);
+      if (from >= 0) layout.moveTab(from, Math.min(placement.index, layout.tabOrder.length - 1));
+    } else if (groupId) {
+      const group = useGroupStore.getState().groups.get(groupId);
+      if (group?.childIds.includes(panelId)) {
+        const childIds = group.childIds.filter(id => id !== panelId);
+        childIds.splice(placement.index, 0, panelId);
+        useGroupStore.setState(s => ({ groups: new Map(s.groups).set(groupId, { ...group, childIds, layoutConfig: null, panelRects: new Map() }) }));
+      }
+    }
   }
 }
 
-export function movePanelToWindow(panelId: string, target: DetachedWorkspace | null) {
-  const groupId = target?.groupId ?? useGroupStore.getState().getCurrentGroupId();
-  useGroupStore.getState().movePanelToLevel(panelId, groupId);
-  if (groupId) useGroupStore.getState().setGroupActiveChild(groupId, panelId);
+interface DropTarget { label: string | null; x: number; y: number; clientX?: number; clientY?: number }
+let stopDragTracking: (() => void) | undefined;
+const dragDocuments = () => [document, ...[...detachedViews.values()].filter(w => !w.closed).map(w => w.document)];
+const targetDocument = (label: string | null) => label === 'main' ? document : [...detachedViews.entries()].find(([id]) => windowLabel(id) === label)?.[1].document;
+
+function pullsAwayFromTabs(doc: Document, x: number, y: number) {
+  const strip = doc.querySelector('[data-window-tabstrip]');
+  const breadcrumb = doc.querySelector('.group-breadcrumb')?.getBoundingClientRect();
+  const onBreadcrumb = breadcrumb && x >= breadcrumb.left && x <= breadcrumb.right && y >= breadcrumb.top && y <= breadcrumb.bottom;
+  return !!strip && !onBreadcrumb && outsideTabStrip(x, y, strip.getBoundingClientRect());
+}
+
+function insertionAt(doc: Document, x: number, y: number, panelId: string) {
+  const strip = doc.querySelector<HTMLElement>('[data-window-tabstrip]');
+  if (!strip) return;
+  const bounds = strip.getBoundingClientRect();
+  if (y < bounds.top || y > bounds.bottom || x < bounds.left || x > bounds.right) return;
+  const tabs = [...strip.querySelectorAll<HTMLElement>('[data-tab-id]')].filter(t => t.dataset.tabId !== panelId);
+  const found = tabs.findIndex(tab => x < tab.getBoundingClientRect().left + tab.getBoundingClientRect().width / 2);
+  const index = found < 0 ? tabs.length : found;
+  const left = tabs[index]?.getBoundingClientRect().left ?? tabs.at(-1)?.getBoundingClientRect().right ?? bounds.left + 6;
+  return { index, left, top: bounds.top + 4, height: bounds.height - 8 };
+}
+
+function clearDropMarkers() {
+  for (const doc of dragDocuments()) {
+    doc.documentElement.removeAttribute('data-window-drop-target');
+    doc.querySelector('[data-window-drop-marker]')?.remove();
+  }
+}
+
+/** Keep one drag alive across embedded sites, native windows and tab strips. */
+export function beginWindowPanelDrag(panelId: string, source: string, event: Event, kind: 'tab' | 'panel' = 'tab') {
+  stopDragTracking?.();
+  const pointer = event as PointerEvent;
+  const node = event.target as Element | null;
+  const doc = node?.ownerDocument ?? targetDocument(source) ?? document;
+  const view = doc.defaultView!;
+  useWindowDragStore.setState({ drag: { panelId, source, kind, x: pointer.clientX, y: pointer.clientY, tearOff: false, targetLabel: source, hint: null } });
+  setWindowTabDragging(true);
+  let disposed = false, busy = false;
+  const move = (e: PointerEvent) => {
+    const state = useWindowDragStore.getState().drag;
+    if (!state) return;
+    const tearOff = kind === 'tab' && pullsAwayFromTabs(doc, e.clientX, e.clientY);
+    useWindowDragStore.setState({ drag: { ...state, x: e.clientX, y: e.clientY, tearOff,
+      hint: state.targetLabel && state.targetLabel !== source ? 'Move to this window' : tearOff || state.targetLabel === null ? 'Release to open a new window' : null } });
+  };
+  const poll = async () => {
+    if (busy || disposed) return;
+    busy = true;
+    try {
+      const target = await invoke<DropTarget>('workspace_drop_target');
+      if (disposed || !target) return;
+      const state = useWindowDragStore.getState().drag;
+      if (!state) return;
+      clearDropMarkers();
+      const other = target.label && target.label !== source;
+      useWindowDragStore.setState({ drag: { ...state, targetLabel: target.label,
+        hint: other ? 'Move to this window' : target.label === null || state.tearOff ? 'Release to open a new window' : null } });
+      if (other) {
+        const destination = targetDocument(target.label);
+        if (destination) {
+          destination.documentElement.setAttribute('data-window-drop-target', '');
+          const insert = insertionAt(destination, target.clientX ?? -1, target.clientY ?? -1, panelId);
+          if (insert) {
+            const marker = destination.createElement('div');
+            marker.dataset.windowDropMarker = '';
+            marker.style.cssText = `position:fixed;pointer-events:none;z-index:10000;left:${insert.left}px;top:${insert.top}px;width:3px;height:${insert.height}px;background:var(--accent)`;
+            destination.body.appendChild(marker);
+          }
+        }
+      }
+    } catch { /* Native targeting is unavailable in a regular browser. */ }
+    finally { busy = false; }
+  };
+  doc.addEventListener('pointermove', move, true);
+  const timer = view.setInterval(() => void poll(), 50);
+  void poll();
+  stopDragTracking = () => { disposed = true; view.clearInterval(timer); doc.removeEventListener('pointermove', move, true); clearDropMarkers(); };
+}
+
+export function endWindowPanelDrag() {
+  stopDragTracking?.(); stopDragTracking = undefined;
+  useWindowDragStore.setState({ drag: null });
+  setWindowTabDragging(false);
 }
 
 /** Returns true when a drop was handled outside the source window. */
 export async function finishWindowTabDrag(panelId: string, source = 'main'): Promise<boolean> {
   try {
-    const target = await invoke<{ label: string | null; x: number; y: number }>('workspace_drop_target');
-    if (target.label === source) return false;
-    if (target.label === 'main') { movePanelToWindow(panelId, null); return true; }
+    const drag = useWindowDragStore.getState().drag;
+    stopDragTracking?.(); stopDragTracking = undefined;
+    const target = await invoke<DropTarget>('workspace_drop_target');
+    if (!target) return false;
+    const sourceDoc = targetDocument(source);
+    const tearOff = drag?.panelId === panelId && drag.kind === 'tab' && (target.clientX !== undefined && target.clientY !== undefined && sourceDoc
+      ? pullsAwayFromTabs(sourceDoc, target.clientX, target.clientY) : drag.tearOff);
+    if (target.label === source && !tearOff) return false;
+    if (target.label === source) { await detachPanel(panelId, target); return true; }
+    const doc = targetDocument(target.label);
+    const insert = doc && insertionAt(doc, target.clientX ?? -1, target.clientY ?? -1, panelId);
+    const placement = { groupId: doc?.documentElement.dataset.workspaceGroup, index: insert?.index };
+    if (target.label === 'main') { movePanelToWindow(panelId, null, placement); void new NativeWindow('main').setFocus(); return true; }
     const workspace = useWorkspaceWindowStore.getState().windows.find(w => windowLabel(w.id) === target.label);
-    if (workspace) { movePanelToWindow(panelId, workspace); return true; }
+    if (workspace) { movePanelToWindow(panelId, workspace, placement); void new NativeWindow(windowLabel(workspace.id)).setFocus(); return true; }
     await detachPanel(panelId, target);
     return true;
   } catch { return false; } // ordinary browser fixtures / unavailable native drag

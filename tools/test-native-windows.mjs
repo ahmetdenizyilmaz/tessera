@@ -8,7 +8,7 @@ let childBrowser;
 let secondBrowser;
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', message => { if (message.type() === 'error') console.log('native console:', message.text()); });
-const drag = (from, to) => execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'tools/drag-native-tab.ps1', '-StartX', String(Math.round(from.x)), '-StartY', String(Math.round(from.y)), '-EndX', String(Math.round(to.x)), '-EndY', String(Math.round(to.y))]);
+const drag = (from, to) => execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'tools/drag-native-tab.ps1', '-StartX', String(Math.round(from.x)), '-StartY', String(Math.round(from.y)), '-EndX', String(Math.round(to.x)), '-EndY', String(Math.round(to.y)), ...(process.argv.includes('--fast') ? ['-Steps', '2', '-StepDelayMs', '10'] : [])]);
 const point = async (p, label, selector) => {
   const pos = await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|inner_position', { label }), label);
   const rect = await p.locator(selector).boundingBox();
@@ -28,13 +28,15 @@ try {
   });
   await expect(page.locator('.tab-item')).toHaveCount(3);
   await page.evaluate(() => { window.pointerLog = []; for (const type of ['pointerdown','pointerup','pointercancel']) document.addEventListener(type, e => window.pointerLog.push({ type, x:e.clientX, y:e.clientY, target:e.target.className })); });
+  await page.evaluate(maximized => { window.__testMaximized = maximized; }, process.argv.includes('--maximized'));
   await page.evaluate(async () => {
     const call = window.__TAURI_INTERNALS__.invoke;
-    if (await call('plugin:window|is_maximized', { label: 'main' })) await call('plugin:window|toggle_maximize', { label: 'main' });
+    const wantsMaximized = !!window.__testMaximized;
+    if ((await call('plugin:window|is_maximized', { label: 'main' })) !== wantsMaximized) await call('plugin:window|toggle_maximize', { label: 'main' });
     await call('plugin:window|set_focus', { label: 'main' });
   });
   const from = await point(page, 'main', process.argv.includes('--header') ? '.browser-title' : '.tab-item:has-text("Lichess")');
-  const outside = await page.evaluate(() => ({ x: screen.availWidth * devicePixelRatio - 40, y: screen.availHeight * devicePixelRatio - 100 }));
+  const outside = process.argv.includes('--maximized') ? { x: from.x + 50, y: from.y + 240 } : await page.evaluate(() => ({ x: screen.availWidth * devicePixelRatio - 40, y: screen.availHeight * devicePixelRatio - 100 }));
   console.log('drag outside', from, outside);
   drag(from, outside);
   console.log('pointer log', await page.evaluate(() => window.pointerLog));
@@ -46,6 +48,10 @@ try {
   await expect(child.locator('.detached-tab')).toHaveCount(1);
   await expect(child.locator('.browser-error')).toHaveCount(0);
   console.log('native detach passed');
+  await page.evaluate(async () => {
+    const call = window.__TAURI_INTERNALS__.invoke;
+    if (await call('plugin:window|is_maximized', { label: 'main' })) await call('plugin:window|toggle_maximize', { label: 'main' });
+  });
   // Move Main's timer to the detached window using physical mouse input.
   await page.evaluate(async () => window.__TAURI_INTERNALS__.invoke('workspace_window_place', {
     label: window.windows.windowLabel(window.workspaces.getState().windows[0].id),
@@ -57,9 +63,11 @@ try {
   console.log('drag into child', timerFrom, childTo);
   drag(timerFrom, childTo);
   await expect(child.locator('.detached-tab')).toHaveCount(2);
+  await expect(child.locator('.detached-tab').first()).toContainText('Timer');
   console.log('native merge passed');
   await page.evaluate(label => window.__TAURI_INTERNALS__.invoke('plugin:window|set_focus', { label }), label1);
-  drag(await point(child, label1, '.detached-tab:has-text("Lichess")'), { x: 60, y: 1100 });
+  await child.locator('.detached-tab:has-text("Lichess")').click();
+  drag(await point(child, label1, process.argv.includes('--header') ? '.browser-title' : '.detached-tab:has-text("Lichess")'), { x: 60, y: 1100 });
   await expect.poll(() => page.evaluate(() => window.workspaces.getState().windows.length)).toBe(2);
   const w2 = await page.evaluate(() => window.workspaces.getState().windows[1]);
   secondBrowser = await chromium.connectOverCDP('http://127.0.0.1:9231');

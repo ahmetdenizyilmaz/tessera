@@ -21,7 +21,7 @@
 .mosaic-tile-dragging {
   opacity: 0.55;
   box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.6);
-  cursor: grabbing;
+  cursor: default;
 }
 
 .mosaic-tile-resizing {
@@ -30,7 +30,8 @@
 
 /* Block iframe pointer events during gutter resize and panel drag */
 .mosaic-gutter-dragging iframe,
-.mosaic-tile-dragging iframe {
+.mosaic-panel-dragging iframe,
+html[data-tab-dragging] iframe {
   pointer-events: none;
 }
 
@@ -41,13 +42,13 @@
 /* Make toolbar a drag handle, and keep it above the unfocused overlay
    so close/action buttons are clickable even on unfocused panels */
 .mosaic-tile .terminal-toolbar {
-  cursor: grab;
+  cursor: default;
   position: relative;
   z-index: 9;
 }
 
 .mosaic-tile-dragging .terminal-toolbar {
-  cursor: grabbing;
+  cursor: default;
 }
 
 /* Transparent overlay on unfocused panels — blocks xterm selection */
@@ -109,17 +110,26 @@
    Snap Zone Preview
    ====================================== */
 
+.snap-layout-preview { position:absolute; inset:0; pointer-events:none; z-index:60; background:var(--bg-primary); }
 .snap-zone-preview {
   position: absolute;
-  background: rgba(74, 158, 255, 0.10);
-  border: 2px dashed rgba(74, 158, 255, 0.6);
-  border-radius: 10px;
+  box-sizing:border-box;
+  background: var(--bg-surface);
+  border: 1px solid rgba(170, 185, 205, .55);
+  border-radius: 4px;
   pointer-events: none;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
   /* Above the dragged tile (z-index 50) so the preview is always visible */
   z-index: 60;
-  transition: left 0.15s ease, top 0.15s ease, width 0.15s ease, height 0.15s ease;
   box-shadow: inset 0 0 30px rgba(74, 158, 255, 0.08);
 }
+.snap-zone-preview-target { background:rgba(74,158,255,.2); border:2px solid var(--accent); }
+.snap-preview-label { display:flex; flex-direction:column; align-items:center; gap:6px; max-width:100%; padding:8px; box-sizing:border-box; color:var(--text-secondary); font-size:12px; }
+.snap-preview-label span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.snap-preview-label small { padding:5px 9px; border-radius:5px; background:var(--bg-surface); color:var(--text-primary); white-space:nowrap; }
 
 /* ======================================
    Terminal Panel — Toolbar Components

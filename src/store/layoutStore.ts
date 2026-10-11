@@ -303,6 +303,12 @@ export function computeRects(
           rects.set(id, { x: (bottomIds.length - 1 - i) * botW, y: mainH, w: botW, h: bottomH });
         });
       }
+      // Orient the complete layout, retaining every sidebar and overflow slot.
+      for (const [id, r] of rects) {
+        if (config.direction === 'right') rects.set(id, { ...r, x: 100 - r.x - r.w });
+        if (config.direction === 'top') rects.set(id, { x: r.y, y: r.x, w: r.h, h: r.w });
+        if (config.direction === 'bottom') rects.set(id, { x: r.y, y: 100 - r.x - r.w, w: r.h, h: r.w });
+      }
       break;
     }
 
@@ -452,7 +458,7 @@ export function getDefaultConfig(
     order.splice(idx, 1);
     order.unshift(focusedId);
   }
-  return { type: 'main', panelOrder: order, mainWidthPercent: previousConfig?.mainWidthPercent };
+  return { type: 'main', panelOrder: order, direction: previousConfig?.direction, mainWidthPercent: previousConfig?.mainWidthPercent };
 }
 
 // ─── Build Snap Config ──────────────────────────────────────────────────────
@@ -465,9 +471,10 @@ export function buildSnapConfig(
 ): LayoutConfig {
   const others = tabOrder.filter((id) => id !== snappedId);
   const n = tabOrder.length;
+  if (n <= 1) return { type: 'single', panelOrder: [...tabOrder] };
 
   if (n === 2) {
-    const dir = zone === 'center' ? 'left' : zone;
+    const dir = zone === 'center' ? 'left' : zone.includes('-') ? (zone.endsWith('left') ? 'left' : 'right') : zone;
     return {
       type: 'split',
       direction: dir,
@@ -527,7 +534,14 @@ export function buildSnapConfig(
   }
 
   // 5+: main layout with the snapped panel as main
-  return { type: 'main', panelOrder: [snappedId, ...others], mainWidthPercent: currentConfig?.mainWidthPercent };
+  const direction = zone === 'center' ? currentConfig?.direction ?? 'left' : zone.includes('-') ? (zone.endsWith('left') ? 'left' : 'right') : zone;
+  return { type: 'main', direction, panelOrder: [snappedId, ...others], mainWidthPercent: currentConfig?.mainWidthPercent };
+}
+
+/** Shared by the drag preview and commit; the drop selects the moved panel. */
+export function computeSnapLayout(tabOrder: string[], snappedId: string, zone: SnapZone, currentConfig: LayoutConfig | null, stealFraction: StealFraction, sideFractions?: number[]) {
+  const layoutConfig = buildSnapConfig(tabOrder, snappedId, zone, currentConfig);
+  return { layoutConfig, panelRects: computeRects(layoutConfig, snappedId, stealFraction, sideFractions) };
 }
 
 // ─── Snap Zone Detection ────────────────────────────────────────────────────
@@ -539,7 +553,9 @@ export function detectSnapZone(
   containerHeight: number,
   panelCount: number,
 ): SnapZone | null {
-  if (containerWidth === 0 || containerHeight === 0) return null;
+  if (containerWidth <= 0 || containerHeight <= 0 || !Number.isFinite(mouseX + mouseY)
+    || mouseX < 0 || mouseY < 0 || mouseX > containerWidth || mouseY > containerHeight) return null;
+  if (panelCount <= 1) return 'center';
 
   const mx = mouseX / containerWidth;
   const my = mouseY / containerHeight;
@@ -842,7 +858,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       layoutConfig = {
         ...layoutConfig,
         mainWidthPercent: normalizeMainWidth(layoutConfig.mainWidthPercent
-          ?? (layoutConfig.type === 'main' ? panelRects.get(layoutConfig.panelOrder[0])?.w : undefined)),
+          ?? (layoutConfig.type === 'main' ? (layoutConfig.direction === 'top' || layoutConfig.direction === 'bottom'
+            ? panelRects.get(layoutConfig.panelOrder[0])?.h : panelRects.get(layoutConfig.panelOrder[0])?.w) : undefined)),
       };
     }
     set((state) => ({
@@ -966,12 +983,14 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     // Main+sidebar widths belong to the layout, not to the focused panel.
     // Only capture the main/sidebar gutter, not dividers inside the bottom strip.
     const type = state.layoutConfig.type;
-    if ((type === 'main' || type === 'grid') && gutterAxis === 'x') {
+    const vertical = state.layoutConfig.direction === 'top' || state.layoutConfig.direction === 'bottom';
+    if ((type === 'main' || type === 'grid') && gutterAxis === (vertical ? 'y' : 'x')) {
       const [mainId, ...otherIds] = state.layoutConfig.panelOrder;
-      if (gutterBefore.includes(mainId) && otherIds.slice(0, 4).some(id => gutterAfter.includes(id))) {
+      const neighbours = gutterBefore.includes(mainId) ? gutterAfter : gutterAfter.includes(mainId) ? gutterBefore : [];
+      if (otherIds.slice(0, 4).some(id => neighbours.includes(id))) {
         set({ layoutConfig: {
           ...state.layoutConfig,
-          mainWidthPercent: normalizeMainWidth(state.panelRects.get(mainId)?.w),
+          mainWidthPercent: normalizeMainWidth(vertical ? state.panelRects.get(mainId)?.h : state.panelRects.get(mainId)?.w),
         } });
       }
       return;
@@ -981,9 +1000,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     // dragged heights as per-SLOT fractions and leave stealFraction alone —
     // deriveStealFraction reads the main panel here and would corrupt the
     // fraction used by the 2-4 panel layouts.
-    if ((type === 'main' || type === 'grid') && gutterAxis === 'y') {
+    if ((type === 'main' || type === 'grid') && gutterAxis === (vertical ? 'x' : 'y')) {
       const sideIds = state.layoutConfig.panelOrder.slice(1, 5);
-      const heights = sideIds.map((id) => state.panelRects.get(id)?.h ?? 0);
+      const heights = sideIds.map((id) => (vertical ? state.panelRects.get(id)?.w : state.panelRects.get(id)?.h) ?? 0);
       if (heights.every((h) => h > 0)) {
         set({ sidebarSlotFractions: heights });
       }
@@ -1016,8 +1035,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
   applySnap: (snappedId: string, zone: SnapZone) => {
     const state = get();
-    const config = buildSnapConfig(state.tabOrder, snappedId, zone, state.layoutConfig);
-    const rects = computeRects(config, state.focusedId, state.stealFraction, state.sidebarSlotFractions);
-
-    set({ layoutConfig: config, panelRects: rects });  },
+    if (!state.tabOrder.includes(snappedId)) return;
+    const geometry = computeSnapLayout(state.tabOrder, snappedId, zone, state.layoutConfig, state.stealFraction, state.sidebarSlotFractions);
+    set({ ...geometry, focusedId: snappedId, activeTabId: snappedId, maximizedId: null });  },
 }));

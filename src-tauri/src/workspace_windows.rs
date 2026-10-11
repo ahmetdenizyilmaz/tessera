@@ -32,7 +32,8 @@ pub fn create_main(app: &tauri::App) -> tauri::Result<()> {
 pub struct WindowBounds { pub x: i32, pub y: i32, pub width: u32, pub height: u32 }
 
 #[derive(Serialize)]
-pub struct DropTarget { pub label: Option<String>, pub x: f64, pub y: f64 }
+#[serde(rename_all = "camelCase")]
+pub struct DropTarget { pub label: Option<String>, pub x: f64, pub y: f64, pub client_x: Option<f64>, pub client_y: Option<f64> }
 
 #[cfg(windows)]
 fn window_under_pointer(x: f64, y: f64) -> isize {
@@ -48,6 +49,7 @@ pub async fn workspace_drop_target(app: tauri::AppHandle) -> Result<DropTarget, 
     let cursor = main.cursor_position().map_err(|e| e.to_string())?;
     #[cfg(windows)] let hit = window_under_pointer(cursor.x, cursor.y);
     let mut label = None;
+    let mut client = (None, None);
     for (name, window) in app.windows() {
         if name != "main" && !name.starts_with("workspace-") { continue; }
         if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(true) { continue; }
@@ -57,10 +59,13 @@ pub async fn workspace_drop_target(app: tauri::AppHandle) -> Result<DropTarget, 
         let size = window.outer_size().map_err(|e| e.to_string())?;
         if cursor.x >= pos.x as f64 && cursor.y >= pos.y as f64 && cursor.x < pos.x as f64 + size.width as f64 && cursor.y < pos.y as f64 + size.height as f64 {
             label = Some(name);
+            let inner = window.inner_position().map_err(|e| e.to_string())?;
+            let scale = window.scale_factor().map_err(|e| e.to_string())?;
+            client = (Some((cursor.x - inner.x as f64) / scale), Some((cursor.y - inner.y as f64) / scale));
             break;
         }
     }
-    Ok(DropTarget { label, x: cursor.x, y: cursor.y })
+    Ok(DropTarget { label, x: cursor.x, y: cursor.y, client_x: client.0, client_y: client.1 })
 }
 
 #[tauri::command]

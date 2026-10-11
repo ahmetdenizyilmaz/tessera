@@ -2,8 +2,7 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   useLayoutStore,
   computeGutters,
-  computeRects,
-  buildSnapConfig,
+  computeSnapLayout,
   detectSnapZone,
   type Gutter,
 } from '../../store/layoutStore';
@@ -17,7 +16,8 @@ import { GroupPreview } from '../groups/GroupPreview';
 import { PluginPanel } from '../plugins/PluginPanel';
 import { RemotePanel } from '../lan/RemotePanel';
 import { SnapZoneOverlay } from './SnapZoneOverlay';
-import { finishWindowTabDrag, setWindowTabDragging } from '../../lib/workspaceWindows';
+import { beginWindowPanelDrag, endWindowPanelDrag, finishWindowTabDrag } from '../../lib/workspaceWindows';
+import { useWindowDragStore } from '../../store/windowDragStore';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
@@ -148,16 +148,17 @@ export function MosaicLayout() {
 
   // Display rects: preview snap layout during drag
   const sidebarSlotFractions = useLayoutStore((s) => s.sidebarSlotFractions);
-  const displayRects = useMemo((): Map<string, PanelRect> => {
-    if (draggingId && layoutConfig) {
-      if (activeSnap) {
-        const preview = buildSnapConfig(tabOrder, draggingId, activeSnap, layoutConfig);
-        return computeRects(preview, focusedId, stealFraction, sidebarSlotFractions);
-      }
-      return computeRects(layoutConfig, focusedId, stealFraction, sidebarSlotFractions);
-    }
-    return panelRects;
-  }, [draggingId, activeSnap, tabOrder, layoutConfig, panelRects, stealFraction, focusedId, sidebarSlotFractions]);
+  const nativeTarget = useWindowDragStore(s => s.drag?.targetLabel);
+  // Keep the real panels stationary until release. Preview and commit share
+  // the same geometry, including focus sizes and the actual panel count.
+  const displayRects = panelRects;
+  const snapPreview = useMemo(() => {
+    const id = sidebarDragging ? '__sidebar-preview__' : draggingId;
+    const zone = sidebarDragging ? sidebarDragSnap : activeSnap;
+    if (!id || !zone || (!sidebarDragging && nativeTarget !== undefined && nativeTarget !== 'main')) return null;
+    const order = sidebarDragging ? [...tabOrder, id] : tabOrder;
+    return { id, ...computeSnapLayout(order, id, zone, layoutConfig, stealFraction, sidebarSlotFractions) };
+  }, [sidebarDragging, sidebarDragSnap, draggingId, activeSnap, nativeTarget, tabOrder, layoutConfig, stealFraction, sidebarSlotFractions]);
 
   // Override rects during group enter/exit animation
   const animatedRects = useMemo((): Map<string, PanelRect> => {
@@ -208,6 +209,7 @@ export function MosaicLayout() {
   const handleGutterDown = useCallback((e: React.PointerEvent, gutter: Gutter) => {
     e.stopPropagation();
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     const currentRects = useLayoutStore.getState().panelRects;
     resizeRef.current = {
       gutter,
@@ -235,7 +237,19 @@ export function MosaicLayout() {
     if (!panel) return;
     const panelId = panel.dataset.panelId!;
 
-    // For group panels, always enter on click (focused or not)
+    // Headers must get a chance to drag before a group click enters it.
+    const toolbar = target.closest('.terminal-toolbar');
+    if (toolbar) {
+      e.preventDefault();
+      target.setPointerCapture(e.pointerId);
+      dragState.current = {
+        panelId, startX: e.clientX, startY: e.clientY,
+        started: false, currentSnap: null, returnToSidebar: false,
+      };
+      return;
+    }
+
+    // Clicking a group body enters it.
     const currentPanelType = useLayoutStore.getState().panelTypes[panelId];
     if (currentPanelType === 'group') {
       useGroupStore.getState().enterGroup(panelId);
@@ -246,21 +260,6 @@ export function MosaicLayout() {
     if (target.classList.contains('unfocused-overlay')) {
       startResizeLock();
       setFocused(panelId);
-      return;
-    }
-
-    const toolbar = target.closest('.terminal-toolbar');
-
-    // Start drag from toolbar
-    if (toolbar) {
-      dragState.current = {
-        panelId,
-        startX: e.clientX,
-        startY: e.clientY,
-        started: false,
-        currentSnap: null,
-        returnToSidebar: false,
-      };
       return;
     }
 
@@ -330,13 +329,13 @@ export function MosaicLayout() {
           setDraggingId(ds.panelId);
           document.body.style.userSelect = 'none';
           document.body.style.cursor = 'default';
-          setWindowTabDragging(true);
+          beginWindowPanelDrag(ds.panelId, 'main', e, 'panel');
         }
 
         // Detect drag-to-sidebar for widget panels
         const panelType = useLayoutStore.getState().panelTypes[ds.panelId];
         const isWidget = panelType === 'widget';
-        if (isWidget && e.clientX < 50) {
+        if (isWidget && e.clientX >= 0 && e.clientX < 50 && e.clientY >= 0 && e.clientY <= window.innerHeight) {
           ds.returnToSidebar = true;
           ds.currentSnap = null;
           setActiveSnap(null);
@@ -383,7 +382,7 @@ export function MosaicLayout() {
         dragState.current = null;
         if (ds.started) {
           const moved = await finishWindowTabDrag(ds.panelId);
-          setWindowTabDragging(false);
+          endWindowPanelDrag();
           if (moved) {
             setDraggingId(null); setActiveSnap(null);
             useLayoutStore.getState().setDragReturnToSidebar(false);
@@ -400,6 +399,10 @@ export function MosaicLayout() {
           startResizeLock();
           applySnapRef.current(ds.panelId, ds.currentSnap);
         } else if (!ds.started) {
+          if (useLayoutStore.getState().panelTypes[ds.panelId] === 'group') {
+            useGroupStore.getState().enterGroup(ds.panelId);
+            return;
+          }
           // An already focused panel does not resize. Locking it here swallowed
           // the second click on its title, preventing double-click rename.
           if (useLayoutStore.getState().focusedId !== ds.panelId) {
@@ -419,11 +422,25 @@ export function MosaicLayout() {
       // Sidebar widget drag end is now handled by Sidebar component directly
     };
 
+    const cancel = () => {
+      if (resizeRef.current) setRawPanelRectsRef.current(resizeRef.current.startRects);
+      resizeRef.current = null;
+      dragState.current = null;
+      setGutterDragging(false); setDraggingId(null); setActiveSnap(null);
+      useLayoutStore.getState().setDragReturnToSidebar(false);
+      endWindowPanelDrag();
+      document.body.style.userSelect = ''; document.body.style.cursor = '';
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && (dragState.current || resizeRef.current)) { e.preventDefault(); cancel(); } };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', onKey);
     };
   }, [startResizeLock]);
 
@@ -444,7 +461,7 @@ export function MosaicLayout() {
   return (
     <div
       ref={containerRef}
-      className={'mosaic-container' + (gutterDragging ? ' mosaic-gutter-dragging' : '')}
+      className={'mosaic-container' + (gutterDragging ? ' mosaic-gutter-dragging' : '') + (draggingId ? ' mosaic-panel-dragging' : '')}
       onPointerDown={handlePointerDown}
     >
       {/* Panels */}
@@ -578,8 +595,8 @@ export function MosaicLayout() {
       })}
 
       {/* Snap zone highlight during tab drag or sidebar drag */}
-      {((activeSnap && draggingId) || (sidebarDragSnap && sidebarDragging)) && containerSize.width > 0 && (
-        <SnapZoneOverlay zone={(sidebarDragging ? sidebarDragSnap : activeSnap)!} containerRect={containerSize} />
+      {snapPreview && containerSize.width > 0 && (
+        <SnapZoneOverlay rects={snapPreview.panelRects} targetId={snapPreview.id} />
       )}
     </div>
   );
