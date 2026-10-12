@@ -14,7 +14,7 @@ import { installTerminalCursorGuard } from '../../lib/terminalCursor';
 import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
 import { terminalPlatform } from '../../lib/terminalPlatform';
 import { createTerminalResize } from '../../lib/terminalResize';
-import { activateTerminalLink } from '../../lib/terminalLinks';
+import { installTerminalPathLinks, localTerminalLinkHandler } from '../../lib/terminalPaths';
 import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
 import { terminalTheme } from '../../lib/terminalTheme';
@@ -167,6 +167,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       terminalSizes.delete(instanceId);
     }
 
+    const getCwd = () => useInstanceStore.getState().instances.get(instanceId)?.config.cwd;
+    const activateLink = localTerminalLinkHandler(getCwd);
     // Create Terminal
     const terminal = new Terminal({
       ...platform,
@@ -178,12 +180,12 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       cursorStyle: 'block',
       allowTransparency: true,
       scrollback: 10000,
-      linkHandler: { activate: activateTerminalLink },
+      linkHandler: { activate: activateLink, allowNonHttpProtocols: true },
     });
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon(activateTerminalLink);
+    const webLinksAddon = new WebLinksAddon(activateLink);
     const serializeAddon = new SerializeAddon();
 
     terminal.loadAddon(fitAddon);
@@ -192,6 +194,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    const pathLinks = installTerminalPathLinks(terminal, getCwd);
     const unshare = registerSharedTerminal(instanceId, terminal, serializeAddon);
     const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
     const cursorGuard = installTerminalCursorGuard(terminal, () => {
@@ -518,6 +521,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
       dataDisposable.dispose();
       unsubscribeCursor();
+      pathLinks.dispose();
       cursorGuard.dispose();
       scrollGuard.dispose();
       if (useInstanceStore.getState().instances.has(instanceId)) {

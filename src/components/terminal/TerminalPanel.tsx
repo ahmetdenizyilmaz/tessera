@@ -9,6 +9,7 @@ import { restartPty } from "../../hooks/usePty";
 import { useEventBusStore } from "../../store/eventBusStore";
 import { invoke } from "@tauri-apps/api/core";
 import { XTermView } from "./XTermView";
+import { PathCwdContext } from '../../lib/openPath';
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import ChatView from "../chat/ChatView";
 import { History } from "lucide-react";
@@ -31,11 +32,12 @@ export function TerminalPanel({ instanceId }: { instanceId: string }) {
   const provider = useInstanceStore(
     (s) => s.instances.get(instanceId)?.config.agentProvider,
   );
-  return provider === 'antigravity' ? <AntigravityPanel instanceId={instanceId} /> : provider === 'opencode' ? <OpenCodePanel instanceId={instanceId} /> : provider === "codex" ? (
+  const cwd = useInstanceStore(s => s.instances.get(instanceId)?.config.cwd);
+  return <PathCwdContext.Provider value={cwd}>{provider === 'antigravity' ? <AntigravityPanel instanceId={instanceId} /> : provider === 'opencode' ? <OpenCodePanel instanceId={instanceId} /> : provider === "codex" ? (
     <CodexPanel instanceId={instanceId} />
   ) : (
     <ClaudeTerminalPanel instanceId={instanceId} />
-  );
+  )}</PathCwdContext.Provider>;
 }
 function ClaudeTerminalPanel({ instanceId }: { instanceId: string }) {
   const instance = useInstanceStore((s) => s.instances.get(instanceId));

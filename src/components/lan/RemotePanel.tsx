@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Monitor, RefreshCw, Send, WifiOff, X } from 'lucide-react';
 import { MarkdownRenderer } from '../chat/MarkdownRenderer';
+import { PathCwdContext } from '../../lib/openPath';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { closePanel } from '../../lib/panelCleanup';
@@ -134,7 +135,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
               border: '1px solid var(--border)', fontSize: 12,
             }}>
               <div style={{ fontSize: 9, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>{role}</div>
-              <MarkdownRenderer content={messageText(message)} />
+              <PathCwdContext.Provider value={null}><MarkdownRenderer content={messageText(message)} /></PathCwdContext.Provider>
             </div>
           );
         })}

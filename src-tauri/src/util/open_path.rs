@@ -22,12 +22,15 @@ pub struct OpenedPath {
 fn clean(raw: &str) -> String {
     let mut s = raw.trim().trim_matches(|c| matches!(c, '"' | '\'' | '`' | '<' | '>' | '(' | ')' | '[' | ']' | ',' | ';')).to_string();
     // "file.rs:12:3" and "file.rs#L12" point at a line, not a different file.
-    if let Some(idx) = s.rfind('#') { if s[idx + 1..].starts_with('L') { s.truncate(idx); } }
+    if let Some(idx) = s.rfind('#') { if s[idx + 1..].strip_prefix('L').is_some_and(|line| !line.is_empty() && line.chars().all(|c| c.is_ascii_digit() || c == '-' || c == 'L')) { s.truncate(idx); } }
     loop {
         let Some(idx) = s.rfind(':') else { break };
         if idx > 1 && s[idx + 1..].chars().all(|c| c.is_ascii_digit()) && !s[idx + 1..].is_empty() { s.truncate(idx); } else { break; }
     }
-    s.trim_end_matches(['/', '\\']).to_string()
+    // Keep / and C:\ intact: stripping the final slash changes a root into
+    // an empty or drive-relative path.
+    while s.ends_with(['/', '\\']) && s.len() > 1 && !(s.len() == 3 && s.as_bytes()[1] == b':') { s.pop(); }
+    s
 }
 
 fn expand_home(s: &str, home: Option<&Path>) -> Option<PathBuf> {
@@ -38,8 +41,15 @@ fn expand_home(s: &str, home: Option<&Path>) -> Option<PathBuf> {
 
 /// The places a written path may refer to, in the order they are tried.
 pub fn candidates(raw: &str, cwd: Option<&Path>, home: Option<&Path>, drives: &[PathBuf]) -> Vec<(String, PathBuf)> {
+    if raw.trim().to_ascii_lowercase().starts_with("file:") {
+        return tauri::Url::parse(raw.trim()).ok().and_then(|mut url| {
+            if url.scheme() != "file" || url.query().is_some() { return None; }
+            url.set_fragment(None);
+            url.to_file_path().ok()
+        }).map(|path| vec![("absolute".into(), path)]).unwrap_or_default();
+    }
     let s = clean(raw);
-    if s.is_empty() { return vec![]; }
+    if s.is_empty() || s.chars().any(char::is_control) || s.contains("://") { return vec![]; }
     let mut out: Vec<(String, PathBuf)> = vec![];
     let mut push = |base: &str, p: PathBuf| { if !out.iter().any(|(_, q)| *q == p) { out.push((base.into(), p)); } };
     if let Some(p) = expand_home(&s, home) { push("home", p); return out; }
@@ -111,16 +121,18 @@ fn show(target: &OpenedPath) -> Result<(), String> {
 /// Open the first existing match for `path` in the file manager. `cwd` is the
 /// panel's working folder. Returns what was opened, or `None` when nothing matched.
 #[tauri::command]
-pub fn open_path_smart(path: String, cwd: Option<String>) -> Result<Option<OpenedPath>, String> {
-    let Some(target) = resolve(&path, cwd.as_deref().map(Path::new)) else { return Ok(None) };
-    show(&target)?;
-    Ok(Some(target))
+pub async fn open_path_smart(path: String, cwd: Option<String>) -> Result<Option<OpenedPath>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(target) = resolve(&path, cwd.as_deref().map(Path::new)) else { return Ok(None) };
+        show(&target)?;
+        Ok(Some(target))
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// Resolve without opening, for showing which paths in a message exist.
 #[tauri::command]
-pub fn resolve_path_smart(path: String, cwd: Option<String>) -> Option<OpenedPath> {
-    resolve(&path, cwd.as_deref().map(Path::new))
+pub async fn resolve_path_smart(path: String, cwd: Option<String>) -> Option<OpenedPath> {
+    tauri::async_runtime::spawn_blocking(move || resolve(&path, cwd.as_deref().map(Path::new))).await.ok().flatten()
 }
 
 #[cfg(test)]
@@ -133,6 +145,9 @@ mod tests {
         assert_eq!(clean("\"C:\\Users\\ady\\Desktop\\\""), "C:\\Users\\ady\\Desktop");
         assert_eq!(clean("(README.md#L4)"), "README.md");
         assert_eq!(clean("C:\\x\\y"), "C:\\x\\y", "a drive colon is not a line number");
+        assert_eq!(clean("C:\\"), "C:\\");
+        assert_eq!(clean("/"), "/");
+        assert_eq!(clean("./"), ".");
     }
 
     #[test]
@@ -165,6 +180,16 @@ mod tests {
         let folder = resolve(&dir.join("inner").to_string_lossy(), None).expect("absolute folder");
         assert!(folder.is_dir);
         assert!(resolve("definitely/not/here", Some(&dir)).is_none());
+        std::fs::create_dir_all(dir.join("My Files")).unwrap();
+        let url = tauri::Url::from_directory_path(dir.join("My Files")).unwrap();
+        let linked = resolve(url.as_str(), None).expect("decoded file URL");
+        assert!(linked.is_dir);
+        assert_eq!(PathBuf::from(linked.path), dir.join("My Files"));
+        assert!(resolve("https://example.com/tmp", Some(&dir)).is_none());
+        assert!(resolve("file:///%00", None).is_none());
+        assert_eq!(resolve("inner", Some(&dir)).unwrap().base, "cwd");
+        let parent = resolve("../inner", Some(&dir.join("My Files"))).unwrap();
+        assert!(parent.is_dir);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

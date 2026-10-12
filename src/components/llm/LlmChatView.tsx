@@ -7,6 +7,7 @@ import { usePanelLayout } from '../windows/PanelWindowContext';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
 import type { LlmProvider } from '../../types/instance';
 import MarkdownRenderer from '../chat/MarkdownRenderer';
+import { PathCwdContext } from '../../lib/openPath';
 import { ProviderIcon } from '../icons/ProviderIcons';
 
 interface LlmChatViewProps {
@@ -178,7 +179,7 @@ export default function LlmChatView({ instanceId }: LlmChatViewProps) {
               {msg.role === 'user' ? (
                 <p className="msg-user-text">{msg.content}</p>
               ) : msg.content ? (
-                <MarkdownRenderer content={msg.content} />
+                <PathCwdContext.Provider value={instance?.config.cwd}><MarkdownRenderer content={msg.content} /></PathCwdContext.Provider>
               ) : msg.isStreaming ? (
                 <span className="streaming-cursor">
                   <span className="streaming-dot" />

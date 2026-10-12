@@ -15,6 +15,8 @@ import { CodexSetup } from "../src/components/codex/CodexSetup";
 import { GeneralSettings } from "../src/components/settings/GeneralSettings";
 import { AgentPanelHeader } from "../src/components/terminal/AgentPanelHeader";
 import { ChatInput } from "../src/components/chat/ChatInput";
+import { MarkdownRenderer } from '../src/components/chat/MarkdownRenderer';
+import { PathCwdContext } from '../src/lib/openPath';
 import { useInstanceStore } from "../src/store/instanceStore";
 import { useCodexStore } from "../src/store/codexStore";
 import { useSettingsStore } from "../src/store/settingsStore";
@@ -51,6 +53,11 @@ window.pick = ["C:\\images\\example.png"];
 mockIPC(
   async (command, args) => {
     window.calls.push({ command, args });
+    if (command === 'resolve_path_smart' || command === 'open_path_smart') {
+      const found = window.pathFixtures?.[`${args.cwd ?? ''}|${args.path}`] ?? null;
+      if (window.pathLookupDelay) await new Promise(resolve => setTimeout(resolve, window.pathLookupDelay));
+      return found;
+    }
     if (command === 'workspace_drop_target') return window.dropTarget;
     if (command === 'workspace_window_destroy') workspaceWindows.detachedViews.get(args.label.slice(10))?.close();
     // Optional binding supplied only by an opt-in native PTY diagnostic.
@@ -170,6 +177,9 @@ window.showCodexSetup = (panelView) => {
   createRoot(node).render(<CodexSetup wizardId="permissions-wizard" />);
 };
 const root = createRoot(document.getElementById("root"));
+window.showPathMarkdown = panels => root.render(<>{panels.map(({ cwd, content }, i) =>
+  <PathCwdContext.Provider key={i} value={cwd}><div data-testid={`path-chat-${i}`}><MarkdownRenderer content={content} /></div></PathCwdContext.Provider>
+)}</>);
 window.showEmptyMosaic = () => {
   root.render(<div style={{ width: '100vw', height: '100vh' }}><MosaicLayout /></div>);
 };

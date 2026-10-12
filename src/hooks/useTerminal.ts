@@ -3,12 +3,14 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { activateTerminalLink } from '../lib/terminalLinks';
+import { installTerminalPathLinks, localTerminalLinkHandler } from '../lib/terminalPaths';
+import { useInstanceStore } from '../store/instanceStore';
 
 interface TerminalEntry {
   terminal: Terminal;
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
+  pathLinks: { dispose(): void };
 }
 
 // Module-level map: persists across re-renders
@@ -23,6 +25,8 @@ export function useTerminal() {
       destroyTerminal(id);
     }
 
+    const getCwd = () => useInstanceStore.getState().instances.get(id)?.config.cwd;
+    const activateLink = localTerminalLinkHandler(getCwd);
     const terminal = new Terminal({
       theme: {
         background: '#1a1a2e',
@@ -52,12 +56,12 @@ export function useTerminal() {
       cursorStyle: 'block',
       allowTransparency: true,
       scrollback: 10000,
-      linkHandler: { activate: activateTerminalLink },
+      linkHandler: { activate: activateLink, allowNonHttpProtocols: true },
     });
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon(activateTerminalLink);
+    const webLinksAddon = new WebLinksAddon(activateLink);
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
@@ -66,7 +70,8 @@ export function useTerminal() {
     terminal.open(container);
     containerRefs.current.set(id, container);
 
-    const entry: TerminalEntry = { terminal, fitAddon, searchAddon };
+    const pathLinks = installTerminalPathLinks(terminal, getCwd);
+    const entry: TerminalEntry = { terminal, fitAddon, searchAddon, pathLinks };
     terminalMap.set(id, entry);
 
     return entry;
@@ -93,6 +98,7 @@ export function useTerminal() {
 export function destroyTerminal(id: string) {
   const entry = terminalMap.get(id);
   if (entry) {
+    entry.pathLinks.dispose();
     entry.terminal.dispose();
     terminalMap.delete(id);
   }

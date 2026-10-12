@@ -1,11 +1,11 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import AnsiToHtml from 'ansi-to-html';
 import { open } from '@tauri-apps/plugin-shell';
 import type { Components } from 'react-markdown';
-import { looksLikePath, openPath, PATH_SCHEME, remarkPaths, useChatCwd } from '../../lib/openPath';
+import { looksLikePath, openPath, resolvePath, PATH_SCHEME, remarkPaths, useChatCwd, type OpenedPath } from '../../lib/openPath';
 
 const ansiConverter = new AnsiToHtml({
   fg: '#e0e0e0',
@@ -31,20 +31,36 @@ function extractText(children: React.ReactNode): string {
   return '';
 }
 
+function LocalPathLink({ path, cwd, inline, children }: {
+  path: string; cwd: string | null | undefined; inline?: boolean; children: React.ReactNode;
+}) {
+  const [target, setTarget] = useState<OpenedPath | null>(null);
+  useEffect(() => {
+    let active = true;
+    setTarget(null);
+    if (cwd !== null) void resolvePath(path, cwd).then(found => { if (active) setTarget(found); });
+    return () => { active = false; };
+  }, [path, cwd]);
+  const Tag = inline ? 'code' : 'span';
+  return <Tag className={`${inline ? 'md-inline-code' : ''}${target ? ' md-link md-path' : ''}`}
+    role={target ? 'link' : undefined} tabIndex={target ? 0 : undefined}
+    title={target ? `${target.isDir ? 'Open folder' : 'Show file in folder'}: ${target.path}` : undefined}
+    data-path={target ? path : undefined}
+    onClick={target && cwd !== null ? () => void openPath(path, cwd) : undefined}
+    onKeyDown={target && cwd !== null ? e => { if (e.key === 'Enter') { e.preventDefault(); void openPath(path, cwd); } } : undefined}>
+    {children}
+  </Tag>;
+}
+
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
   const cwd = useChatCwd();
   const handleLinkClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
     const href = e.currentTarget.getAttribute('href') ?? '';
-    if (href.startsWith(PATH_SCHEME)) {
-      e.preventDefault();
-      void openPath(decodeURIComponent(href.slice(PATH_SCHEME.length)), cwd);
-      return;
-    }
     if (href.startsWith('http://') || href.startsWith('https://')) {
       e.preventDefault();
       open(href).catch(() => {});
     }
-  }, [cwd]);
+  }, []);
 
   const components: Components = {
     // pre: render a fragment to avoid nesting issues; code handles the wrapper
@@ -59,13 +75,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
 
       // Inline code; a path opens its folder (or reveals the file) on click.
       if (!hasLanguage) {
-        if (looksLikePath(text)) {
-          return (
-            <code className="md-inline-code md-path" role="link" tabIndex={0} title="Open in file manager" data-path={text.trim()}
-              onClick={() => void openPath(text, cwd)} onKeyDown={e => { if (e.key === 'Enter') void openPath(text, cwd); }} {...props}>
-              {children}
-            </code>
-          );
+        if (looksLikePath(text, true)) {
+          return <LocalPathLink path={text.trim()} cwd={cwd} inline>{children}</LocalPathLink>;
         }
         return (
           <code className="md-inline-code" {...props}>
@@ -116,8 +127,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
     // Links open in the browser; `path:` links open the file manager.
     a({ href, children }) {
       const isPath = href?.startsWith(PATH_SCHEME);
+      if (isPath) {
+        let path: string;
+        try { path = decodeURIComponent(href!.slice(PATH_SCHEME.length)); } catch { return <>{children}</>; }
+        return <LocalPathLink path={path} cwd={cwd}>{children}</LocalPathLink>;
+      }
       return (
-        <a href={href} onClick={handleLinkClick} className={isPath ? 'md-link md-path' : 'md-link'} rel="noreferrer" title={isPath ? 'Open in file manager' : undefined}>
+        <a href={href} onClick={handleLinkClick} className="md-link" rel="noreferrer">
           {children}
         </a>
       );
@@ -140,7 +156,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkPaths]}
         rehypePlugins={[rehypeHighlight]}
-        urlTransform={url => url.startsWith(PATH_SCHEME) ? url : defaultUrlTransform(url)}
+        urlTransform={(url, key) => key === 'href' && !url.startsWith('#') && (url.startsWith(PATH_SCHEME) || looksLikePath(url, true))
+          ? url.startsWith(PATH_SCHEME) ? url : PATH_SCHEME + encodeURIComponent(url)
+          : defaultUrlTransform(url)}
         components={components}
       >
         {content}
