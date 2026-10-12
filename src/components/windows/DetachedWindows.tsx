@@ -36,7 +36,7 @@ function DetachedTab({ id, active, select, menu }: { id: string; active: boolean
     className={`detached-tab ${active ? 'detached-tab-active' : ''}`} data-tab-id={id}
     style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? .5 : 1 }}
     onClick={select} onContextMenu={e => { e.preventDefault(); menu(e.clientX, e.clientY); }} title={`${panelName(id)} — drag to move between windows`}>
-    <span>{panelName(id)}</span><button aria-label={`Close ${panelName(id)}`} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void closePanel(id); }}><X size={13} /></button>
+    <span>{panelName(id)}</span><button type="button" className="tab-close-btn" aria-label={`Close ${panelName(id)}`} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); void closePanel(id); }}><X size={14} strokeWidth={1.8} aria-hidden="true" /></button>
   </div>;
 }
 

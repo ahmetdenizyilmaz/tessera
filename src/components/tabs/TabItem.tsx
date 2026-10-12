@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle, Plus, Monitor, Activity } from 'lucide-react';
+import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle, Plus, Monitor, Activity, X } from 'lucide-react';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -240,13 +240,14 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
         </span>
       )}
       <button
+        type="button"
         className="tab-close-btn"
         onClick={handleClose}
         onPointerDown={(e) => e.stopPropagation()}
         aria-label={isRemoteGroup ? 'Close remote group locally' : isGroup ? 'Close group and all panels' : isRemote ? 'Close remote panel locally' : 'Close'}
         title={isRemoteGroup ? 'Close group locally (all host panels keep running)' : isGroup ? 'Close group and all panels inside' : isRemote ? 'Close locally (keeps running on host)' : 'Close'}
       >
-        {'\u00D7'}
+        <X size={14} strokeWidth={1.8} aria-hidden="true" />
       </button>
     </div>
   );

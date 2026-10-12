@@ -286,28 +286,47 @@ body,
 }
 
 .tab-close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.65;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 
-.tab-item:hover .tab-close-btn {
+.tab-close-btn svg {
+  display: block;
+  pointer-events: none;
+}
+
+.tab-item:hover .tab-close-btn,
+.tab-item-active .tab-close-btn,
+.detached-tab:hover .tab-close-btn,
+.detached-tab-active .tab-close-btn,
+.tab-close-btn:focus-visible {
   opacity: 1;
 }
 
 .tab-close-btn:hover {
-  background: var(--error);
-  color: white;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.tab-close-btn:active {
+  background: color-mix(in srgb, var(--text-primary) 20%, transparent);
+}
+
+.tab-close-btn:focus-visible {
+  outline-offset: 1px;
 }
 
 /* ======================================
