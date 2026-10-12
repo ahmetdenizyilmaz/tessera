@@ -40,6 +40,7 @@ pub fn build_request(
                 "model": model,
                 "messages": messages,
                 "stream": true,
+                "stream_options": { "include_usage": true },
             });
             if let Some(temp) = temperature {
                 body["temperature"] = serde_json::json!(temp);
@@ -220,6 +221,39 @@ pub fn parse_sse_chunk(provider: &str, line: &str) -> Option<String> {
     }
 }
 
+/// Stream usage frames are cumulative, never added together. Reasoning is
+/// already part of completion tokens; cached input is a subset of prompt tokens.
+pub fn parse_usage(provider: &str, line: &str, previous: Option<&crate::activity::model::Usage>) -> Option<crate::activity::model::Usage> {
+    use crate::activity::model::Usage;
+    let data = if provider == "ollama" { line } else { line.strip_prefix("data:")?.trim() };
+    let v: Value = serde_json::from_str(data).ok()?;
+    if provider == "anthropic" {
+        let u = if v["type"] == "message_start" { &v["message"]["usage"] } else { &v["usage"] };
+        if !u.is_object() { return None; }
+        let mut usage = previous.cloned().unwrap_or_default();
+        if let Some(n) = u["input_tokens"].as_u64() { usage.input = n; }
+        if let Some(n) = u["output_tokens"].as_u64() { usage.output = n; }
+        if let Some(n) = u["cache_read_input_tokens"].as_u64() { usage.cache_read = n; }
+        if let Some(n) = u["cache_creation_input_tokens"].as_u64() { usage.cache_write = n; }
+        return Some(usage);
+    }
+    if provider == "gemini" {
+        let u=&v["usageMetadata"];
+        let input=u["promptTokenCount"].as_u64()?;
+        let cache=u["cachedContentTokenCount"].as_u64().unwrap_or(0).min(input);
+        let reasoning=u["thoughtsTokenCount"].as_u64().unwrap_or(0);
+        return Some(Usage {input:input-cache,output:u["candidatesTokenCount"].as_u64().unwrap_or(0)+reasoning,cache_read:cache,reasoning,..Usage::default()});
+    }
+    if provider == "ollama" {
+        return Some(Usage {input:v["prompt_eval_count"].as_u64()?,output:v["eval_count"].as_u64().unwrap_or(0),..Usage::default()});
+    }
+    let u=&v["usage"];
+    let input=u["prompt_tokens"].as_u64()?;
+    let cache=u["prompt_tokens_details"]["cached_tokens"].as_u64().unwrap_or(0).min(input);
+    let output=u["completion_tokens"].as_u64().unwrap_or(0);
+    Some(Usage {input:input-cache,output,cache_read:cache,reasoning:u["completion_tokens_details"]["reasoning_tokens"].as_u64().unwrap_or(0).min(output),..Usage::default()})
+}
+
 pub fn list_models_url(provider: &str, base_url: &str) -> String {
     let base = base_url.trim_end_matches('/');
     match provider {
@@ -279,5 +313,37 @@ pub fn parse_model_list(provider: &str, body_json: &Value) -> Vec<String> {
             })
             .unwrap_or_default(),
         _ => vec![],
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+    #[test]
+    fn openrouter_cached_and_reasoning_tokens_are_not_counted_twice() {
+        let line=r#"data: {"choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":200,"prompt_tokens_details":{"cached_tokens":600},"completion_tokens_details":{"reasoning_tokens":150}}}"#;
+        let u=parse_usage("openrouter",line,None).unwrap();
+        assert_eq!((u.input,u.cache_read,u.output,u.reasoning,u.total()),(400,600,200,150,1200));
+        assert!(parse_usage("openrouter","data: [DONE]",Some(&u)).is_none());
+        assert_eq!(parse_usage("openrouter",line,Some(&u)).unwrap(),u);
+    }
+    #[test]
+    fn anthropic_partial_usage_preserves_input_and_cache() {
+        let first=parse_usage("anthropic",r#"data: {"type":"message_start","message":{"usage":{"input_tokens":100,"output_tokens":1,"cache_read_input_tokens":500,"cache_creation_input_tokens":50}}}"#,None).unwrap();
+        let end=parse_usage("anthropic",r#"data: {"type":"message_delta","usage":{"output_tokens":45}}"#,Some(&first)).unwrap();
+        assert_eq!((end.input,end.output,end.cache_read,end.cache_write),(100,45,500,50));
+    }
+    #[test]
+    fn unreported_usage_remains_missing_and_native_formats_normalize() {
+        assert!(parse_usage("openrouter",r#"data: {"choices":[{"delta":{"content":"hi"}}]}"#,None).is_none());
+        let gemini=parse_usage("gemini",r#"data: {"usageMetadata":{"promptTokenCount":200,"cachedContentTokenCount":100,"candidatesTokenCount":50,"thoughtsTokenCount":30}}"#,None).unwrap();
+        assert_eq!(gemini.total(),280);
+        assert_eq!(parse_usage("ollama",r#"{"done":true,"prompt_eval_count":10,"eval_count":5}"#,None).unwrap().total(),15);
+    }
+    #[test]
+    fn openrouter_requests_final_stream_usage() {
+        let req=build_request(&reqwest::Client::new(),"openrouter","http://localhost",None,"test","[]","",None).unwrap().build().unwrap();
+        let body:Value=serde_json::from_slice(req.body().unwrap().as_bytes().unwrap()).unwrap();
+        assert_eq!(body["stream_options"]["include_usage"],true);
     }
 }

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "shop-lamp-desk",
+  "name": "Warm floor lamp",
+  "description": "Warm floor lamp. A place for your team to work and recharge.",
+  "category": "decoration",
+  "price": 40,
+  "sprite": "lamp",
+  "furnitureType": "lamp",
+  "footprint": {
+    "w": 1,
+    "h": 1
+  },
+  "collision": [
+    [
+      0,
+      0
+    ]
+  ],
+  "anchor": {
+    "x": 128,
+    "y": 75
+  },
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"115.20,91.00 128.00,97.40 128.00,94.84 115.20,88.44\" fill=\"#48565c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"140.80,91.00 128.00,97.40 128.00,94.84 140.80,88.44\" fill=\"#56666e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,82.04 140.80,88.44 128.00,94.84 115.20,88.44\" fill=\"#647780\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"126.72,88.44 128.00,89.08 128.00,49.08 126.72,48.44\" fill=\"#87785a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"129.28,88.44 128.00,89.08 128.00,49.08 129.28,48.44\" fill=\"#a1906c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,47.80 129.28,48.44 128.00,49.08 126.72,48.44\" fill=\"#bba77d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"110.08,49.40 128.00,58.36 128.00,49.40 110.08,40.44\" fill=\"#b09e76\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"145.92,49.40 128.00,58.36 128.00,49.40 145.92,40.44\" fill=\"#d2bd8d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,31.48 145.92,40.44 128.00,49.40 110.08,40.44\" fill=\"#f4dca4\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"115.20,91.00 128.00,97.40 128.00,94.84 115.20,88.44\" fill=\"#48565c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"140.80,91.00 128.00,97.40 128.00,94.84 140.80,88.44\" fill=\"#56666e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,82.04 140.80,88.44 128.00,94.84 115.20,88.44\" fill=\"#647780\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"126.72,88.44 128.00,89.08 128.00,49.08 126.72,48.44\" fill=\"#87785a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"129.28,88.44 128.00,89.08 128.00,49.08 129.28,48.44\" fill=\"#a1906c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,47.80 129.28,48.44 128.00,49.08 126.72,48.44\" fill=\"#bba77d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"110.08,49.40 128.00,58.36 128.00,49.40 110.08,40.44\" fill=\"#b09e76\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"145.92,49.40 128.00,58.36 128.00,49.40 145.92,40.44\" fill=\"#d2bd8d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,31.48 145.92,40.44 128.00,49.40 110.08,40.44\" fill=\"#f4dca4\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"115.20,91.00 128.00,97.40 128.00,94.84 115.20,88.44\" fill=\"#48565c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"140.80,91.00 128.00,97.40 128.00,94.84 140.80,88.44\" fill=\"#56666e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,82.04 140.80,88.44 128.00,94.84 115.20,88.44\" fill=\"#647780\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"126.72,88.44 128.00,89.08 128.00,49.08 126.72,48.44\" fill=\"#87785a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"129.28,88.44 128.00,89.08 128.00,49.08 129.28,48.44\" fill=\"#a1906c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,47.80 129.28,48.44 128.00,49.08 126.72,48.44\" fill=\"#bba77d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"110.08,49.40 128.00,58.36 128.00,49.40 110.08,40.44\" fill=\"#b09e76\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"145.92,49.40 128.00,58.36 128.00,49.40 145.92,40.44\" fill=\"#d2bd8d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,31.48 145.92,40.44 128.00,49.40 110.08,40.44\" fill=\"#f4dca4\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"115.20,91.00 128.00,97.40 128.00,94.84 115.20,88.44\" fill=\"#48565c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"140.80,91.00 128.00,97.40 128.00,94.84 140.80,88.44\" fill=\"#56666e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,82.04 140.80,88.44 128.00,94.84 115.20,88.44\" fill=\"#647780\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"126.72,88.44 128.00,89.08 128.00,49.08 126.72,48.44\" fill=\"#87785a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"129.28,88.44 128.00,89.08 128.00,49.08 129.28,48.44\" fill=\"#a1906c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,47.80 129.28,48.44 128.00,49.08 126.72,48.44\" fill=\"#bba77d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"110.08,49.40 128.00,58.36 128.00,49.40 110.08,40.44\" fill=\"#b09e76\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"145.92,49.40 128.00,58.36 128.00,49.40 145.92,40.44\" fill=\"#d2bd8d\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,31.48 145.92,40.44 128.00,49.40 110.08,40.44\" fill=\"#f4dca4\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>"
+  ],
+  "color": "#bba77d",
+  "bonus": {
+    "scope": "environment",
+    "amount": 0.002,
+    "family": "lamp"
+  }
+}

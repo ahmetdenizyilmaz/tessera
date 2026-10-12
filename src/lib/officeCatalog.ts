@@ -1,43 +1,44 @@
 import { WEARABLE_SLOTS, type ShopItem, type WearableSlot } from '../types/office';
 
-export const OFFICE_CATALOG: ShopItem[] = [
-  { id: 'shop-desk-oak', name: 'Oak workstation', category: 'furniture', price: 80, sprite: 'desk', furnitureType: 'desk' },
-  { id: 'shop-chair-ergo', name: 'Ergonomic chair', category: 'furniture', price: 40, sprite: 'chair', furnitureType: 'chair' },
-  { id: 'shop-bookshelf', name: 'Research library', category: 'furniture', price: 90, sprite: 'bookshelf', furnitureType: 'bookshelf' },
-  { id: 'shop-whiteboard', name: 'Planning board', category: 'furniture', price: 75, sprite: 'whiteboard', furnitureType: 'whiteboard' },
-  { id: 'shop-couch', name: 'Lounge sofa', category: 'furniture', price: 120, sprite: 'couch', furnitureType: 'couch' },
-  { id: 'shop-server', name: 'Build server', category: 'furniture', price: 180, sprite: 'server_rack', furnitureType: 'server_rack' },
-  { id: 'shop-cabinet', name: 'Filing cabinet', category: 'furniture', price: 60, sprite: 'filing_cabinet', furnitureType: 'filing_cabinet' },
-  { id: 'shop-tasks', name: 'Task board', category: 'furniture', price: 75, sprite: 'task_board', furnitureType: 'task_board' },
-  { id: 'shop-plant-small', name: 'Desk-side plant', category: 'decoration', price: 30, sprite: 'plant', furnitureType: 'plant' },
-  { id: 'shop-lamp-desk', name: 'Warm floor lamp', category: 'decoration', price: 40, sprite: 'lamp', furnitureType: 'lamp' },
-  { id: 'shop-poster-code', name: 'Code poster', category: 'decoration', price: 25, sprite: 'poster', furnitureType: 'poster' },
-  { id: 'shop-rug-red', name: 'Terracotta rug', category: 'decoration', price: 50, sprite: 'rug', furnitureType: 'rug' },
-  { id: 'shop-water-cooler', name: 'Water cooler', category: 'decoration', price: 60, sprite: 'water_cooler', furnitureType: 'water_cooler' },
-  { id: 'shop-coffee', name: 'Espresso machine', category: 'decoration', price: 100, sprite: 'coffee_machine', furnitureType: 'coffee_machine' },
-  { id: 'shop-printer', name: 'Office printer', category: 'decoration', price: 70, sprite: 'printer', furnitureType: 'printer' },
-  { id: 'shop-floor-wood', name: 'Oak flooring', category: 'floor', price: 100, sprite: 'wood' },
-  { id: 'shop-floor-marble', name: 'Stone flooring', category: 'floor', price: 150, sprite: 'marble' },
-  { id: 'shop-floor-carpet', name: 'Blue carpet', category: 'floor', price: 80, sprite: 'carpet' },
-  { id: 'headphones', name: 'Studio headphones', category: 'accessory', price: 80, sprite: 'headphones', slot: 'head' },
-  { id: 'cap', name: 'Builder cap', category: 'accessory', price: 60, sprite: 'cap', slot: 'head' },
-  { id: 'beanie', name: 'Cozy beanie', category: 'accessory', price: 50, sprite: 'beanie', slot: 'head' },
-  { id: 'beret', name: 'Artist beret', category: 'accessory', price: 70, sprite: 'beret', slot: 'head' },
-  { id: 'visor', name: 'Sun visor', category: 'accessory', price: 55, sprite: 'visor', slot: 'head' },
-  { id: 'party_hat', name: 'Party hat', category: 'accessory', price: 45, sprite: 'party_hat', slot: 'head' },
-  { id: 'crown', name: 'Tiny crown', category: 'accessory', price: 250, sprite: 'crown', slot: 'head' },
-  { id: 'halo', name: 'Halo', category: 'accessory', price: 300, sprite: 'halo', slot: 'head' },
-  { id: 'glasses', name: 'Reading glasses', category: 'accessory', price: 60, sprite: 'glasses', slot: 'face' },
-  { id: 'sunglasses', name: 'Sunglasses', category: 'accessory', price: 75, sprite: 'sunglasses', slot: 'face' },
-  { id: 'monocle', name: 'Monocle', category: 'accessory', price: 120, sprite: 'monocle', slot: 'face' },
-  { id: 'tie', name: 'Red tie', category: 'accessory', price: 40, sprite: 'tie', slot: 'neck' },
-  { id: 'bowtie', name: 'Bow tie', category: 'accessory', price: 45, sprite: 'bowtie', slot: 'neck' },
-  { id: 'scarf', name: 'Autumn scarf', category: 'accessory', price: 65, sprite: 'scarf', slot: 'neck' },
-  { id: 'lanyard', name: 'Staff lanyard', category: 'accessory', price: 30, sprite: 'lanyard', slot: 'neck' },
-];
-export function officeItem(id: string) { return OFFICE_CATALOG.find(item => item.id === id); }
-export const SLOT_LABELS: Record<WearableSlot, string> = { head: 'Head', face: 'Face', neck: 'Neck' };
-/** The wearables a character shows, as one string so renderers can cache on it. */
+/** Restricted SVG subset used by both Pixi and store thumbnails. No external assets. */
+export function validateOfficeItem(value: unknown): ShopItem {
+  const i = value as ShopItem;
+  if (!i || i.version !== 1 || !/^[a-z0-9_-]+$/.test(i.id) || !i.name || !Number.isFinite(i.price) || i.price < 0)
+    throw new Error('Invalid office item identity or price');
+  if (!['floor', 'furniture', 'decoration', 'accessory', 'pc', 'server'].includes(i.category)) throw new Error(`Invalid category: ${i.id}`);
+  if (!i.footprint || !Number.isInteger(i.footprint.w) || !Number.isInteger(i.footprint.h) || i.footprint.w < 1 || i.footprint.h < 1 || i.footprint.w > 8 || i.footprint.h > 8) throw new Error(`Invalid footprint: ${i.id}`);
+  if (i.slot && !WEARABLE_SLOTS.includes(i.slot)) throw new Error(`Invalid slot: ${i.id}`);
+  if (!i.art || i.art.length !== 4 || !i.anchor) throw new Error(`Missing artwork: ${i.id}`);
+  if (![i.anchor.x,i.anchor.y].every(Number.isFinite)) throw new Error(`Invalid anchor: ${i.id}`);
+  if (i.category === 'pc' && (!Number.isFinite(i.pcMultiplier) || i.pcMultiplier! < 1 || i.pcMultiplier! > 5)) throw new Error(`Invalid computer multiplier: ${i.id}`);
+  if (i.category === 'accessory' && (!i.slot || !i.attachment || ![i.attachment.x,i.attachment.y,i.attachment.scale].every(Number.isFinite) || i.attachment.scale <= 0)) throw new Error(`Invalid wearable attachment: ${i.id}`);
+  if (i.color && !/^#[a-f0-9]{6}$/i.test(i.color)) throw new Error(`Invalid color: ${i.id}`);
+  for (const seat of i.seats ?? []) if (![seat.x,seat.y,...seat.approach].every(Number.isFinite) || seat.x<0 || seat.y<0 || seat.x>i.footprint.w || seat.y>i.footprint.h) throw new Error(`Invalid seat: ${i.id}`);
+  for (const svg of [...i.art, ...(i.foreground ?? [])]) {
+    if (typeof svg !== 'string' || svg.length > 250000 || !svg.startsWith('<svg ') || /<!|<\?|&|\bon[a-z]+\s*=|href|url\s*\(|style\s*=|<\/?(?:script|foreignObject|image|use|animate|set|style|a)\b/i.test(svg)) throw new Error(`Unsafe SVG: ${i.id}`);
+    const tags = [...svg.matchAll(/<\/?([\w:]+)/g)].map(m => m[1]);
+    if (tags.some(t => !['svg', 'g', 'path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line'].includes(t))) throw new Error(`Unsupported SVG: ${i.id}`);
+  }
+  for (const [x,y] of i.collision ?? []) if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= i.footprint.w || y >= i.footprint.h) throw new Error(`Invalid collision: ${i.id}`);
+  if (i.bonus && (!['worker','environment','provider'].includes(i.bonus.scope) || !Number.isFinite(i.bonus.amount) || i.bonus.amount < 0 || i.bonus.amount > 1)) throw new Error(`Invalid bonus: ${i.id}`);
+  if (i.category === 'server' && !['claude','codex','antigravity','openrouter'].includes(i.bonus?.provider ?? '')) throw new Error(`Invalid server provider: ${i.id}`);
+  return i;
+}
+const bundled = import.meta.glob('../content/office/*.json', { eager: true, import: 'default' });
+export const OFFICE_CATALOG = Object.values(bundled).map(validateOfficeItem).sort((a,b) => a.price-b.price || a.name.localeCompare(b.name));
+const registry = new Map(OFFICE_CATALOG.map(i => [i.id, i]));
+if (registry.size !== OFFICE_CATALOG.length) throw new Error('Duplicate office item id');
+export function officeItem(id: string) { return registry.get(id); }
+export const SLOT_LABELS: Record<WearableSlot, string> = { head: 'Head', face: 'Face', neck: 'Neck', shirt: 'Shirt' };
 export function wearableKey(wearables?: Partial<Record<WearableSlot, string>>): string {
   return WEARABLE_SLOTS.map(slot => wearables?.[slot] ?? '').join('|');
+}
+export function itemForFurniture(f: { itemId?: string; type: string }) {
+  return officeItem(f.itemId ?? '') ?? OFFICE_CATALOG.find(i => i.furnitureType === f.type);
+}
+export const itemImage = (item: ShopItem, rotation = 0) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.art![rotation])}`;
+export function bonusLabel(item: ShopItem) {
+  if (item.pcMultiplier) return `×${item.pcMultiplier.toFixed(2)} worker income`;
+  const b = item.bonus;
+  return b ? `+${(b.amount*100).toFixed(1)}% ${b.scope === 'worker' ? 'equipped worker' : b.scope === 'provider' ? b.provider : 'environment'}` : 'Cosmetic';
 }

@@ -8,7 +8,7 @@ const storage = vi.hoisted(() => {
 const { useOfficeGameStore: office } = await import('../store/officeGameStore');
 const { ingestOfficeRecords } = await import('../hooks/useWorkerActivity');
 const { useLlmChatStore } = await import('../store/llmChatStore');
-import { codexSignal, claudeSignal, mapOfficeTool, recordedSignal, rewardForTools } from './officeActivity';
+import { codexSignal, claudeSignal, mapOfficeTool, recordedSignal } from './officeActivity';
 import { workerDestination, blockedCells } from './officeSpace';
 import { findPath } from '../engine/PathFinding';
 import { WorkerAnimator } from '../engine/WorkerAnimator';
@@ -18,8 +18,8 @@ import type { ActivityRecord } from '../types/activity';
 import type { OfficeLayout, OfficeWorker } from '../types/office';
 
 const emptyRoom = (): OfficeLayout => ({ width: 8, height: 8, furniture: [], rooms: [], floorTiles: {}, wallTiles: {} });
-const record = (id = 'turn'): ActivityRecord => ({ id, kind: 'turn', actor: { id: 'a', name: 'Builder', provider: 'codex', model: null, device: null }, target: null, sessionId: 'thread', startedAt: 100, updatedAt: 200, status: 'completed', prompt: 'Fix the build', response: 'Done', usage: null, parentId: null, usageNote: null, origin: 'user', tools: ['Read', 'Bash', 'Bash', 'Edit'] });
-beforeEach(() => { office.setState({ layout: emptyRoom(), workers: {}, profiles: {}, panelAliases: {}, currency: 150, totalEarned: 0, completedTasks: 0, inventory: {}, purchasedItems: [], rewards: [], claimed: {}, startedAt: 50, editMode: false, selectedItem: null, editAction: 'place', movingId: null, rotation: 0 }); });
+const record = (id = 'turn'): ActivityRecord => ({ id, kind: 'turn', actor: { id: 'a', name: 'Builder', provider: 'codex', model: null, device: null }, target: null, sessionId: 'thread', startedAt: 100, updatedAt: 200, status: 'completed', prompt: 'Fix the build', response: 'Done', usage: {input:1000000,output:250000,cacheRead:0,cacheWrite:0,reasoning:0}, parentId: null, usageNote: null, origin: 'user', tools: ['Read', 'Bash', 'Bash', 'Edit'] });
+beforeEach(() => { office.setState({companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,ledger:{},prices:{}, layout: emptyRoom(), workers: {}, profiles: {}, panelAliases: {}, currency: 150, totalEarned: 0, completedTasks: 0, inventory: {}, purchasedItems: [], rewards: [], claimed: {}, startedAt: 50, editMode: false, selectedItem: null, editAction: 'place', movingId: null, rotation: 0 }); });
 
 describe('office work and rewards', () => {
   it('retains the API cancellation marker through the done event and clears it for a new turn', () => {
@@ -34,7 +34,7 @@ describe('office work and rewards', () => {
     office.getState().remapPanels(new Map([['a', 'restored']]));
     office.getState().remapPanels(new Map([['restored', 'restored-again']]));
     ingestOfficeRecords([record('late')]);
-    expect(office.getState().profiles['restored-again']).toMatchObject({ appearanceId: 'a', coins: 90, tasks: 2 });
+    expect(office.getState().profiles['restored-again']).toMatchObject({ appearanceId: 'a', tasks: 2 });
     expect(office.getState().profiles.a).toBeUndefined();
   });
   it('awards completed work once across native replay and store reload', async () => {
@@ -50,9 +50,8 @@ describe('office work and rewards', () => {
     expect(office.getState().profiles.a.tasks).toBe(1);
   });
   it('does not reward old history, pending work, errors, handoffs, or remote work', () => {
-    ingestOfficeRecords([{ ...record('old'), startedAt: 0 }, { ...record('run'), status: 'running' }, { ...record('err'), status: 'failed' }, { ...record('handoff'), kind: 'handoff' }, { ...record('remote'), actor: { ...record().actor, device: 'PC' } }]);
+    ingestOfficeRecords([{ ...record('old'), startedAt: 0 }, { ...record('run'), status: 'running', usage:null }, { ...record('err'), status: 'failed', usage:null }, { ...record('handoff'), kind: 'handoff' }, { ...record('remote'), actor: { ...record().actor, device: 'PC' } }]);
     expect(office.getState().currency).toBe(150);
-    expect(rewardForTools(['Bash', 'Bash', 'exec_command', 'AskUserQuestion'])).toBe(35);
   });
   it('maps Codex live tools and approval requests to stations', () => {
     let state = { ...emptyCodexState('g'), busy: true, items: [{ id: 'q', type: 'userMessage', content: [{ type: 'text', text: 'Run the test suite' }] }] };
@@ -81,7 +80,7 @@ describe('office purchases and movement', () => {
   it('charges atomically, consumes placed inventory, and returns packed pieces', () => {
     expect(office.getState().purchase('shop-server')).toBe(false);
     expect(office.getState().purchase('shop-plant-small')).toBe(true);
-    expect(office.getState().currency).toBe(120);
+    expect(office.getState().currency).toBe(130);
     office.getState().selectItem('shop-plant-small');
     expect(office.getState().placeAt({ gridX: 2, gridY: 2 })).toBe(true);
     expect(office.getState().placeAt({ gridX: 3, gridY: 3 })).toBe(false);
@@ -100,10 +99,10 @@ describe('office purchases and movement', () => {
     office.getState().setEditMode(false);
     expect(office.getState().placeAt({ gridX: 5, gridY: 5 })).toBe(false);
   });
-  it('unlocks wearable once and blocks equipping unowned items', () => {
+  it('purchases individual wearables and blocks equipping unowned items', () => {
     office.getState().equip('a', 'crown'); expect(office.getState().profiles.a).toBeUndefined();
     expect(office.getState().purchase('cap')).toBe(true);
-    expect(office.getState().purchase('cap')).toBe(false);
+    expect(office.getState().purchase('cap')).toBe(true);
     office.getState().equip('a', 'cap'); expect(office.getState().profiles.a.wearables).toEqual({ head: 'cap' });
   });
   it('routes each task to a free room tile and never cuts blocked corners', () => {

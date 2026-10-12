@@ -107,14 +107,14 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
 
   return <aside className="office-chat" aria-label={`Chat with ${instance.name}`}>
     <header className="office-chat-heading">
-      <CharacterPortrait id={profile?.appearanceId ?? id} color={`#${getProviderColor(provider).toString(16).padStart(6, '0')}`} wearables={profile?.wearables} />
+      <CharacterPortrait id={profile?.appearanceId ?? id} color={`#${getProviderColor(provider).toString(16).padStart(6, '0')}`} wearables={profile?.wearables} provider={provider} />
       <div><span className="office-eyebrow">AGENT CONVERSATION</span><h3>{instance.name}</h3><p>{providerName} · {instance.config.llmConfig?.model ?? instance.config.model}</p></div>
       <button aria-label="Close agent chat" title="Close chat (Esc)" onClick={onClose}><X size={18} /></button>
     </header>
     <details className="office-chat-profile">
       <summary><span className={`office-state-dot ${worker?.activity ?? 'unknown'}`} />{worker ? ACTIVITY_LABELS[worker.activity] : 'Offline'}<span>Agent details</span><ChevronDown size={13} /></summary>
       {worker?.task && <p>{worker.task}</p>}
-      <div className="office-chat-stats">{profile?.tasks ?? 0} completed turns · {profile?.coins ?? 0} coins earned</div>
+      <div className="office-chat-stats">{profile?.tasks ?? 0} completed turns · {(profile?.coins ?? 0).toFixed(2)} coins earned</div>
       <WearablePicker panelId={id} name={instance.name} />
       <OfficeHuddle instance={instance} />
       <OfficeExchanges id={id} />

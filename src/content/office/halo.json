@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "halo",
+  "name": "Halo",
+  "category": "accessory",
+  "price": 150,
+  "sprite": "halo",
+  "slot": "head",
+  "description": "One item for one worker. Provider badge stays visible.",
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"40\" cy=\"37\" rx=\"29\" ry=\"9\" fill=\"none\" stroke=\"#e8db9b\" stroke-width=\"5\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"40\" cy=\"37\" rx=\"29\" ry=\"9\" fill=\"none\" stroke=\"#e8db9b\" stroke-width=\"5\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"40\" cy=\"37\" rx=\"29\" ry=\"9\" fill=\"none\" stroke=\"#e8db9b\" stroke-width=\"5\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"40\" cy=\"37\" rx=\"29\" ry=\"9\" fill=\"none\" stroke=\"#e8db9b\" stroke-width=\"5\"/></svg>"
+  ],
+  "footprint": {
+    "w": 1,
+    "h": 1
+  },
+  "collision": [],
+  "anchor": {
+    "x": 40,
+    "y": 40
+  },
+  "color": "#e8db9b",
+  "attachment": {
+    "x": 0,
+    "y": -43,
+    "scale": 0.25
+  },
+  "badgeAnchor": {
+    "x": 0,
+    "y": -19
+  },
+  "bonus": {
+    "scope": "worker",
+    "amount": 0.015
+  }
+}

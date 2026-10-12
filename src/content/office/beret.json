@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "beret",
+  "name": "Artist beret",
+  "category": "accessory",
+  "price": 40,
+  "sprite": "beret",
+  "slot": "head",
+  "description": "One item for one worker. Provider badge stays visible.",
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"37\" cy=\"40\" rx=\"30\" ry=\"14\" fill=\"#7b89bc\"/><rect x=\"36\" y=\"19\" width=\"5\" height=\"10\" fill=\"#43537a\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"37\" cy=\"40\" rx=\"30\" ry=\"14\" fill=\"#7b89bc\"/><rect x=\"36\" y=\"19\" width=\"5\" height=\"10\" fill=\"#43537a\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"37\" cy=\"40\" rx=\"30\" ry=\"14\" fill=\"#7b89bc\"/><rect x=\"36\" y=\"19\" width=\"5\" height=\"10\" fill=\"#43537a\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><ellipse cx=\"37\" cy=\"40\" rx=\"30\" ry=\"14\" fill=\"#7b89bc\"/><rect x=\"36\" y=\"19\" width=\"5\" height=\"10\" fill=\"#43537a\"/></svg>"
+  ],
+  "footprint": {
+    "w": 1,
+    "h": 1
+  },
+  "collision": [],
+  "anchor": {
+    "x": 40,
+    "y": 40
+  },
+  "color": "#7b89bc",
+  "attachment": {
+    "x": 0,
+    "y": -43,
+    "scale": 0.25
+  },
+  "badgeAnchor": {
+    "x": 0,
+    "y": -19
+  },
+  "bonus": {
+    "scope": "worker",
+    "amount": 0.004
+  }
+}

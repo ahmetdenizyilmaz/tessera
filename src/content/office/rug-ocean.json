@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "rug-ocean",
+  "name": "Ocean rug",
+  "description": "Ocean rug. A place for your team to work and recharge.",
+  "category": "decoration",
+  "price": 260,
+  "sprite": "rug",
+  "furnitureType": "rug",
+  "footprint": {
+    "w": 2,
+    "h": 2
+  },
+  "collision": [],
+  "anchor": {
+    "x": 128,
+    "y": 75
+  },
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#426c7a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#4f8191\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#5c96a9\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#4e7f8f\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#5d97aa\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#6cb0c6\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#426c7a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#4f8191\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#5c96a9\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#4e7f8f\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#5d97aa\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#6cb0c6\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#426c7a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#4f8191\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#5c96a9\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#4e7f8f\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#5d97aa\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#6cb0c6\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#426c7a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#4f8191\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#5c96a9\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#4e7f8f\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#5d97aa\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#6cb0c6\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>"
+  ],
+  "color": "#5c96a9",
+  "bonus": {
+    "scope": "environment",
+    "amount": 0.006,
+    "family": "rug"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "monocle",
+  "name": "Monocle",
+  "category": "accessory",
+  "price": 110,
+  "sprite": "monocle",
+  "slot": "face",
+  "description": "One item for one worker. Provider badge stays visible.",
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><circle cx=\"36\" cy=\"32\" r=\"19\" fill=\"none\" stroke=\"#e8ca88\" stroke-width=\"4\"/><path d=\"M52 44L66 67\" stroke=\"#e8ca88\" stroke-width=\"2\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><circle cx=\"36\" cy=\"32\" r=\"19\" fill=\"none\" stroke=\"#e8ca88\" stroke-width=\"4\"/><path d=\"M52 44L66 67\" stroke=\"#e8ca88\" stroke-width=\"2\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><circle cx=\"36\" cy=\"32\" r=\"19\" fill=\"none\" stroke=\"#e8ca88\" stroke-width=\"4\"/><path d=\"M52 44L66 67\" stroke=\"#e8ca88\" stroke-width=\"2\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\"><circle cx=\"36\" cy=\"32\" r=\"19\" fill=\"none\" stroke=\"#e8ca88\" stroke-width=\"4\"/><path d=\"M52 44L66 67\" stroke=\"#e8ca88\" stroke-width=\"2\"/></svg>"
+  ],
+  "footprint": {
+    "w": 1,
+    "h": 1
+  },
+  "collision": [],
+  "anchor": {
+    "x": 40,
+    "y": 40
+  },
+  "color": "#e8ca88",
+  "attachment": {
+    "x": 0,
+    "y": -35,
+    "scale": 0.25
+  },
+  "badgeAnchor": {
+    "x": 0,
+    "y": -19
+  },
+  "bonus": {
+    "scope": "worker",
+    "amount": 0.011
+  }
+}

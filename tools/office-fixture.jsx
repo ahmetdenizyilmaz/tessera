@@ -18,7 +18,8 @@ import '../src/styles/global.css';
 import '../src/styles/chat.css';
 import '../src/styles/codex.css';
 import '../src/styles/antigravity.css';
-mockWindows('main');
+const native = !!window.__TAURI_INTERNALS__;
+if (!native) mockWindows('main');
 window.office = useOfficeGameStore;
 window.instances = useInstanceStore;
 window.codex = useCodexStore;
@@ -32,10 +33,11 @@ window.officeHistoryDelay = 0;
 window.officeCalls = [];
 window.officeFail = false;
 const start = useOfficeGameStore.getState().startedAt;
-const makeRecord = (id, actorId, name, provider, tools) => ({ id, kind: 'turn', actor: { id: actorId, name, provider, model: provider, device: null }, startedAt: start + 100, updatedAt: Date.now(), prompt: 'Completed the workspace improvements', response: 'Done', status: 'completed', tools, usage: null, sessionId: id, parentId: null, target: null, origin: 'user', usageNote: null });
+const makeRecord = (id, actorId, name, provider, tools) => ({ id, kind: 'turn', actor: { id: actorId, name, provider, model: provider, device: null }, startedAt: start + 100, updatedAt: Date.now(), prompt: 'Completed the workspace improvements', response: 'Done', status: 'completed', tools, usage: {input:50000,output:5000,cacheRead:10000,cacheWrite:0,reasoning:0}, sessionId: id, parentId: null, target: null, origin: 'user', usageNote: null });
 window.officeRecords = [makeRecord('done-a', 'architect', 'Backend architect', 'claude', ['Read', 'Edit', 'Bash']), makeRecord('done-b', 'tester', 'Test engineer', 'codex', ['Bash', 'Edit']), makeRecord('done-c', 'research', 'Research assistant', 'codex', ['WebSearch'])];
-mockIPC(async (command, args) => {
+const handler = async (command, args) => {
   window.officeCalls.push({ command, args });
+  if (command === 'office_prices') return {'claude-sonnet-4':{input:3,output:15,cacheRead:.3,cacheWrite:3.75}};
   if (command === 'session_load_history') {
     const messages = window.officeHistory[args.sessionId] ?? [];
     await new Promise(resolve => setTimeout(resolve, window.officeHistoryDelay));
@@ -43,6 +45,7 @@ mockIPC(async (command, args) => {
     return messages;
   }
   if (command === 'panel_send_text') return { delivered: true, panel: args.id };
+  if (command === 'resolve_path_smart') return args.path.includes('missing') ? null : {path:args.path,isDir:! /\.\w+$/.test(args.path),base:'cwd'};
   if (command === 'open_path_smart') return args.path.includes('missing') ? null : { path: args.path, isDir: !/\.\w+$/.test(args.path), base: 'cwd' };
   if (command === 'codex_read_thread') return { thread: { id: args.threadId, turns: [{ id: 'saved', items: [{ id: 'saved-answer', type: 'agentMessage', text: 'Saved Codex thread restored in office.' }] }] } };
   if (command === 'activity_list') {
@@ -57,7 +60,8 @@ mockIPC(async (command, args) => {
     return { records, hasMore: all.length > args.limit, health: { error: null, lastScan: Date.now() } };
   }
   return null;
-}, { shouldMockEvents: true });
+};
+if (!native) mockIPC(handler, {shouldMockEvents:true});
 for (const [id, name, provider, model] of [['architect', 'Backend architect', 'claude', 'Claude Sonnet'], ['tester', 'Test engineer', 'codex', 'Codex'], ['research', 'Research assistant', 'codex', 'Codex'], ['designer', 'Interface designer', 'claude', 'Claude Opus'], ['reviewer', 'Code reviewer', 'claude', 'Claude Sonnet']]) {
   useInstanceStore.setState(s => ({ instances: new Map([...s.instances, [id, { id, name, status: 'running', color: '#9bb7ac', config: { agentProvider: provider, panelView: 'chat', cwd: 'C:\\fixture', model, systemPrompt: '', allowedTools: [], maxBudget: 0, agentMode: true, dangerouslySkipPermissions: false, permissionMode: 'default' } }]]) }));
   useLayoutStore.getState().addPanel(id);
@@ -74,10 +78,19 @@ for (const [id, name, provider, model] of [['architect', 'Backend architect', 'c
     useCodexStore.getState().receive({ id, generation: 'fixture', sequence: 2, message: { method: 'item/started', params: { threadId: id, item: { id: 'work', type: id === 'tester' ? 'commandExecution' : 'webSearch', command: 'npm test' } } } });
   }
 }
+if (native) {
+  const office=useOfficeGameStore.getState();
+  office.ensureCapacity([...useInstanceStore.getState().instances.keys()]);
+  let n=0;
+  for(const id of useInstanceStore.getState().instances.keys()) {
+    office.addWorker(id,{gridX:1+n++,gridY:3});
+    office.updateWorker(id,'idle','Synthetic native worker','',{gridX:1+n,gridY:3});
+  }
+}
+function ActivityBridge() {useWorkerActivity();return null;}
 function Fixture() {
-  useWorkerActivity();
   const [visible, setVisible] = useState(true);
-  return <div style={{ height: '100vh', display: 'flex' }}>{visible ? <OfficeView onBack={() => setVisible(false)} /> : <button onClick={() => setVisible(true)}>Return to office</button>}<Toasts /></div>;
+  return <div style={{ height: '100vh', display: 'flex' }}>{!native && <ActivityBridge/>}{visible ? <OfficeView onBack={() => setVisible(false)} /> : <button onClick={() => setVisible(true)}>Return to office</button>}<Toasts /></div>;
 }
 if (location.search.includes('empty')) useInstanceStore.setState({ instances: new Map() });
 document.documentElement.setAttribute('data-theme', 'dark');

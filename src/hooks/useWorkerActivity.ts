@@ -8,18 +8,13 @@ import { useAntigravityStore } from '../store/antigravityStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useOfficeGameStore } from '../store/officeGameStore';
 import { useLayoutStore } from '../store/layoutStore';
-import { workerDestination } from '../lib/officeSpace';
-import { antigravitySignal, claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, rewardForTools, type WorkSignal } from '../lib/officeActivity';
+import { interactionTile, workerDestination } from '../lib/officeSpace';
+import { antigravitySignal, claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, type WorkSignal } from '../lib/officeActivity';
 import type { ActivityPage, ActivityRecord } from '../types/activity';
 
 /** Stable record IDs make polling, replay, and reopening the office idempotent. */
 export function ingestOfficeRecords(records: ActivityRecord[]) {
-  for (const r of records) {
-    const store = useOfficeGameStore.getState();
-    if (r.kind !== 'turn' || r.status !== 'completed' || r.startedAt < store.startedAt || r.actor.device) continue;
-    store.claimReward({ id: r.id, panelId: r.actor.id, name: r.actor.name, task: cleanTask(r.prompt),
-      coins: rewardForTools(r.tools ?? []), at: r.updatedAt });
-  }
+  for (const record of records) useOfficeGameStore.getState().settleUsage(record);
 }
 
 /** App-wide: characters and rewards keep updating while panels are visible. */
@@ -32,38 +27,31 @@ export function useWorkerActivity(): void {
     let since = useOfficeGameStore.getState().startedAt;
     const latest = new Map<string, ActivityRecord>();
     const latestBySession = new Map<string, ActivityRecord>();
-    const inFlight = new Map<string, { id: string; task: string; tools: Set<string> }>();
+    let pricingReady = false;
 
     function sync() {
       timer = undefined;
       if (disposed) return;
       const panelTypes = useLayoutStore.getState().panelTypes;
       const instances = new Map([...useInstanceStore.getState().instances].filter(([id]) => !['computer', 'widget', 'plugin', 'group', 'remote'].includes(panelTypes[id])));
+      useOfficeGameStore.getState().ensureCapacity([...instances.keys()]);
       for (const id of Object.keys(useOfficeGameStore.getState().workers)) {
-        if (!instances.has(id)) { useOfficeGameStore.getState().removeWorker(id); inFlight.delete(id); }
+        if (!instances.has(id)) { useOfficeGameStore.getState().removeWorker(id); }
       }
       const occupied = new Set<string>();
       let index = 0;
       for (const [id, instance] of instances) {
         const store = useOfficeGameStore.getState();
         let state: WorkSignal;
-        // LLM and OpenCode do not yet enter native Activity history. Award only
-        // a turn whose running state was observed, never imported old messages.
-        let supplemental: { running: boolean; completed: boolean; key: string; tools: string[] } | undefined;
         if (instance.config.llmConfig) {
           const conv = useLlmChatStore.getState().conversations[id];
           const question = conv?.messages.filter(m => m.role === 'user').at(-1);
           state = { activity: conv?.error ? 'error' : conv?.isStreaming ? 'responding' : 'idle', task: cleanTask(question?.content ?? ''), detail: conv?.error ?? '' };
-          supplemental = { running: !!conv?.isStreaming, completed: !!conv && !conv.isStreaming && !conv.error && !conv.cancelled && conv.messages.at(-1)?.role === 'assistant' && !!conv.messages.at(-1)?.content.trim(), key: `llm:${question?.id ?? ''}`, tools: [] };
         } else if (instance.config.agentProvider === 'codex') {
           state = codexSignal(useCodexStore.getState().sessions[id]);
         } else if (instance.config.agentProvider === 'opencode') {
           const session = useOpenCodeStore.getState().sessions[id];
           state = openCodeSignal(session);
-          const question = session?.messages.filter(m => m.info.role === 'user').at(-1);
-          const answer = session?.messages.at(-1);
-          supplemental = { running: session?.status.type === 'busy', completed: !!session?.connected && session.status.type === 'idle' && !session.error && answer?.info.role === 'assistant' && !answer.info.error,
-            key: `opencode:${session?.sessionId}:${question?.info.id}`, tools: session?.messages.filter(m => m.info.id > (question?.info.id ?? '')).flatMap(m => m.parts.filter(p => p.type === 'tool').map(p => p.tool ?? 'Tool')) ?? [] };
         } else if (instance.config.agentProvider === 'antigravity') {
           // Chat turns are recorded natively in Activity (rewards come from those
           // records, once per turn ID). The native TUI reports nothing structured.
@@ -77,20 +65,17 @@ export function useWorkerActivity(): void {
         } else {
           state = claudeSignal(useChatStore.getState().sessions.get(id));
         }
-        if (supplemental?.running) {
-          const previous = inFlight.get(id);
-          inFlight.set(id, { id: supplemental.key, task: state.task, tools: new Set([...(previous?.id === supplemental.key ? previous.tools : []), ...supplemental.tools]) });
-        } else if (supplemental && inFlight.has(id)) {
-          const turn = inFlight.get(id)!;
-          inFlight.delete(id);
-          if (supplemental.completed && supplemental.key === turn.id) store.claimReward({ id: turn.id, panelId: id, name: instance.name, task: turn.task, coins: rewardForTools([...turn.tools]), at: Date.now() });
-        }
         let worker = useOfficeGameStore.getState().workers[id];
         if (!worker) {
           store.addWorker(id, workerDestination(store.layout, 'new', index, occupied));
           worker = useOfficeGameStore.getState().workers[id];
         }
-        const target = workerDestination(store.layout, state.activity, index++, occupied);
+        const desk = store.layout.furniture.find(f=>f.workstationFor===id && f.type==='desk');
+        const assigned = desk ? interactionTile(desk) : worker.assignedDesk;
+        const keepIdleTarget = state.activity==='idle' && worker.activity==='idle';
+        const target = keepIdleTarget ? worker.targetPosition : ['responding','editing_file','writing_file','using_tool'].includes(state.activity) ? assigned : workerDestination(store.layout, state.activity, index, occupied);
+        index++;
+        if (worker.assignedDesk.gridX!==assigned.gridX || worker.assignedDesk.gridY!==assigned.gridY) useOfficeGameStore.setState(s=>({workers:{...s.workers,[id]:{...s.workers[id],assignedDesk:assigned}}}));
         occupied.add(`${target.gridX},${target.gridY}`);
         // Avoid writing persistent storage on every streamed token.
         if (worker.activity !== state.activity || worker.task !== state.task || worker.detail !== state.detail || worker.targetPosition.gridX !== target.gridX || worker.targetPosition.gridY !== target.gridY)
@@ -101,6 +86,11 @@ export function useWorkerActivity(): void {
     async function poll() {
       if (disposed) return;
       try {
+        if (!pricingReady) {
+          const prices = await invoke<Record<string,import('../types/office').OfficeRates>>('office_prices');
+          if (disposed) return;
+          useOfficeGameStore.setState({prices:prices ?? {}}); pricingReady=true;
+        }
         const store = useOfficeGameStore.getState();
         const full = Date.now() - lastFullScan > 300000;
         const scanSince = full ? store.startedAt : Math.max(store.startedAt, since - 60000);
@@ -130,7 +120,7 @@ export function useWorkerActivity(): void {
         const waiting = new Set(store.pendingRecords);
         for (const r of collected) {
           if (r.kind !== 'turn') continue;
-          if (['completed', 'failed', 'interrupted'].includes(r.status)) waiting.delete(r.id); else waiting.add(r.id);
+          if (r.usage && ['completed', 'failed', 'interrupted'].includes(r.status)) waiting.delete(r.id); else waiting.add(r.id);
           const previous = latest.get(r.actor.id);
           if (!previous || r.startedAt >= previous.startedAt) latest.set(r.actor.id, r);
           const key = `${r.actor.provider}:${r.sessionId}`, previousSession = latestBySession.get(key);
@@ -147,7 +137,8 @@ export function useWorkerActivity(): void {
     const unsubscribe = [useInstanceStore.subscribe(schedule), useLayoutStore.subscribe((s, old) => { if (s.panelTypes !== old.panelTypes) schedule(); }), useChatStore.subscribe(schedule), useCodexStore.subscribe(schedule), useOpenCodeStore.subscribe(schedule), useAntigravityStore.subscribe(schedule), useLlmChatStore.subscribe(schedule),
       useOfficeGameStore.subscribe((s, old) => { if (s.layout !== old.layout) schedule(); })];
     sync();
+    const activityTimer = setInterval(() => useOfficeGameStore.getState().tickActivity(), 30000);
     void poll();
-    return () => { disposed = true; clearTimeout(timer); clearTimeout(pollTimer); unsubscribe.forEach(unsub => unsub()); };
+    return () => { disposed = true; clearTimeout(timer); clearTimeout(pollTimer); clearInterval(activityTimer); unsubscribe.forEach(unsub => unsub()); };
   }, []);
 }

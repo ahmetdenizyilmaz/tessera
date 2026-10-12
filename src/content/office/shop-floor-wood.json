@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "shop-floor-wood",
+  "name": "Oak flooring",
+  "description": "Oak flooring. A place for your team to work and recharge.",
+  "category": "floor",
+  "price": 100,
+  "sprite": "wood",
+  "footprint": {
+    "w": 2,
+    "h": 2
+  },
+  "collision": [],
+  "anchor": {
+    "x": 128,
+    "y": 75
+  },
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#5e6f73\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#70848a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#829aa0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#6d8287\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#839ba1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#98b4bb\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#5e6f73\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#70848a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#829aa0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#6d8287\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#839ba1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#98b4bb\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#5e6f73\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#70848a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#829aa0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#6d8287\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#839ba1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#98b4bb\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"66.56,107.00 128.00,137.72 128.00,136.92 66.56,106.20\" fill=\"#5e6f73\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"189.44,107.00 128.00,137.72 128.00,136.92 189.44,106.20\" fill=\"#70848a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,75.48 189.44,106.20 128.00,136.92 66.56,106.20\" fill=\"#829aa0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"79.36,106.17 128.00,130.49 128.00,130.23 79.36,105.91\" fill=\"#6d8287\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"176.64,106.17 128.00,130.49 128.00,130.23 176.64,105.91\" fill=\"#839ba1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,81.59 176.64,105.91 128.00,130.23 79.36,105.91\" fill=\"#98b4bb\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>"
+  ],
+  "color": "#829aa0"
+}

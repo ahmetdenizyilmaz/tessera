@@ -1,7 +1,7 @@
 import type { OfficeWorker, GridPosition, OfficeLayout } from '../types/office';
 import { findPath } from './PathFinding';
 
-export interface WorkerPose { x: number; y: number; direction: number; isWalking: boolean }
+export interface WorkerPose { x: number; y: number; direction: number; isWalking: boolean; seat?: OfficeWorker['seat'] }
 interface AnimationState { position: WorkerPose; path: GridPosition[]; next: number }
 export class WorkerAnimator {
   private states = new Map<string, AnimationState>();
@@ -31,7 +31,8 @@ export class WorkerAnimator {
         if (remaining > 0) state.position.direction = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 10) % 8;
       }
       state.position.isWalking = state.next < state.path.length;
-      result.set(id, { ...state.position });
+      const arrived = !state.position.isWalking && state.position.x===worker.targetPosition.gridX && state.position.y===worker.targetPosition.gridY;
+      result.set(id, { ...state.position, ...(arrived && worker.seat ? {seat:worker.seat} : {}) });
     }
     return result;
   }

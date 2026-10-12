@@ -57,6 +57,7 @@ fn latest_turn(conn: &Connection, panel: &str, at: i64) -> Result<Option<String>
 }
 
 enum Command {
+    Api(Record),
     Codex {
         actor: Actor,
         message: Value,
@@ -133,6 +134,7 @@ impl Recorder {
                             .lock()
                             .map_err(|e| e.to_string())
                             .and_then(|conn| match command {
+                                Command::Api(record) => save(&conn, &record),
                                 Command::Codex { actor, message, at } => {
                                     codex_event(&conn, &mut active, actor, &message, at)
                                 }
@@ -205,6 +207,13 @@ impl Recorder {
         let (tx, rx) = mpsc::channel();
         self.send(Command::Flush(tx));
         let _ = rx.recv_timeout(Duration::from_secs(5));
+    }
+}
+
+/// API streams are recorded natively so closing a view cannot lose usage.
+pub fn record_api(app: &AppHandle, record: Record) {
+    if let Some(recorder) = app.try_state::<Recorder>() {
+        recorder.send(Command::Api(record));
     }
 }
 

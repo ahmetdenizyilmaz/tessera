@@ -13,7 +13,7 @@ const { useOfficeGameStore: office } = await import('../store/officeGameStore');
 const { ingestOfficeRecords } = await import('../hooks/useWorkerActivity');
 const { takeTerminalForkPrompt } = await import('./antigravitySessions');
 import { useInstanceStore } from '../store/instanceStore';
-import { antigravitySignal, rewardForTools } from './officeActivity';
+import { antigravitySignal } from './officeActivity';
 import { antigravityOfficeTool, antigravityStatus, antigravityTranscript, formatAntigravityUsage, ANTIGRAVITY_PERMISSIONS } from './antigravityConfig';
 import { activitySummary, providerName } from './activityGraph';
 import type { AntigravityItem, AntigravitySnapshot } from '../types/antigravity';
@@ -28,7 +28,7 @@ const turn = (id: string, extra: Partial<ActivityRecord> = {}): ActivityRecord =
 void storage;
 
 beforeEach(() => {
-  office.setState({ workers: {}, profiles: {}, panelAliases: {}, currency: 150, totalEarned: 0, completedTasks: 0, rewards: [], claimed: {}, startedAt: 50 });
+  office.setState({companyBase:0,modelBase:{},permanent:1,location:'studio',ledger:{},prices:{},lifetimeCoins:0, workers: {}, profiles: {}, panelAliases: {}, currency: 150, totalEarned: 0, completedTasks: 0, rewards: [], claimed: {}, startedAt: 50 });
   useInstanceStore.setState({ instances: new Map() });
 });
 
@@ -58,16 +58,16 @@ describe('Antigravity office state', () => {
     expect(antigravitySignal(undefined).activity).toBe('unknown');
     expect(antigravitySignal(session()).activity).toBe('idle');
   });
-  it('awards a completed turn exactly once, and nothing for stopped, failed or still-running turns', () => {
-    ingestOfficeRecords([turn('antigravity:conv:t1'), turn('antigravity:conv:t1'), turn('antigravity:conv:t2', { status: 'interrupted' }), turn('antigravity:conv:t3', { status: 'failed' }), turn('antigravity:conv:t4', { status: 'running' })]);
-    const coins = rewardForTools(['Bash', 'Write']);
-    expect(office.getState().currency).toBe(150 + coins);
-    // Polling, reopening the office and a resumed conversation replay the same record.
-    ingestOfficeRecords([turn('antigravity:conv:t1', { updatedAt: 999 })]);
-    expect(office.getState().currency).toBe(150 + coins);
-    expect(office.getState().profiles['panel-g']).toMatchObject({ tasks: 1, coins });
-    ingestOfficeRecords([turn('antigravity:conv:t4')]);
-    expect(office.getState().profiles['panel-g'].tasks).toBe(2);
+  it('settles Antigravity tokens once, including consumed tokens on interrupted work', () => {
+    const r=turn('antigravity:conv:t1');
+    ingestOfficeRecords([r,r]);
+    const earned=office.getState().currency;
+    expect(earned).toBeGreaterThan(150);
+    ingestOfficeRecords([{...r,updatedAt:999}]);expect(office.getState().currency).toBe(earned);
+    expect(office.getState().profiles['panel-g'].tasks).toBe(1);
+    ingestOfficeRecords([turn('antigravity:conv:t2',{status:'interrupted'})]);
+    expect(office.getState().currency).toBeGreaterThan(earned);
+    expect(office.getState().profiles['panel-g'].tasks).toBe(1);
   });
 });
 

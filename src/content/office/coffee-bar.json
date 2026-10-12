@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "coffee-bar",
+  "name": "Barista station",
+  "description": "Barista station. A place for your team to work and recharge.",
+  "category": "furniture",
+  "price": 1000,
+  "sprite": "coffee_machine",
+  "furnitureType": "coffee_machine",
+  "footprint": {
+    "w": 1,
+    "h": 1
+  },
+  "collision": [
+    [
+      0,
+      0
+    ]
+  ],
+  "anchor": {
+    "x": 128,
+    "y": 75
+  },
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"114.88,69.72 128.96,76.76 128.96,67.16 114.88,60.12\" fill=\"#25323a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"143.04,69.72 128.96,76.76 128.96,67.16 143.04,60.12\" fill=\"#2c3c45\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.96,53.08 143.04,60.12 128.96,67.16 114.88,60.12\" fill=\"#334650\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"108.16,91.32 127.36,100.92 127.36,80.12 108.16,70.52\" fill=\"#96846e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,90.68 127.36,100.92 127.36,80.12 147.84,69.88\" fill=\"#b49e84\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.64,60.28 147.84,69.88 127.36,80.12 108.16,70.52\" fill=\"#d1b899\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"115.20,72.44 120.00,74.84 120.00,69.40 115.20,67.00\" fill=\"#ad9d8a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"124.80,72.44 120.00,74.84 120.00,69.40 124.80,67.00\" fill=\"#cebba5\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"120.00,64.60 124.80,67.00 120.00,69.40 115.20,67.00\" fill=\"#f0dac0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"116.80,65.24 121.60,67.64 121.60,62.20 116.80,59.80\" fill=\"#ad9d8a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"126.40,65.24 121.60,67.64 121.60,62.20 126.40,59.80\" fill=\"#cebba5\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"121.60,57.40 126.40,59.80 121.60,62.20 116.80,59.80\" fill=\"#f0dac0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"108.16,90.68 128.64,100.92 128.64,80.12 108.16,69.88\" fill=\"#96846e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,91.32 128.64,100.92 128.64,80.12 147.84,70.52\" fill=\"#b49e84\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"127.36,60.28 147.84,70.52 128.64,80.12 108.16,69.88\" fill=\"#d1b899\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"114.88,70.68 128.96,77.72 128.96,68.12 114.88,61.08\" fill=\"#25323a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"143.04,70.68 128.96,77.72 128.96,68.12 143.04,61.08\" fill=\"#2c3c45\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.96,54.04 143.04,61.08 128.96,68.12 114.88,61.08\" fill=\"#334650\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"131.20,66.04 136.00,68.44 136.00,63.00 131.20,60.60\" fill=\"#ad9d8a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"140.80,66.04 136.00,68.44 136.00,63.00 140.80,60.60\" fill=\"#cebba5\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"136.00,58.20 140.80,60.60 136.00,63.00 131.20,60.60\" fill=\"#f0dac0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"108.16,91.32 127.36,100.92 127.36,80.12 108.16,70.52\" fill=\"#96846e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,90.68 127.36,100.92 127.36,80.12 147.84,69.88\" fill=\"#b49e84\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.64,60.28 147.84,69.88 127.36,80.12 108.16,70.52\" fill=\"#d1b899\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"112.96,70.68 127.04,77.72 127.04,68.12 112.96,61.08\" fill=\"#25323a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"141.12,70.68 127.04,77.72 127.04,68.12 141.12,61.08\" fill=\"#2c3c45\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"127.04,54.04 141.12,61.08 127.04,68.12 112.96,61.08\" fill=\"#334650\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"112.96,69.72 127.04,76.76 127.04,67.16 112.96,60.12\" fill=\"#25323a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"141.12,69.72 127.04,76.76 127.04,67.16 141.12,60.12\" fill=\"#2c3c45\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"127.04,53.08 141.12,60.12 127.04,67.16 112.96,60.12\" fill=\"#334650\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"108.16,90.68 128.64,100.92 128.64,80.12 108.16,69.88\" fill=\"#96846e\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,91.32 128.64,100.92 128.64,80.12 147.84,70.52\" fill=\"#b49e84\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"127.36,60.28 147.84,70.52 128.64,80.12 108.16,69.88\" fill=\"#d1b899\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"129.60,73.24 134.40,75.64 134.40,70.20 129.60,67.80\" fill=\"#ad9d8a\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"139.20,73.24 134.40,75.64 134.40,70.20 139.20,67.80\" fill=\"#cebba5\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"134.40,65.40 139.20,67.80 134.40,70.20 129.60,67.80\" fill=\"#f0dac0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>"
+  ],
+  "color": "#d1b899",
+  "bonus": {
+    "scope": "environment",
+    "amount": 0.02,
+    "family": "coffee_machine"
+  }
+}

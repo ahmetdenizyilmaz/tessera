@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "shop-water-cooler",
+  "name": "Water cooler",
+  "description": "Water cooler. A place for your team to work and recharge.",
+  "category": "furniture",
+  "price": 100,
+  "sprite": "water_cooler",
+  "furnitureType": "water_cooler",
+  "footprint": {
+    "w": 1,
+    "h": 1
+  },
+  "collision": [
+    [
+      0,
+      0
+    ]
+  ],
+  "anchor": {
+    "x": 128,
+    "y": 75
+  },
+  "art": [
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"108.16,91.32 127.36,100.92 127.36,68.92 108.16,59.32\" fill=\"#7b868c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,90.68 127.36,100.92 127.36,68.92 147.84,58.68\" fill=\"#93a0a7\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.64,49.08 147.84,58.68 127.36,68.92 108.16,59.32\" fill=\"#abbac2\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"113.92,59.00 128.00,66.04 128.00,53.24 113.92,46.20\" fill=\"#6b91a1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"142.08,59.00 128.00,66.04 128.00,53.24 142.08,46.20\" fill=\"#7faec0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,39.16 142.08,46.20 128.00,53.24 113.92,46.20\" fill=\"#94cadf\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"108.16,90.68 128.64,100.92 128.64,68.92 108.16,58.68\" fill=\"#7b868c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,91.32 128.64,100.92 128.64,68.92 147.84,59.32\" fill=\"#93a0a7\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"127.36,49.08 147.84,59.32 128.64,68.92 108.16,58.68\" fill=\"#abbac2\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"113.92,59.00 128.00,66.04 128.00,53.24 113.92,46.20\" fill=\"#6b91a1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"142.08,59.00 128.00,66.04 128.00,53.24 142.08,46.20\" fill=\"#7faec0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,39.16 142.08,46.20 128.00,53.24 113.92,46.20\" fill=\"#94cadf\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"108.16,91.32 127.36,100.92 127.36,68.92 108.16,59.32\" fill=\"#7b868c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,90.68 127.36,100.92 127.36,68.92 147.84,58.68\" fill=\"#93a0a7\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.64,49.08 147.84,58.68 127.36,68.92 108.16,59.32\" fill=\"#abbac2\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"113.92,59.00 128.00,66.04 128.00,53.24 113.92,46.20\" fill=\"#6b91a1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"142.08,59.00 128.00,66.04 128.00,53.24 142.08,46.20\" fill=\"#7faec0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,39.16 142.08,46.20 128.00,53.24 113.92,46.20\" fill=\"#94cadf\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"192\" viewBox=\"0 0 256 192\"><polygon points=\"108.16,90.68 128.64,100.92 128.64,68.92 108.16,58.68\" fill=\"#7b868c\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"147.84,91.32 128.64,100.92 128.64,68.92 147.84,59.32\" fill=\"#93a0a7\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"127.36,49.08 147.84,59.32 128.64,68.92 108.16,58.68\" fill=\"#abbac2\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"113.92,59.00 128.00,66.04 128.00,53.24 113.92,46.20\" fill=\"#6b91a1\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"142.08,59.00 128.00,66.04 128.00,53.24 142.08,46.20\" fill=\"#7faec0\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/><polygon points=\"128.00,39.16 142.08,46.20 128.00,53.24 113.92,46.20\" fill=\"#94cadf\" stroke=\"#20323c\" stroke-opacity=\"0.18\" stroke-width=\"0.65\"/></svg>"
+  ],
+  "color": "#abbac2",
+  "bonus": {
+    "scope": "environment",
+    "amount": 0.003,
+    "family": "water_cooler"
+  }
+}

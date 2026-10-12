@@ -71,6 +71,16 @@ pub fn pricing_for(model: &str) -> Option<Pricing> {
         .map(|(_, p)| *p)
 }
 
+/// Office uses the same maintained price table as Analytics. Unknown models are
+/// valued separately by the game's explicitly labelled fallback configuration.
+#[tauri::command]
+pub fn office_prices() -> BTreeMap<String, Value> {
+    PRICES.iter().map(|(model, p)| (model.to_string(), serde_json::json!({
+        "input": p.input, "output": p.output, "cacheRead": p.cache_read,
+        "cacheWrite": p.cache_write_5m
+    }))).collect()
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Tokens {

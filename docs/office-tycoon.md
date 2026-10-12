@@ -1,48 +1,77 @@
 # Agent office
 
-Open **View → Office View** or press **Ctrl+G**. Each local agent panel becomes a named character with its provider, current assignment, reported action, and earned coins. Select a character or a team row to inspect its task, equip an accessory, or open the chat (including chats inside groups).
+Open **View > Office View** or press **Ctrl+G**. Each local agent panel becomes a worker, including agents inside groups and detached windows. Browser, utility, and remote panels are not independent workers.
 
-Characters walk between workstations, the library, build lab, research lab, planning room, coffee lounge, and your office. Movement uses reported tools and session states: reading goes to the library, edits to a workstation, commands/tests to the build lab, web tools to research, and approval requests to your office. This does not infer hidden reasoning or judge whether the answer is correct. Unavailable activity is labeled explicitly.
+Names on the floor are small and muted. Hover or select a character for its full name, provider, model, and reported activity. Clicking a character opens its existing chat beside the office. **Agent details** contains its computer, shirt, headwear, eyewear, neck accessory, and income breakdown. Shirts keep the provider badge visible.
 
-The office starts with **150 game coins**. A successfully completed conversation turn earns **30 coins**, plus **5 per distinct reported work category**, capped at a 20-coin bonus. Token usage, model price, waiting time, failed turns, and handoff messages do not generate coins. Office level advances every 10 completed turns; character level advances every five. These are local game points with no monetary value.
+## Coins from real work
 
-The shop sells individual furniture/decor pieces, reusable floor styles, and team-wide accessory unlocks. Buy a piece, choose **Place**, then click an empty tile. **Decorate → Move** repositions existing furniture; **Store** returns it to inventory. **R** rotates the selected item. Floors can be painted after unlocking. Wearables come in three slots a character wears at once: **head** (headphones, builder cap, cozy beanie, artist beret, sun visor, party hat, tiny crown, halo), **face** (reading glasses, sunglasses, monocle) and **neck** (red tie, bow tie, autumn scarf, staff lanyard); pick one per slot from the agent details. **Escape** closes the editor or shop. Furniture, inventory, coins, earned rewards, character appearance, and accessories persist on this PC. Workspace restoration remaps character profiles to the restored panels.
+The office earns from recorded token usage, including consumed tokens on failed or interrupted requests. Idle time, walking, and handoff notifications do not generate coins. Model values use the same price table as Analytics where known; otherwise the office uses explicitly labeled game estimates. Subscriptions are not billed per token, and these coins have no monetary value.
 
-## Speech bubbles and agent talk
+```
+base coins = token value * 10
+income = base coins
+       * permanent spin-off multiplier
+       * (global coefficient + environment bonus + location bonus)
+       * (1 + matching provider server bonus)
+       * model coefficient
+       * (PC multiplier + equipped accessory bonuses)
+       * worker activity
+```
 
-Characters never show message text; the bubble's shape says what state they are in. A **thought cloud** with pulsing dots (the character glances up) means it is only thinking; a **spinning gear** (arms typing) means it is working with tools or writing; a **?** bubble means it is waiting for your approval; a **!** bubble means its last turn failed. When one agent messages another through the `tessera-panels` MCP tools (`send_to_panel`), the sender gets a green **speech bubble with sound waves** (and a moving mouth) and a line with a travelling dot is drawn to the receiver for a few seconds. The native bus emits `panel-bus-message` for every delivery, so this works for Claude, Codex, OpenCode and Antigravity senders alike, including messages the agents exchange on their own.
+All coefficients start at 1.000. Activity gains 0.05 per working hour and loses 0.10 per idle hour, bounded between 1 and 2. Time spent offline only decays activity; it never simulates work. Waiting for approval and unknown activity are not working time.
 
-**Talk with another agent** (in the agent details) asks the selected agent to discuss a topic with another panel over those same tools and report back; both chats show the exchange, and the office shows it as bubbles. The agent needs the panel tools (Claude and Codex chat panels have them; Antigravity after importing the server in Settings → Antigravity).
+Global coefficient is `1 + 0.001 * log2(1 + companyBase / 100)`. Model experience is `1 + 0.002 * log2(1 + modelBase / 100)`, independent for each provider/model pair. Earnings retain fractions internally. The HUD shows whole coins; income details show three decimal places.
 
-## Chatting from the office
+`src/lib/officeEconomy.ts` contains the shared balance configuration, including game-estimate model tiers. Per-million input/output/cache-read/cache-write values are 0.5/2/0.05/0.625 (Economy), 2/10/0.2/2.5 (Standard), and 4/20/0.4/5 (Premium). Unknown models use Standard. Reported cache writes use the Analytics five-minute cache rate when no duration is available. Reasoning tokens already included in output are not counted twice.
 
-The office chat has a composer: Enter sends to the selected agent without opening its panel. Rust routes it the way panel messages are routed (Claude stream, Codex, OpenCode, Antigravity chat, or a paste into a terminal panel). API (LLM) chats are answered from the full chat. An agent waiting for an approval still needs the full chat to answer it.
+The app-wide recorder continues when the office is closed. Claude, Codex, Antigravity, and API chats including OpenRouter supply durable usage records. Unavailable provider usage earns nothing until a usage record arrives. Historical imports are not rewarded. Persistent settlement IDs and cumulative usage watermarks prevent duplicate income after polling, window moves, or restart. Late usage retains the original multiplier rather than benefiting from later purchases.
 
-**Resources** lists the files, folders and links the conversation mentioned. Clicking a file reveals it in the file manager, a folder opens it, a link opens the browser.
+## Store and equipment
 
-## Clickable paths
+There are 64 bundled definitions. Store cards show the actual object, footprint, bonus, price, and stored quantity; click its preview to see all four orientations. Furniture and equipment are individual purchases. Floor finishes are reusable unlocks.
 
-In every chat, an inline-code path (`src/lib/office.ts`, `C:\Users\you\Desktop\app`, `~/project`) and an absolute path in prose open the file manager. Agents shorten paths inconsistently, so `open_path_smart` tries the text as written, then relative to the panel folder, the Desktop, the home folder and each drive root, and opens the first that exists; line suffixes like `:12:3` and `#L12` are ignored. Nothing is launched: folders open, files are revealed. When no candidate exists a toast says where it looked.
+Five PCs cost 0 / 300 / 900 / 2,400 / 6,000 and multiply their worker by 1.00 / 1.05 / 1.12 / 1.22 / 1.35. Every worker receives a basic computer automatically. Buy an upgrade and assign it in that worker's **Agent details**. Replacing equipment returns the old item to storage. Closing a worker's panel returns its equipment too.
 
-## Activity and reward coverage
+Accessories cost 20-150 and grant small individual bonuses. Environment items cost 20-1,000. Only the strongest item per environment family applies, capped at +0.15 overall; stored objects and supplied starter furniture grant no environment bonus. Server upgrades cost 500 / 1,500 / 4,000 with +0.03 / +0.08 / +0.15 for Claude, Codex, Antigravity, or OpenRouter. Only the best placed server for each provider applies.
 
-- Claude chat uses the live structured chat store for movement. Claude terminal uses the native transcript recorder; its last reported action becomes unknown after 30 seconds without another event.
-- Codex chat and terminal use the existing app-server state for movement. Claude and Codex rewards come from completed native Activity records, including after a view change or restart. Stable record IDs prevent duplicate rewards on polling or transcript replay. Only turns begun after the office game was initialized qualify; imported older history earns nothing.
-- Antigravity chat uses its live session for movement: the character keeps working for the whole open turn, however quiet the output, and stops only when agy reports the turn's end (idle), a turn awaiting your reply (waiting), or a failure (error). Its rewards come from completed native Activity records, once per turn ID; stopped and failed turns earn nothing. Antigravity terminal panels have a character but report no structured activity.
-- OpenCode and API chat panels use their live stores. Their rewards require observing the current turn running and then completing during this app run; historical imports are not rewarded.
-- Remote LAN panels and internal subagents are not independently represented or rewarded in this version.
-- The app-wide activity hook continues while Office View is closed. Entering Office View keeps the panel tree mounted so ongoing sessions and API streams continue. Native polling refreshes pending turns, paginates newer activity, and rescans from the game start every five minutes to catch delayed transcript imports. Errors remain visible and retries resume automatically.
+## Expanding and arranging
 
-Native records retain distinct tool **names**, not command contents or tool arguments, for work-category rewards. No additional model requests are made. The existing Activity timeline and token counts are unchanged.
+The office appends workstation capacity as panels join without moving existing furniture. **Company > Expand studio** adds a four-tile-deep decorating module, starting at 150 coins and doubling for each purchase. Closing panels frees their basic workstations for reuse.
 
-## Validation
+Locations change the exterior while preserving furniture and capacity: starter studio, city office (1,200, +0.03), plaza (3,500, +0.08), and seaside (8,000, +0.15). Only the current location gives a bonus.
 
-`npx vitest run src/lib/office.test.ts src/lib/activityGraph.test.ts src/lib/codexReducer.test.ts src/lib/workspaceSerializer.test.ts`
+Double-click an object to pick it up, or use **Decorate > Move**. A translucent preview and the entire rotated grid footprint follow the pointer. **R** or **Rotate** changes orientation; click to place; **Escape** cancels without changing the original object. Green footprints are valid; red footprints indicate blocked placements. Keep workstation approaches, seat approaches, and walking routes clear. Rugs and floor decorations can sit beneath furniture. **Store** returns furniture to inventory; supplied workstation capacity cannot be packed away.
 
-Tests cover reward replay/reload, old and failed records, restoration of character identity, provider activity, atomic purchases, bounds/overlap rejection, inventory return, accessory ownership, blocked paths, and rerouting from the animated position.
+Workers use pathfinding for reported task destinations. Idle workers occasionally walk, rest, or reserve a couch/chair seat while Office View is visible. Work interrupts wandering. Animation is cosmetic and does not increase income. Office View does not need to stay open.
 
-`powershell -ExecutionPolicy Bypass -File tools/test-rust.ps1 -Stable`
+## Company spin-offs
 
-Includes native tool-name collection, deduplication, omission of tool inputs, and compatibility with turn/usage recording.
+Find the red reset action under **Company > Advanced**. A preview and second confirmation explain everything that resets: coins, furniture, outfits, equipment, location, expansions, activity, and model experience. Chats, provider sessions, files, and panel identities are never reset.
 
-Start Vite, then run `node tools/test-office.mjs`. The browser fixture uses real office components, Pixi rendering, and store subscriptions with synthetic native/session data. It checks task stations, scene lifecycle, actual canvas placement, wearable slots, the office composer, clickable resources and paths (including the not-found toast), the agent huddle request, the exchange list, rewards while away, persistence, pagination, errors/recovery, narrow layout, and empty state. PNGs are saved under `../tessera-office-validation/`. No model inference or personal transcripts are used.
+The company needs at least 250 fresh **base coins before bonuses**. The spin-off factor is:
+
+`1 + floor(10 * log2(1 + companyBase / 250)) / 100`
+
+750 base coins grants x1.20; 1,750 grants x1.30. Factors multiply permanently, so x1.20 followed by x1.30 yields x1.56. Lifetime statistics survive; other game progression starts over. Earlier records cannot earn again in the new company.
+
+## Adding content
+
+Copy a JSON definition in `src/content/office/`, change its stable ID, and rebuild. Each single file contains:
+
+- `version: 1`, ID, name, description, category, price, and a legacy furniture archetype when applicable.
+- `footprint`, `collision` grid cells, and optional `interaction` approach cells.
+- Four SVG strings in `art`, with a shared pixel `anchor`. Artwork is drawn at the tile origin. Each SVG must supply width, height, and viewBox.
+- Optional `seats`: local fractional tile positions and integer approach cells in the unrotated view. The engine rotates these with the furniture.
+- Optional `bonus`: scope (`worker`, `environment`, `provider`), amount, environment family, or provider.
+- Wearable slot, color, attachment position/scale, and shirt badge anchor; PCs use `pcMultiplier`.
+
+Use the existing plant, couch, shirt, or server file as a template. Definition validation rejects scripts, external resources, executable SVG, bad footprints, and malformed bonuses. The renderer supports a restricted SVG shape subset. `tools/generate-office-catalog.py` reproduces the bundled artwork; running it overwrites the shipped definitions, so hand-authored additions should use new IDs. Downloading items from the internet is not implemented.
+
+## Save upgrade and verification
+
+Save version 3 backs up the preceding office state under `tessera-office-before-tycoon-v3`. Furniture and currently equipped outfits survive. Ten old coins become one new coin; old earnings remain a separate lifetime statistic. New coefficient growth and spin-off eligibility start at the update, with no retrospective rewards.
+
+Run `npm test` for economy, migration, placement, pathfinding, and reward replay tests. With Vite running, `node tools/test-office-tycoon.mjs` exercises store purchases, equipment, canvas placement, rotations, cancellation, thirty-worker expansion, locations, spin-offs, narrow layout, and persistence using synthetic sessions. `tools/test-office.mjs` retains broader chat, activity, pagination, and scene lifecycle coverage. Screenshots are saved in `../tessera-office-validation/`.
+
+The isolated `office_validation` native example uses a separate profile with synthetic data, starts hidden, and exits automatically after three minutes. It never loads the user's agents or database.

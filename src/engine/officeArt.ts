@@ -1,5 +1,8 @@
+import { drawOfficeSvg } from './officeSvg';
 import { Graphics } from 'pixi.js';
 import type { OfficeFurnitureType } from '../types/office';
+import { officeItem } from '../lib/officeCatalog';
+import providerBadges from '../content/office-provider-icons.json';
 
 export function characterSeed(id: string): number { let hash = 0; for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0; return hash; }
 const shade = (c: number, factor: number) => ((Math.round((c >> 16 & 255) * factor) << 16) | (Math.round((c >> 8 & 255) * factor) << 8) | Math.round((c & 255) * factor));
@@ -94,17 +97,31 @@ export function drawOfficeFurniture(g: Graphics, type: OfficeFurnitureType) {
  * `think` lifts the gaze, `work0/work1` move the arms as if typing. */
 export type CharacterMood = '' | 'talk0' | 'talk1' | 'think' | 'work0' | 'work1';
 /** `wearables` is the `wearableKey()` string: head|face|neck item ids. */
-export function drawOfficeCharacter(g: Graphics, id: string, color: number, wearables: string, frame: number, walking: boolean, activity: string, mood: CharacterMood = '') {
-  const [head, face, neck] = wearables.split('|');
+export function drawOfficeCharacter(g: Graphics, id: string, color: number, wearables: string, frame: number, walking: boolean, activity: string, mood: CharacterMood = '', provider = '', seated = false) {
+  const [head, face, neck, shirt] = wearables.split('|');
+  const shirtColor = officeItem(shirt)?.color;
+  if (shirtColor) color = parseInt(shirtColor.slice(1),16);
   const seed = characterSeed(id), skin = [0xf1c29c, 0xbd8968, 0x966747, 0xe3af81][seed % 4], hair = [0x423632, 0xb6804d, 0x302e39, 0x8a6751][seed % 4];
   const step = walking ? (frame % 2 ? 2 : -2) : mood === 'work0' ? 1 : mood === 'work1' ? -1 : 0;
   g.clear().ellipse(0, 7, 10, 4).fill({ color: 0x152329, alpha: .28 });
   const stride = walking ? step : 0;
-  g.rect(-6, -8 + stride, 5, 12).rect(1, -8 - stride, 5, 12).fill(0x3b485a);
-  g.rect(-7, 2 + stride, 6, 4).rect(1, 2 - stride, 6, 4).fill(0xd5d8c7);
+  if (seated) {
+    g.poly([-6,-7,-1,-7,2,-1,2,4,-2,4,-2,0,-6,-2]).poly([1,-7,6,-7,10,-1,10,4,6,4,6,0,1,-2]).fill(0x3b485a);
+    g.rect(-2,2,6,3).rect(6,2,6,3).fill(0xd5d8c7);
+  } else {
+    g.rect(-6, -8 + stride, 5, 12).rect(1, -8 - stride, 5, 12).fill(0x3b485a);
+    g.rect(-7, 2 + stride, 6, 4).rect(1, 2 - stride, 6, 4).fill(0xd5d8c7);
+  }
   g.roundRect(-8, -27, 16, 22, 3).fill(color).stroke({ color: 0x202b37, width: 1 });
   g.rect(-11, -24 - step, 4, 14).rect(7, -24 + step, 4, 14).fill(shade(color, .8));
   g.rect(-11, -11 - step, 4, 4).rect(7, -11 + step, 4, 4).fill(skin);
+  const top = officeItem(shirt);
+  if (top?.art && top.attachment) {
+    g.save();g.context.translate(top.attachment.x,top.attachment.y);g.context.scale(top.attachment.scale);g.context.translate(-top.anchor!.x,-top.anchor!.y);drawOfficeSvg(g,top.art[0]);g.restore();
+  }
+  const badge = providerBadges[(provider === 'anthropic' ? 'claude' : provider === 'openai' ? 'codex' : provider) as keyof typeof providerBadges];
+  const badgeAnchor = top?.badgeAnchor ?? {x:0,y:-19.5};
+  if (badge) { g.save();g.context.translate(badgeAnchor.x-4.5,badgeAnchor.y-4.5);drawOfficeSvg(g,badge);g.restore(); }
   g.roundRect(-7, -42, 14, 16, 3).fill(skin);
   g.rect(-8, -43, 16, 5).rect(-8, -39, seed % 2 ? 5 : 3, 6).fill(hair);
   const gaze = mood === 'think' ? 1 : 0;
@@ -127,6 +144,14 @@ export function drawOfficeCharacter(g: Graphics, id: string, color: number, wear
   if (head === 'party_hat') { g.poly([-6, -43, 6, -43, 0, -59]).fill(0x7fc0e8); g.poly([-4, -48, 4, -48, 3, -51, -3, -51]).fill(0xf5d76e); g.circle(0, -59, 2).fill(0xf0788f); }
   if (head === 'crown') g.poly([-8, -43, -9, -53, -3, -48, 0, -55, 4, -48, 9, -53, 8, -43]).fill(0xf3ce75).stroke({ color: 0x9a7743, width: 1 });
   if (head === 'halo') g.ellipse(0, -50, 9, 3).stroke({ color: 0xf3ce75, width: 2 });
+  // Future declarative wearables attach without a renderer branch.
+  const builtins = new Set(['headphones','cap','beanie','beret','visor','party_hat','crown','halo','glasses','sunglasses','monocle','tie','bowtie','scarf','lanyard']);
+  for (const id of [head,face,neck]) {
+    const item = officeItem(id);
+    if (!item?.art || !item.attachment || builtins.has(id)) continue;
+    const {x,y,scale}=item.attachment;
+    g.save();g.context.translate(x,y);g.context.scale(scale);g.context.translate(-item.anchor!.x,-item.anchor!.y);drawOfficeSvg(g,item.art[0]);g.restore();
+  }
   if (!walking && (activity === 'reading_file' || activity === 'searching_files')) g.poly([-9, -19, 0, -16, 9, -19, 9, -7, 0, -4, -9, -7]).fill(0xf0d7a6).stroke({ color: 0x9e805b, width: 1 });
   const active = !['idle', 'unknown', 'new'].includes(activity);
   g.circle(11, -43, 4).fill(activity === 'error' ? 0xe79588 : activity === 'awaiting_permission' ? 0xf1c574 : active ? 0x8fceaf : 0x8c9b9c);

@@ -24,6 +24,8 @@ export interface OfficeFurniture {
   rotation: 0 | 1 | 2 | 3;
   style?: string;
   itemId?: string;
+  /** Automatically supplied equipment is never sellable or packable. */
+  workstationFor?: string;
 }
 
 export interface OfficeWorker {
@@ -36,6 +38,7 @@ export interface OfficeWorker {
   isWalking: boolean;
   task: string;
   detail: string;
+  seat?: { furnitureId: string; index: number; position: GridPosition; rotation: number };
 }
 
 export interface OfficeRoom {
@@ -53,17 +56,32 @@ export interface OfficeLayout {
 }
 
 /** Where a wearable sits on the character. One item per slot. */
-export type WearableSlot = 'head' | 'face' | 'neck';
-export const WEARABLE_SLOTS: WearableSlot[] = ['head', 'face', 'neck'];
+export type WearableSlot = 'head' | 'face' | 'neck' | 'shirt';
+export const WEARABLE_SLOTS: WearableSlot[] = ['head', 'face', 'neck', 'shirt'];
 
 export interface ShopItem {
   id: string;
   name: string;
-  category: 'floor' | 'furniture' | 'decoration' | 'accessory';
+  category: 'floor' | 'furniture' | 'decoration' | 'accessory' | 'pc' | 'server';
   price: number;
   sprite: string;
   furnitureType?: OfficeFurnitureType;
   slot?: WearableSlot;
+  version?: 1;
+  description?: string;
+  footprint?: { w: number; h: number };
+  collision?: Array<[number, number]>;
+  /** Four genuine isometric views in one self-contained definition. */
+  art?: [string, string, string, string];
+  anchor?: { x: number; y: number };
+  foreground?: [string, string, string, string];
+  seats?: Array<{ x: number; y: number; approach: [number, number] }>;
+  interaction?: Array<[number, number]>;
+  bonus?: { scope: 'worker' | 'environment' | 'provider'; amount: number; family?: string; provider?: string };
+  pcMultiplier?: number;
+  color?: string;
+  attachment?: { x: number; y: number; scale: number };
+  badgeAnchor?: { x: number; y: number };
 }
 
 export const ACTIVITY_LOCATIONS: Record<WorkerActivity, OfficeRoomType[]> = {
@@ -90,6 +108,10 @@ export interface WorkerProfile {
   tasks: number;
   /** Equipped wearable ids by slot. */
   wearables: Partial<Record<WearableSlot, string>>;
+  pc?: string;
+  activity?: number;
+  activityAt?: number;
+  activityState?: WorkerActivity;
 }
 export interface OfficeReward {
   id: string;
@@ -98,4 +120,18 @@ export interface OfficeReward {
   task: string;
   coins: number;
   at: number;
+  base?: number;
+  estimated?: boolean;
 }
+
+export interface OfficeRates { input: number; output: number; cacheRead: number; cacheWrite: number }
+export interface OfficeSettlement {
+  usage: import('./activity').ActivityUsage;
+  multiplier: number;
+  rates: OfficeRates;
+  estimated: boolean;
+  panelId: string;
+  modelKey: string;
+  completed?: boolean;
+}
+export type OfficeLocation = 'studio' | 'city' | 'plaza' | 'seaside';

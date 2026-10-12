@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+use crate::activity::{model::{Actor, Record, now}, record_api};
 
 use super::providers;
 
@@ -101,7 +102,17 @@ pub async fn llm_send_message(
     let done_event = format!("llm-done-{}", id);
     let error_event = format!("llm-error-{}", id);
 
+    let name = app_handle.try_state::<crate::panelbus::PanelBus>()
+        .and_then(|bus| bus.with_registry(|r| r.get(&id).map(|p| p.name.clone())))
+        .unwrap_or_else(|| id.clone());
+    let mut record = Record::turn(format!("api:{}", uuid::Uuid::new_v4()),
+        Actor { id: id.clone(), name, provider: provider.clone(), model: Some(model), device: None }, id.clone(), now());
+    let messages: Vec<serde_json::Value> = serde_json::from_str(&messages_json).unwrap_or_default();
+    record.set_prompt(messages.iter().rev().find(|m| m["role"] == "user").and_then(|m| m["content"].as_str()).unwrap_or("").to_string());
+    record.status = "running".into();
+    record_api(&app_handle, record.clone());
     tokio::spawn(async move {
+        let mut cancelled = false;
         let result = async {
             use futures_util::StreamExt;
 
@@ -125,6 +136,7 @@ pub async fn llm_send_message(
             loop {
                 tokio::select! {
                     _ = cancel.notified() => {
+                        cancelled = true;
                         break;
                     }
                     chunk = stream.next() => {
@@ -141,7 +153,13 @@ pub async fn llm_send_message(
                                         continue;
                                     }
 
+                                    if let Some(usage) = providers::parse_usage(&provider, &line, record.usage.as_ref()) {
+                                        record.usage = Some(usage);
+                                        record.updated_at = now();
+                                        record_api(&app_handle, record.clone());
+                                    }
                                     if let Some(content) = providers::parse_sse_chunk(&provider, &line) {
+                                        record.response.push_str(&content);
                                         let _ = app_handle.emit(
                                             &chunk_event,
                                             ChunkPayload { content },
@@ -158,10 +176,21 @@ pub async fn llm_send_message(
                 }
             }
 
+            if !buffer.trim().is_empty() {
+                if let Some(usage) = providers::parse_usage(&provider, buffer.trim(), record.usage.as_ref()) { record.usage = Some(usage); }
+                if let Some(content) = providers::parse_sse_chunk(&provider, buffer.trim()) {
+                    record.response.push_str(&content);
+                    let _ = app_handle.emit(&chunk_event, ChunkPayload { content });
+                }
+            }
             Ok::<(), String>(())
         }
         .await;
 
+        record.updated_at = now();
+        record.status = if cancelled { "interrupted" } else if result.is_err() { "failed" } else { "completed" }.into();
+        if record.usage.is_none() { record.usage_note = Some("Provider did not report token usage.".into()); }
+        record_api(&app_handle, record);
         match result {
             Ok(()) => {
                 let _ = app_handle.emit(&done_event, ());

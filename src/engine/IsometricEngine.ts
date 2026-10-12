@@ -1,12 +1,16 @@
+import { drawOfficeSvg } from './officeSvg';
 import { Application, Container, Graphics, Matrix, Rectangle, Text } from 'pixi.js';
-import type { OfficeLayout, OfficeFurniture } from '../types/office';
+import type { OfficeLayout, OfficeFurniture, OfficeLocation, WorkerProfile } from '../types/office';
 import { BUBBLE_FRAMES, drawOfficeCharacter, drawOfficeFurniture, drawSpeechBubble, type BubbleKind, type CharacterMood } from './officeArt';
+import { itemForFurniture, officeItem } from '../lib/officeCatalog';
+import { furnitureCells } from '../lib/officeSpace';
 import type { WorkerPose } from './WorkerAnimator';
 
 const ROOM_NAMES: Record<string, string> = { reception: 'WELCOME', open_floor: 'THE STUDIO', manager_office: 'YOUR OFFICE', meeting_room: 'PLANNING', server_room: 'BUILD LAB', break_room: 'COFFEE LOUNGE', archive: 'LIBRARY', computer_lab: 'RESEARCH', maintenance: 'SUPPORT' };
 export class IsometricEngine {
   app = new Application();
   private world = new Container();
+  private exterior = new Graphics();
   private floor = new Container();
   private walls = new Container();
   private entities = new Container();
@@ -15,6 +19,11 @@ export class IsometricEngine {
   private bubbles = new Container();
   private grid = new Graphics();
   private ghost = new Graphics();
+  private ghostArt = new Graphics();
+  private furnitureGraphics = new Map<string,Graphics>();
+  private hoverTile?: {gx:number;gy:number};
+  private onTileHoverHandler?: (gx:number,gy:number)=>void;
+  private onFurnitureDoubleClickHandler?: (id:string)=>void;
   private ready = false;
   private disposed = false;
   private cameraX = 0;
@@ -37,9 +46,10 @@ export class IsometricEngine {
     if (this.disposed) { this.app.destroy(true, { children: true }); return; }
     this.ready = true;
     parent.appendChild(this.app.canvas);
-    this.world.addChild(this.floor, this.walls, this.entities, this.links, this.labels, this.bubbles, this.grid, this.ghost);
+    this.world.addChild(this.exterior, this.floor, this.walls, this.entities, this.links, this.labels, this.bubbles, this.grid, this.ghost, this.ghostArt);
     this.app.stage.addChild(this.world);
     this.entities.sortableChildren = true;
+    this.exterior.eventMode='none';this.ghostArt.eventMode='none';
     this.labels.eventMode = 'none'; this.grid.eventMode = 'none'; this.ghost.eventMode = 'none'; this.links.eventMode = 'none'; this.bubbles.eventMode = 'none';
     this.resizeObserver = new ResizeObserver(() => { if (parent.clientWidth && parent.clientHeight) { this.app.renderer.resize(parent.clientWidth, parent.clientHeight); this.centerCamera(); } });
     this.resizeObserver.observe(parent);
@@ -89,25 +99,59 @@ export class IsometricEngine {
     }
     g.eventMode = 'none'; this.walls.addChildAt(g, 0);
   }
-  drawFurniture(furniture: OfficeFurniture[]) {
-    for (const child of [...this.entities.children]) if (child.label === 'furniture') { this.entities.removeChild(child); child.destroy({ children: true }); }
-    for (const f of furniture) {
-      const g = new Graphics(); g.label = 'furniture'; g.eventMode = 'none';
-      drawOfficeFurniture(g, f.type);
-      const p = this.gridToScreen(f.position.gridX, f.position.gridY);
-      g.position.set(p.x, p.y + 12); g.scale.x = f.rotation % 2 ? -1 : 1;
-      g.zIndex = f.type === 'rug' ? -10000 : p.y + 16;
-      this.entities.addChild(g);
+  drawExterior(layout:OfficeLayout, location:OfficeLocation) {
+    const g=this.exterior;g.clear();
+    const colors={studio:0x354a47,city:0x3b4d50,plaza:0x4b606e,seaside:0x407e90};
+    const x=-layout.height*32-180,y=-110,w=(layout.width+layout.height)*32+360,h=(layout.width+layout.height)*16+280;
+    g.roundRect(x,y,w,h,40).fill(colors[location]);
+    if(location==='seaside') {
+      g.roundRect(x+15,y+15,w-30,h-30,32).fill(0x4c96a6);
+      for(let row=0;row<12;row++) for(let col=0;col<12;col++) g.moveTo(x+30+col*110,y+30+row*65).quadraticCurveTo(x+55+col*110,y+18+row*65,x+85+col*110,y+30+row*65).stroke({color:0xb0e4dd,alpha:.24,width:2});
+      const a=this.gridToScreen(-1,-1),b=this.gridToScreen(layout.width+1,-1),c=this.gridToScreen(layout.width+1,layout.height+1),d=this.gridToScreen(-1,layout.height+1);
+      g.poly([a,b,c,d]).fill(0xd7c69c);
+    } else {
+      for(let i=0;i<6;i++) {
+        const bx=x+50+i*w/6;
+        if(location==='studio' || location==='city') {g.circle(bx,y+45,20).fill(0x64856c);g.circle(bx+9,y+40,12).fill(0x7c9b7b);}
+        else {g.rect(bx,y+15,70,80).fill(0x728b9d);for(let n=0;n<4;n++)g.rect(bx+8+n*15,y+25,6,57).fill(0xa3bcc5);}
+      }
     }
   }
+  drawFurniture(furniture: OfficeFurniture[], profiles:Record<string,WorkerProfile> = {}) {
+    for (const child of [...this.entities.children]) if (child.label === 'furniture') { this.entities.removeChild(child); child.destroy({ children: true }); }
+    this.furnitureGraphics.clear();
+    for (const f of furniture) {
+      const g = new Graphics(); g.label = 'furniture'; g.eventMode = 'none';
+      const item=f.workstationFor ? officeItem(profiles[f.workstationFor]?.pc ?? 'pc-0') : itemForFurniture(f);
+      if(item?.art) {g.save();g.context.translate(-item.anchor!.x,-item.anchor!.y);drawOfficeSvg(g,item.art[f.rotation]);g.restore();}
+      else drawOfficeFurniture(g,f.type);
+      const p = this.gridToScreen(f.position.gridX, f.position.gridY);
+      g.position.set(p.x,p.y);
+      g.zIndex = f.type === 'rug' ? -10000 : p.y + ((item?.footprint?.w??1)+(item?.footprint?.h??1))*16-1;
+      this.entities.addChild(g);this.furnitureGraphics.set(f.id,g);
+    }
+  }
+  showPlacement(f?:OfficeFurniture, error?:string|null) {
+    this.ghost.clear();this.ghostArt.clear();
+    for(const [id,g] of this.furnitureGraphics) g.alpha=f?.id===id ? .25 : 1;
+    if(!f) return;
+    const color=error ? 0xe38f86 : 0x9ed9b3;
+    for(const cell of furnitureCells(f)) {const p=this.gridToScreen(cell.gridX,cell.gridY);this.ghost.poly([p.x,p.y,p.x+32,p.y+16,p.x,p.y+32,p.x-32,p.y+16]).fill({color,alpha:.28}).stroke({color,width:1.5});}
+    const item=itemForFurniture(f),p=this.gridToScreen(f.position.gridX,f.position.gridY);
+    this.ghostArt.position.set(p.x,p.y);this.ghostArt.alpha=.55;
+    if(item?.art) {this.ghostArt.save();this.ghostArt.context.translate(-item.anchor!.x,-item.anchor!.y);drawOfficeSvg(this.ghostArt,item.art[f.rotation]);this.ghostArt.restore();}
+    else drawOfficeFurniture(this.ghostArt,f.type);
+  }
+  refreshPlacement() {if(this.hoverTile)this.onTileHoverHandler?.(this.hoverTile.gx,this.hoverTile.gy);}
+  highlightWorker(id:string|null) {for(const [key,w] of this.workerGraphics) {w.label.alpha=key===id?1:.42;w.label.style.fontSize=key===id?12:10;}}
   syncWorkers(ids: string[]) {
     for (const [id, worker] of this.workerGraphics) if (!ids.includes(id)) { worker.body.destroy(); worker.label.destroy(); worker.bubble.destroy(); worker.glyph.destroy(); this.workerGraphics.delete(id); }
     for (const id of ids) if (!this.workerGraphics.has(id)) {
       const body = new Graphics(); body.eventMode = 'static'; body.cursor = 'pointer'; body.hitArea = new Rectangle(-17, -55, 34, 65);
       body.on('pointerover', e => { if (!this.edit) this.onWorkerHoverHandler?.(id, e.global.x, e.global.y); });
       body.on('pointerout', () => this.onWorkerHoverHandler?.(null, 0, 0));
-      const label = new Text({ text: '', style: { fontFamily: 'Segoe UI, sans-serif', fontSize: 12, fontWeight: '600', fill: 0xf4f3df, stroke: { color: 0x1b3034, width: 3 }, align: 'center' } });
-      label.anchor.set(.5, 0); label.eventMode = 'none';
+      const label = new Text({ text: '', style: { fontFamily: 'Segoe UI, sans-serif', fontSize: 10, fontWeight: '600', fill: 0xf4f3df, stroke: { color: 0x1b3034, width: 3 }, align: 'center' } });
+      label.alpha=.42;label.anchor.set(.5, 0); label.eventMode = 'none';
       const bubble = new Graphics(); bubble.eventMode = 'none'; bubble.visible = false;
       const glyph = new Text({ text: '', style: { fontFamily: 'Segoe UI, sans-serif', fontSize: 13, fontWeight: '800', fill: 0x2a3a44, align: 'center' } });
       glyph.anchor.set(.5); glyph.eventMode = 'none'; glyph.visible = false;
@@ -118,18 +162,19 @@ export class IsometricEngine {
   updateWorkerPositions(positions: Map<string, WorkerPose>) {
     for (const [id, pos] of positions) {
       const w = this.workerGraphics.get(id); if (!w) continue;
-      const p = this.gridToScreen(pos.x + .5, pos.y + .5);
-      w.body.position.set(p.x, p.y); w.body.zIndex = p.y;
+      const p = pos.seat ? this.gridToScreen(pos.seat.position.gridX,pos.seat.position.gridY) : this.gridToScreen(pos.x + .5, pos.y + .5);
+      if(pos.seat) p.y-=10;
+      w.body.position.set(p.x, p.y); w.body.zIndex = pos.seat ? (this.furnitureGraphics.get(pos.seat.furnitureId)?.zIndex ?? p.y)+1 : p.y;
       w.label.position.set(p.x, p.y + 10);
       w.bubble.position.set(p.x, p.y); w.glyph.position.set(p.x, p.y - 72);
     }
   }
-  updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', wearables = '', walking = false, frame = 0, appearanceId = id, mood: CharacterMood = '') {
+  updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', wearables = '', walking = false, frame = 0, appearanceId = id, mood: CharacterMood = '', seated=false) {
     const w = this.workerGraphics.get(id); if (!w) return;
-    const key = [color, activity, name, provider, wearables, walking, walking ? frame % 2 : 0, appearanceId, walking ? '' : mood].join(':');
+    const key = [color, activity, name, provider, wearables, walking, seated, walking ? frame % 2 : 0, appearanceId, walking ? '' : mood].join(':');
     if (key === w.key) return;
-    w.key = key; drawOfficeCharacter(w.body, appearanceId, color, wearables, frame, walking, activity, walking ? '' : mood);
-    w.label.text = `${name.length > 22 ? name.slice(0, 21) + '…' : name}\n${provider}`;
+    w.key = key; drawOfficeCharacter(w.body, appearanceId, color, wearables, frame, walking, activity, walking ? '' : mood, provider, seated);
+    w.label.text = name.length > 16 ? name.slice(0, 15) + '…' : name;
   }
   /** The bubble over a character: animated dots while it works, a glyph when it needs
    * someone, a tinted bubble while it is messaging another agent. */
@@ -171,12 +216,15 @@ export class IsometricEngine {
   onBackgroundClick(handler: () => void) { this.onBackgroundClickHandler = handler; }
   onWorkerHover(handler: (id: string | null, x: number, y: number) => void) { this.onWorkerHoverHandler = handler; }
   showGrid(layout: OfficeLayout, enabled: boolean) {
-    this.edit = enabled; this.grid.clear(); this.ghost.clear();
+    this.edit = enabled; this.grid.clear(); this.ghost.clear();this.ghostArt.clear();
+    if (!enabled) {this.showPlacement();}
     if (!enabled) return;
     for (let y = 0; y <= layout.height; y++) { const a = this.gridToScreen(0, y), b = this.gridToScreen(layout.width, y); this.grid.moveTo(a.x, a.y).lineTo(b.x, b.y); }
     for (let x = 0; x <= layout.width; x++) { const a = this.gridToScreen(x, 0), b = this.gridToScreen(x, layout.height); this.grid.moveTo(a.x, a.y).lineTo(b.x, b.y); }
     this.grid.stroke({ color: 0xffffff, alpha: .25, width: 1 });
   }
+  onTileHover(handler:(gx:number,gy:number)=>void) {this.onTileHoverHandler=handler;}
+  onFurnitureDoubleClick(handler:(id:string)=>void) {this.onFurnitureDoubleClickHandler=handler;}
   private setupInteraction(parent: HTMLElement) {
     let dragging = false, downX = 0, downY = 0, lastX = 0, lastY = 0, panning = false, moved = false;
     let pressedWorker: string | undefined;
@@ -187,14 +235,14 @@ export class IsometricEngine {
       return [...this.workerGraphics].sort((a, b) => b[1].body.zIndex - a[1].body.zIndex)
         .find(([, { body }]) => body.hitArea?.contains(x - body.x, y - body.y))?.[0];
     };
-    const point = (e: PointerEvent) => { const r = parent.getBoundingClientRect(); return this.screenToGrid((e.clientX - r.left - this.cameraX) / this.zoomLevel, (e.clientY - r.top - this.cameraY) / this.zoomLevel); };
+    const point = (e: MouseEvent) => { const r = parent.getBoundingClientRect(); return this.screenToGrid((e.clientX - r.left - this.cameraX) / this.zoomLevel, (e.clientY - r.top - this.cameraY) / this.zoomLevel); };
     const down = (e: PointerEvent) => { if (e.button > 1) return; dragging = true; moved = e.shiftKey || e.button !== 0; pressedWorker = workerAt(e); panning = e.shiftKey || e.button === 1 || !this.edit; downX = lastX = e.clientX; downY = lastY = e.clientY; };
     const move = (e: PointerEvent) => {
       if (dragging && Math.hypot(e.clientX - downX, e.clientY - downY) >= 5) moved = true;
       if (dragging && panning) { this.cameraX += e.clientX - lastX; this.cameraY += e.clientY - lastY; this.updateCamera(); }
       lastX = e.clientX; lastY = e.clientY;
-      this.ghost.clear();
-      if (this.edit && this.layout) { const { gx, gy } = point(e); if (gx >= 0 && gy >= 0 && gx < this.layout.width && gy < this.layout.height) { const p = this.gridToScreen(gx, gy); this.ghost.poly([p.x, p.y, p.x + 32, p.y + 16, p.x, p.y + 32, p.x - 32, p.y + 16]).fill({ color: 0xf4d492, alpha: .4 }).stroke({ color: 0xffe0a5, width: 2 }); } }
+      if(this.edit) {this.hoverTile=point(e);this.onTileHoverHandler?.(this.hoverTile.gx,this.hoverTile.gy);}
+
     };
     const up = (e: PointerEvent) => {
       if (dragging && !moved && e.button === 0 && Math.hypot(e.clientX - downX, e.clientY - downY) < 5) {
@@ -207,9 +255,16 @@ export class IsometricEngine {
       }
       dragging = false;
     };
-    const leave = () => { dragging = false; this.ghost.clear(); this.onWorkerHoverHandler?.(null, 0, 0); };
+    const leave = () => { dragging = false; this.ghost.clear();this.ghostArt.clear(); this.onWorkerHoverHandler?.(null, 0, 0); };
     const wheel = (e: WheelEvent) => { e.preventDefault(); this.zoomBy(e.deltaY > 0 ? -.08 : .08); };
+    const doubleClick=(e:MouseEvent)=>{
+      if(this.edit) return;
+      const r=parent.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;
+      const found=[...this.furnitureGraphics].sort((a,b)=>b[1].zIndex-a[1].zIndex).find(([,g])=>g.getBounds().rectangle.contains(x,y));
+      if(found){e.preventDefault();this.onFurnitureDoubleClickHandler?.(found[0]);}
+    };
+    parent.addEventListener('dblclick',doubleClick);
     parent.addEventListener('pointerdown', down); parent.addEventListener('pointermove', move); parent.addEventListener('pointerup', up); parent.addEventListener('pointerleave', leave); parent.addEventListener('pointercancel', leave); parent.addEventListener('wheel', wheel, { passive: false });
-    this.cleanup = () => { parent.removeEventListener('pointerdown', down); parent.removeEventListener('pointermove', move); parent.removeEventListener('pointerup', up); parent.removeEventListener('pointerleave', leave); parent.removeEventListener('pointercancel', leave); parent.removeEventListener('wheel', wheel); };
+    this.cleanup = () => { parent.removeEventListener('dblclick',doubleClick); parent.removeEventListener('pointerdown', down); parent.removeEventListener('pointermove', move); parent.removeEventListener('pointerup', up); parent.removeEventListener('pointerleave', leave); parent.removeEventListener('pointercancel', leave); parent.removeEventListener('wheel', wheel); };
   }
 }

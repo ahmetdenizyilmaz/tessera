@@ -1,15 +1,18 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Minus, Plus, Scan, Users } from 'lucide-react';
 import { IsometricEngine } from '../../engine/IsometricEngine';
+import { OfficeWander } from '../../engine/OfficeWander';
+import { placementError } from '../../lib/officeSpace';
 import { WorkerAnimator } from '../../engine/WorkerAnimator';
 import { getProviderColor } from '../../engine/SpriteManager';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { useInstanceStore } from '../../store/instanceStore';
-import { officeProvider, PROVIDER_NAMES } from '../../lib/officeActivity';
-import { wearableKey } from '../../lib/officeCatalog';
+import { officeProvider } from '../../lib/officeActivity';
+import { officeItem, wearableKey } from '../../lib/officeCatalog';
 import { bubbleFor, moodFor } from '../../lib/officeBubbles';
 import { EXCHANGE_VISIBLE_MS, liveExchanges } from '../../lib/officeTalk';
 import { focusShortcutPanel } from '../../lib/panelShortcuts';
+import { OfficeCompany } from './OfficeCompany';
 import { OfficeHUD } from './OfficeHUD';
 import { OfficeShop } from './OfficeShop';
 import { OfficeTeam } from './OfficeTeam';
@@ -27,6 +30,12 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
   const layout = useOfficeGameStore(s => s.layout);
   const editMode = useOfficeGameStore(s => s.editMode);
   const shopOpen = useOfficeGameStore(s => s.shopOpen);
+  const companyOpen = useOfficeGameStore(s=>s.companyOpen);
+  const profiles = useOfficeGameStore(s=>s.profiles);
+  const location = useOfficeGameStore(s=>s.location);
+  const rotation = useOfficeGameStore(s=>s.rotation);
+  const movingId = useOfficeGameStore(s=>s.movingId);
+  const selectedItem = useOfficeGameStore(s=>s.selectedItem);
   const count = useOfficeGameStore(s => Object.keys(s.workers).length);
   const selectedInstance = useInstanceStore(s => selected ? s.instances.get(selected) : undefined);
   const selectAgent = useCallback((id: string | null) => {
@@ -38,25 +47,40 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (!canvasRef.current) return;
     let disposed = false, frameId = 0;
-    const engine = new IsometricEngine(), animator = new WorkerAnimator();
+    const engine = new IsometricEngine(), animator = new WorkerAnimator(), wander=new OfficeWander();
     engineRef.current = engine;
     engine.onWorkerClick(selectAgent);
     engine.onBackgroundClick(closeChat);
     engine.onWorkerHover(id => setHover(id));
+    engine.onFurnitureDoubleClick(id=>useOfficeGameStore.getState().beginMove(id));
+    engine.onTileHover((gridX,gridY)=>{
+      const s=useOfficeGameStore.getState();
+      const existing=s.layout.furniture.find(f=>f.id===s.movingId), item=officeItem(s.selectedItem??'');
+      const type=existing?.type??item?.furnitureType;
+      if(!s.editMode || !type || (!existing && s.editAction!=='place')) {engine.showPlacement();return;}
+      const f={...existing,id:existing?.id??'preview',type,itemId:existing?.itemId??item?.id,position:{gridX,gridY},rotation:s.rotation};
+      engine.showPlacement(f,placementError(s.layout,f,s.workers));
+    });
     engine.onTileClick((gridX, gridY) => useOfficeGameStore.getState().placeAt({ gridX, gridY }));
     void engine.init(canvasRef.current).then(() => {
       if (disposed) return;
       const initial = useOfficeGameStore.getState();
-      engine.drawFloor(initial.layout); engine.drawWalls(initial.layout); engine.drawFurniture(initial.layout.furniture);
+      engine.drawFloor(initial.layout); engine.drawWalls(initial.layout); engine.drawFurniture(initial.layout.furniture,initial.profiles);engine.drawExterior(initial.layout,initial.location);
       engine.showGrid(initial.layout, initial.editMode); engine.centerCamera(); setReady(true);
       let lastTime = performance.now();
-      let lastLayout = initial.layout;
+      let lastLayout = initial.layout, lastWander=0;
       const targets = new Map<string, string>();
       const loop = (time: number) => {
         if (disposed) return;
+        if(document.hidden) {lastTime=time;frameId=requestAnimationFrame(loop);return;}
         const dt = Math.min((time - lastTime) / 1000, .1); lastTime = time;
         const state = useOfficeGameStore.getState(), ids = Object.keys(state.workers);
         engine.syncWorkers(ids);
+        if(time-lastWander>1000 && !state.editMode) {
+          lastWander=time;
+          const changes=wander.update(Date.now(),state.layout,state.workers);
+          if(Object.keys(changes).length) useOfficeGameStore.setState({workers:{...state.workers,...changes}});
+        }
         for (const id of targets.keys()) if (!state.workers[id]) { targets.delete(id); animator.removeWorker(id); }
         for (const [id, worker] of Object.entries(state.workers)) {
           const key = `${worker.targetPosition.gridX},${worker.targetPosition.gridY}`;
@@ -70,8 +94,8 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
           const instance = useInstanceStore.getState().instances.get(id); if (!instance) continue;
           const provider = officeProvider(instance);
           const beat = Math.floor(time / 260);
-          engine.updateWorkerGraphic(id, getProviderColor(provider), worker.activity, instance.name, PROVIDER_NAMES[provider] ?? provider,
-            wearableKey(state.profiles[id]?.wearables), poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId, moodFor(worker.activity, talking.has(id), beat));
+          engine.updateWorkerGraphic(id, getProviderColor(provider), worker.activity, instance.name, provider,
+            wearableKey(state.profiles[id]?.wearables), poses.get(id)?.isWalking, Math.floor(time / 180), state.profiles[id]?.appearanceId, moodFor(worker.activity, talking.has(id), beat),!!poses.get(id)?.seat);
           engine.updateWorkerBubble(id, bubbleFor(worker.activity, talking.has(id)), beat);
         }
         engine.drawLinks(exchanges.map(e => {
@@ -90,13 +114,15 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (!ready) return;
     const engine = engineRef.current!;
-    engine.drawFloor(layout); engine.drawWalls(layout); engine.drawFurniture(layout.furniture); engine.showGrid(layout, editMode);
-  }, [layout, editMode, ready]);
+    engine.drawFloor(layout); engine.drawWalls(layout); engine.drawFurniture(layout.furniture,profiles);engine.drawExterior(layout,location); engine.showGrid(layout, editMode);
+  }, [layout, editMode, ready, profiles, location]);
+  useEffect(()=>{engineRef.current?.refreshPlacement();},[rotation,movingId,selectedItem]);
+  useEffect(()=>{engineRef.current?.highlightWorker(hover??selected);},[hover,selected]);
   useEffect(() => { if (shopOpen || editMode || !selectedInstance) closeChat(); }, [shopOpen, editMode, selectedInstance?.id, closeChat]);
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { const s = useOfficeGameStore.getState(); s.setShopOpen(false); s.setEditMode(false); closeChat(); }
-      if (e.key.toLowerCase() === 'r' && useOfficeGameStore.getState().editMode && !(e.target instanceof HTMLInputElement)) useOfficeGameStore.setState(s => ({ rotation: ((s.rotation + 1) % 4) as 0 | 1 | 2 | 3 }));
+      if (e.key === 'Escape') { const s = useOfficeGameStore.getState(); s.setShopOpen(false); s.setEditMode(false); useOfficeGameStore.setState({companyOpen:false});closeChat(); }
+      if (e.key.toLowerCase() === 'r' && useOfficeGameStore.getState().editMode && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement || (e.target instanceof HTMLElement && e.target.isContentEditable))) useOfficeGameStore.setState(s => ({ rotation: ((s.rotation + 1) % 4) as 0 | 1 | 2 | 3 }));
     };
     window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey);
   }, [closeChat]);
@@ -113,6 +139,7 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
     <OfficeTeam selected={selected ?? hover} onSelect={selectAgent} onOpen={openPanel} collapsed={!!selectedInstance} onExpand={closeChat} />
     {selectedInstance && <OfficeChat key={`${selectedInstance.id}:${selectedInstance.claudeSessionId ?? selectedInstance.codexThreadId ?? selectedInstance.opencodeSessionId ?? selectedInstance.antigravityConversationId ?? ''}`} instance={selectedInstance} onClose={closeChat} onOpen={openPanel} />}
     {shopOpen && <OfficeShop />}
+    {companyOpen && <OfficeCompany />}
     {editMode && <EditModeOverlay />}
   </div>;
 }

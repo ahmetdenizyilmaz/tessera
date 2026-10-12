@@ -22,10 +22,6 @@ export function mapOfficeTool(name: string): WorkerActivity {
   if (/bash|exec|shell|command|terminal|stdin|test/.test(tool)) return 'running_command';
   return 'using_tool';
 }
-export function rewardForTools(tools: string[]): number {
-  const activities = new Set(tools.map(mapOfficeTool).filter(a => a !== 'awaiting_permission'));
-  return 30 + Math.min(20, activities.size * 5);
-}
 export function cleanTask(text: string): string {
   return text.replace(/^\[panel-message[^\n]*\]\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 180);
 }
