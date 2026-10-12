@@ -4,7 +4,7 @@
   "name": "Water cooler",
   "description": "Water cooler. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 100,
+  "price": 150,
   "sprite": "water_cooler",
   "furnitureType": "water_cooler",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#abbac2",
   "bonus": {
     "scope": "environment",
-    "amount": 0.003,
+    "amount": 0.006,
     "family": "water_cooler"
   }
 }

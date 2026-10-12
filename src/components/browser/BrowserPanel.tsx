@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, Maximize2, Minimize2, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, Home, Maximize2, Minimize2, RefreshCw, X } from 'lucide-react';
+import { PluginIcon } from '../icons/PluginIcon';
 import { browserCommand, browserNeedsFocus, measureBrowserSurface } from '../../lib/browserPanels';
 import { usePluginStore } from '../../store/pluginStore';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
@@ -10,9 +11,11 @@ import { closePanel } from '../../lib/panelCleanup';
 import { listen } from '@tauri-apps/api/event';
 import { PANEL_MAXIMIZE_EVENT } from '../../lib/panelMaximize';
 
-export function BrowserPanel({ instanceId, site }: { instanceId: string; site: 'lichess' }) {
+export function BrowserPanel({ instanceId, site }: { instanceId: string; site: string }) {
   const useLayoutStore = usePanelLayout();
   const instance = usePluginStore(s => s.instances.get(instanceId));
+  const homeUrl=usePluginStore(s=>s.registry.get(instance?.pluginName??'')?.homeUrl);
+  const title=instance?.title??'Web app';
   const maximized = useLayoutStore(s => s.maximizedId === instanceId);
   const surface = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -57,7 +60,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
       } finally { busy = false; }
     };
     browserCommand(instanceId, 'browser_panel_create', {
-      site, url: usePluginStore.getState().instances.get(instanceId)?.browserUrl ?? null,
+      site, homeUrl:homeUrl??null, url: usePluginStore.getState().instances.get(instanceId)?.browserUrl ?? null,
     }).then(() => {
       if (disposed) return;
       setReady(true);
@@ -68,7 +71,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
       view.cancelAnimationFrame(frame);
       void browserCommand(instanceId, 'browser_panel_bounds', { bounds: null }).catch(() => {});
     };
-  }, [instanceId, site, attempt]);
+  }, [instanceId, site, homeUrl, attempt]);
 
   const action = (action: string) => {
     setError('');
@@ -79,22 +82,22 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
   };
   return <div className="browser-panel">
     <div className="terminal-toolbar browser-toolbar">
-      <Globe size={15} className="browser-brand" />
-      <span className="browser-title">{instance?.title ?? 'Lichess'}<PanelShortcutBadge panelId={instanceId} /></span>
+      <PluginIcon icon={instance?.icon??'Globe'} size={15} className="browser-brand" />
+      <span className="browser-title">{title}<PanelShortcutBadge panelId={instanceId} /></span>
       <button title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
       <button title="Forward" aria-label="Forward" disabled={!ready} onClick={() => action('forward')}><ArrowRight size={14} /></button>
-      <button title="Lichess home" aria-label="Lichess home" disabled={!ready} onClick={() => action('home')}><Home size={14} /></button>
-      <button title="Reload Lichess" aria-label="Reload Lichess" disabled={!ready} onClick={() => action('reload')}><RefreshCw size={14} /></button>
+      <button title={`${title} home`} aria-label={`${title} home`} disabled={!ready} onClick={() => action('home')}><Home size={14} /></button>
+      <button title={`Reload ${title}`} aria-label={`Reload ${title}`} disabled={!ready} onClick={() => action('reload')}><RefreshCw size={14} /></button>
       <MovePanelButton panelId={instanceId} />
       <button title={maximized ? 'Restore panel size' : 'Maximize panel'} aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
         onClick={() => useLayoutStore.getState().toggleMaximized(instanceId)}>{maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
       <button title="Open in default browser" aria-label="Open in default browser" disabled={!ready} onClick={() => action('external')}><ExternalLink size={14} /></button>
-      <button title="Close Lichess panel" aria-label="Close Lichess panel" onClick={close}><X size={14} /></button>
+      <button title={`Close ${title} panel`} aria-label={`Close ${title} panel`} onClick={close}><X size={14} /></button>
     </div>
     {error && <div className="browser-error" role="alert">{error}<button onClick={() => setAttempt(n => n + 1)}>Retry</button></div>}
     <div ref={surface} className="browser-surface" data-browser-surface={instanceId}>
-      <div className="browser-placeholder"><Globe size={32} /><strong>Lichess</strong>
-        <span>{error ? 'The browser could not be opened.' : clickToFocus ? 'Click to focus and play' : ready ? 'Your chess session stays open while you use Tessera.' : 'Opening Lichess…'}</span>
+      <div className="browser-placeholder"><PluginIcon icon={instance?.icon??'Globe'} size={32} /><strong>{title}</strong>
+        <span>{error ? 'The browser could not be opened.' : clickToFocus ? 'Click to focus and interact' : ready ? 'Your session stays open while you use Tessera.' : `Opening ${title}…`}</span>
       </div>
     </div>
   </div>;

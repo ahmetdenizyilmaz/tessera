@@ -4,7 +4,7 @@
   "name": "Indoor olive tree",
   "description": "Indoor olive tree. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 350,
+  "price": 525,
   "sprite": "plant",
   "furnitureType": "plant",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#a2b280",
   "bonus": {
     "scope": "environment",
-    "amount": 0.009,
+    "amount": 0.018,
     "family": "plant"
   }
 }

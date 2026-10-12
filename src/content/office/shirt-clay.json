@@ -3,7 +3,7 @@
   "id": "shirt-clay",
   "name": "Clay tee",
   "category": "accessory",
-  "price": 35,
+  "price": 50,
   "sprite": "shirt-clay",
   "slot": "shirt",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.0035
+    "amount": 0.007
   }
 }

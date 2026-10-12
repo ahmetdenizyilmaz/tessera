@@ -3,7 +3,7 @@
   "id": "headphones",
   "name": "Studio headphones",
   "category": "accessory",
-  "price": 80,
+  "price": 120,
   "sprite": "headphones",
   "slot": "head",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.008
+    "amount": 0.016
   }
 }

@@ -5,7 +5,7 @@ import { itemForFurniture, officeItem } from './officeCatalog';
 /** Game values, not provider invoices. All tuning is centralized here. */
 export const OFFICE_BALANCE = {
   coinsPerValue: 10, activePerHour: .05, idlePerHour: .10,
-  environmentCap: .15, expansionPrice: 150,
+  environmentCap: .25, expansionPrice: 450,
   fallback: {
     economy: { input: .5, output: 2, cacheRead: .05, cacheWrite: .625 },
     standard: { input: 2, output: 10, cacheRead: .2, cacheWrite: 2.5 },
@@ -18,9 +18,9 @@ export const OFFICE_BALANCE = {
 };
 export const OFFICE_LOCATIONS: Record<OfficeLocation, { name: string; price: number; bonus: number; description: string }> = {
   studio: { name: 'Starter studio', price: 0, bonus: 0, description: 'A quiet courtyard and a company of your own.' },
-  city: { name: 'City office', price: 1200, bonus: .03, description: 'A leafy street, warm brick, and room to grow.' },
-  plaza: { name: 'Plaza headquarters', price: 3500, bonus: .08, description: 'Glass towers and a landscaped business plaza.' },
-  seaside: { name: 'Seaside studio', price: 8000, bonus: .15, description: 'Ocean views, a sandy shore, and a calmer workspace.' },
+  city: { name: 'City office', price: 12000, bonus: .06, description: 'A leafy street, warm brick, and room to grow.' },
+  plaza: { name: 'Plaza headquarters', price: 40000, bonus: .16, description: 'Glass towers and a landscaped business plaza.' },
+  seaside: { name: 'Seaside studio', price: 100000, bonus: .30, description: 'Ocean views, a sandy shore, and a calmer workspace.' },
 };
 export const ZERO_USAGE: ActivityUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 };
 export function normalizedModel(model: string) { return model.toLowerCase().replace(/^.*\//, '').replace(/\./g, '-'); }

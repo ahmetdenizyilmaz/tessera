@@ -26,7 +26,7 @@ try {
   console.log('PASS native usage adapter, five assigned workstations, live renderer');
 
   // Synthetic funds let the same run exercise every store interaction.
-  await page.evaluate(()=>window.office.setState({currency:20000}));
+  await page.evaluate(()=>window.office.setState({currency:200000}));
   await page.getByRole('button',{name:'Shop',exact:true}).click();
   await page.getByRole('button',{name:'Computers',exact:true}).click();
   await expect(page.locator('[data-shop-item]')).toHaveCount(4);
@@ -35,8 +35,11 @@ try {
   await page.getByRole('button',{name:'Rotate item preview'}).click();
   expect(await image.getAttribute('src')).not.toBe(before);
   await page.getByRole('button',{name:'Buy Professional PC',exact:true}).click();
-  await page.getByRole('button',{name:'Outfits',exact:true}).click();
+  await page.getByRole('button',{name:'Shop categories',exact:true}).click();
+  await page.getByRole('button',{name:'Headwear',exact:true}).click();
   await page.getByRole('button',{name:'Buy Studio headphones',exact:true}).click();
+  await page.getByRole('button',{name:'Shop categories',exact:true}).click();
+  await page.getByRole('button',{name:'Shirts',exact:true}).click();
   await page.getByRole('button',{name:'Buy Sage tee',exact:true}).click();
   await page.screenshot({path:`${out}/tycoon-store.png`});
   await page.getByRole('button',{name:'Close shop',exact:true}).click();

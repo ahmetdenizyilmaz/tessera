@@ -15,6 +15,11 @@ export function drawOfficeSvg(g: Graphics, svg: string) {
     return `<path ${before} d="${path}${tag==='polygon'?' Z':''}" ${after.replace(/\/$/,'')}/>`;
   });
   g.save();
-  if(box?.length===4 && box[2]>0 && box[3]>0 && width>0 && height>0) {g.context.scale(width/box[2],height/box[3]);g.context.translate(-box[0],-box[1]);}
+  // Append a local transform. context.scale() also scales the caller's
+  // translation, which pulls small shirt badges back toward the feet.
+  if(box?.length===4 && box[2]>0 && box[3]>0 && width>0 && height>0) {
+    const sx=width/box[2], sy=height/box[3];
+    g.context.transform(sx,0,0,sy,-box[0]*sx,-box[1]*sy);
+  }
   g.svg(normalized);g.restore();
 }

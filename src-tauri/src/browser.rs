@@ -2,9 +2,28 @@
 use serde::{Deserialize, Serialize};
 use tauri::{webview::{NewWindowResponse, WebviewBuilder}, Manager, Webview, WebviewUrl};
 use tauri_plugin_shell::ShellExt;
+use std::collections::HashMap;
 
 #[derive(Default)]
-pub struct BrowserPanels(tokio::sync::Mutex<()>);
+pub struct BrowserPanels(tokio::sync::Mutex<HashMap<String, SitePolicy>>);
+
+#[derive(Clone)]
+struct SitePolicy { home: tauri::Url, custom: bool }
+
+impl SitePolicy {
+    fn new(site: &str, home: Option<&str>) -> Result<Self,String> {
+        if site == "lichess" { return Ok(Self {home:"https://lichess.org/".parse().unwrap(),custom:false}); }
+        if !site.starts_with("web-app-") || site.len() <= 8 || label(site).is_err() { return Err("Unknown website module".into()); }
+        let home = home.ok_or("A home address is required")?.parse::<tauri::Url>().map_err(|_|"Invalid web address")?;
+        if !web_address(&home) {return Err("Only http and https addresses without credentials are supported".into());}
+        Ok(Self {home,custom:true})
+    }
+    fn allows(&self, url: &tauri::Url) -> bool { if self.custom {web_address(url)} else {allowed(url)} }
+}
+
+fn web_address(url: &tauri::Url) -> bool {
+    matches!(url.scheme(),"https"|"http") && url.host_str().is_some() && url.username().is_empty() && url.password().is_none()
+}
 
 fn authorize(caller: &Webview) -> Result<(), String> {
     if caller.label() == "main" { Ok(()) } else { Err("Only the Tessera UI can control browser panels".into()) }
@@ -22,10 +41,10 @@ fn allowed(url: &tauri::Url) -> bool {
         && url.port().is_none() && url.username().is_empty() && url.password().is_none()
 }
 
-fn saved_url(url: &tauri::Url) -> String {
+fn saved_url(url: &tauri::Url, policy: &SitePolicy) -> String {
     // Never put login redirects, tokens, or account settings into workspace exports.
-    if !allowed(url) || ["/login", "/signup", "/auth", "/oauth", "/account"].iter().any(|p| url.path().starts_with(p)) {
-        return "https://lichess.org/".into();
+    if !policy.allows(url) || ["/login", "/signin", "/signup", "/auth", "/oauth", "/account"].iter().any(|p| url.path().starts_with(p)) {
+        return policy.home.to_string();
     }
     let mut url = url.clone();
     url.set_query(None);
@@ -68,26 +87,27 @@ fn install_panel_shortcut(view: &Webview, app: tauri::AppHandle, id: String) -> 
 }
 
 #[tauri::command]
-pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String, site: String, url: Option<String>) -> Result<(), String> {
+pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String, site: String, url: Option<String>, home_url: Option<String>) -> Result<(), String> {
     authorize(&caller)?;
     let label = label(&id)?;
-    if site != "lichess" { return Err("Unknown website module".into()); }
-    let _guard = state.0.lock().await;
+    let policy = SitePolicy::new(&site,home_url.as_deref())?;
+    let mut profiles = state.0.lock().await;
     if app.get_webview(&label).is_some() { return Ok(()); }
-    let url = url.and_then(|u| u.parse::<tauri::Url>().ok()).filter(allowed)
-        .unwrap_or_else(|| "https://lichess.org/".parse().unwrap());
+    let url = url.and_then(|u| u.parse::<tauri::Url>().ok()).filter(|u|policy.allows(u)).unwrap_or_else(||policy.home.clone());
     let window = app.get_window("main").ok_or("Main window is unavailable")?;
     let profile = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("browser-profiles").join(&site);
     std::fs::create_dir_all(&profile).map_err(|e| e.to_string())?;
     let popup_app = app.clone();
     let popup_label = label.clone();
+    let navigation_policy=policy.clone();
+    let popup_policy=policy.clone();
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .data_directory(profile)
         .focused(false)
         .disable_drag_drop_handler()
-        .on_navigation(allowed)
+        .on_navigation(move |url|navigation_policy.allows(url))
         .on_new_window(move |url, _| {
-            if allowed(&url) {
+            if popup_policy.allows(&url) {
                 let app = popup_app.clone();
                 let label = popup_label.clone();
                 tauri::async_runtime::spawn(async move {
@@ -103,6 +123,7 @@ pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state:
         .map_err(|e| e.to_string())?;
     #[cfg(windows)]
     install_panel_shortcut(&view, app.clone(), id)?;
+    profiles.insert(label,policy);
     view.hide().map_err(|e| e.to_string())
 }
 
@@ -141,17 +162,18 @@ pub async fn browser_panel_bounds(caller: Webview, app: tauri::AppHandle, id: St
 }
 
 #[tauri::command]
-pub async fn browser_panel_action(caller: Webview, app: tauri::AppHandle, id: String, action: String) -> Result<(), String> {
+pub async fn browser_panel_action(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String, action: String) -> Result<(), String> {
     authorize(&caller)?;
     let view = app.get_webview(&label(&id)?).ok_or("Browser panel is not ready")?;
+    let policy=state.0.lock().await.get(&label(&id)?).cloned().ok_or("Website profile is unavailable")?;
     let result = match action.as_str() {
         "back" => view.eval("history.back()"),
         "forward" => view.eval("history.forward()"),
         "reload" => view.reload(),
-        "home" => view.navigate("https://lichess.org/".parse().unwrap()),
+        "home" => view.navigate(policy.home.clone()),
         "external" => {
             let url = view.url().map_err(|e| e.to_string())?;
-            if !allowed(&url) { return Err("Unsupported address".into()); }
+            if !policy.allows(&url) { return Err("Unsupported address".into()); }
             return app.shell().open(url.to_string(), None).map_err(|e| e.to_string());
         }
         _ => return Err("Unknown browser action".into()),
@@ -163,17 +185,19 @@ pub async fn browser_panel_action(caller: Webview, app: tauri::AppHandle, id: St
 pub struct BrowserStatus { url: String }
 
 #[tauri::command]
-pub async fn browser_panel_status(caller: Webview, app: tauri::AppHandle, id: String) -> Result<BrowserStatus, String> {
+pub async fn browser_panel_status(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String) -> Result<BrowserStatus, String> {
     authorize(&caller)?;
     let view = app.get_webview(&label(&id)?).ok_or("Browser panel is not ready")?;
-    Ok(BrowserStatus { url: saved_url(&view.url().map_err(|e| e.to_string())?) })
+    let policy=state.0.lock().await.get(&label(&id)?).cloned().ok_or("Website profile is unavailable")?;
+    Ok(BrowserStatus { url: saved_url(&view.url().map_err(|e| e.to_string())?, &policy) })
 }
 
 #[tauri::command]
 pub async fn browser_panel_close(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String) -> Result<(), String> {
     authorize(&caller)?;
-    let _guard = state.0.lock().await;
+    let mut profiles = state.0.lock().await;
     if let Some(view) = app.get_webview(&label(&id)?) { view.close().map_err(|e| e.to_string())?; }
+    profiles.remove(&label(&id)?);
     Ok(())
 }
 
@@ -186,9 +210,20 @@ mod tests {
         for url in ["http://lichess.org", "https://lichess.org.evil.test/", "https://evil.test/?lichess.org", "https://user@lichess.org/", "file:///C:/secret", "https://lichess.org:8443/"] {
             assert!(!allowed(&url.parse().unwrap()), "{url}");
         }
-        assert_eq!(saved_url(&"https://lichess.org/login?token=secret".parse().unwrap()), "https://lichess.org/");
-        assert_eq!(saved_url(&"https://lichess.org/abcdefgh?foo=bar#secret".parse().unwrap()), "https://lichess.org/abcdefgh");
+        let policy=SitePolicy::new("lichess",None).unwrap();
+        assert_eq!(saved_url(&"https://lichess.org/login?token=secret".parse().unwrap(), &policy), "https://lichess.org/");
+        assert_eq!(saved_url(&"https://lichess.org/abcdefgh?foo=bar#secret".parse().unwrap(), &policy), "https://lichess.org/abcdefgh");
         assert!(label("../main").is_err());
         assert!(label("plugin-lichess-123").is_ok());
+    }
+    #[test]
+    fn custom_web_apps_keep_stable_profiles_and_allow_web_auth_navigation() {
+        let policy=SitePolicy::new("web-app-stable-identity",Some("https://player.example.test/")).unwrap();
+        for url in ["https://player.example.test/music", "https://login.example.test/oauth", "http://127.0.0.1:4567/"] {assert!(policy.allows(&url.parse().unwrap()));}
+        for url in ["file:///C:/secret", "javascript:alert(1)", "data:text/html,hello", "https://user:pass@example.test/"] {assert!(!policy.allows(&url.parse().unwrap()));}
+        assert_eq!(saved_url(&"https://login.example.test/oauth?token=secret".parse().unwrap(), &policy),"https://player.example.test/");
+        assert_eq!(saved_url(&"https://player.example.test/music?token=secret#fragment".parse().unwrap(), &policy),"https://player.example.test/music");
+        assert!(SitePolicy::new("web-app-../../outside",Some("https://example.test/")).is_err());
+        assert!(SitePolicy::new("web-app-safe",Some("file:///C:/secret")).is_err());
     }
 }

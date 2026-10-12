@@ -4,7 +4,7 @@
   "name": "Flagship PC",
   "description": "Assign to one worker. Their desk displays this computer.",
   "category": "pc",
-  "price": 6000,
+  "price": 9000,
   "sprite": "desk",
   "footprint": {
     "w": 2,
@@ -37,5 +37,5 @@
       1
     ]
   ],
-  "pcMultiplier": 1.35
+  "pcMultiplier": 1.5
 }

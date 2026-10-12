@@ -3,7 +3,7 @@
   "id": "halo",
   "name": "Halo",
   "category": "accessory",
-  "price": 150,
+  "price": 225,
   "sprite": "halo",
   "slot": "head",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.015
+    "amount": 0.03
   }
 }

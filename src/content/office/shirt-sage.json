@@ -3,7 +3,7 @@
   "id": "shirt-sage",
   "name": "Sage tee",
   "category": "accessory",
-  "price": 20,
+  "price": 30,
   "sprite": "shirt-sage",
   "slot": "shirt",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.002
+    "amount": 0.004
   }
 }

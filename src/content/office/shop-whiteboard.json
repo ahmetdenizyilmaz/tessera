@@ -4,7 +4,7 @@
   "name": "Planning board",
   "description": "Planning board. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 100,
+  "price": 150,
   "sprite": "whiteboard",
   "furnitureType": "whiteboard",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#d8dfd1",
   "bonus": {
     "scope": "environment",
-    "amount": 0.003,
+    "amount": 0.006,
     "family": "whiteboard"
   }
 }

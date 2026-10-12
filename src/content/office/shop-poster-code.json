@@ -4,7 +4,7 @@
   "name": "Code poster",
   "description": "Code poster. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 25,
+  "price": 40,
   "sprite": "poster",
   "furnitureType": "poster",
   "footprint": {
@@ -25,7 +25,7 @@
   "color": "#bfaa96",
   "bonus": {
     "scope": "environment",
-    "amount": 0.001,
+    "amount": 0.002,
     "family": "poster"
   }
 }

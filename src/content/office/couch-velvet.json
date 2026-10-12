@@ -4,7 +4,7 @@
   "name": "Velvet lounge",
   "description": "Velvet lounge. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 650,
+  "price": 975,
   "sprite": "couch",
   "furnitureType": "couch",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#a481a5",
   "bonus": {
     "scope": "environment",
-    "amount": 0.015,
+    "amount": 0.03,
     "family": "couch"
   },
   "seats": [

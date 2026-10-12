@@ -4,7 +4,7 @@
   "name": "Architect lighting",
   "description": "Architect lighting. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 450,
+  "price": 675,
   "sprite": "lamp",
   "furnitureType": "lamp",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#d5bb86",
   "bonus": {
     "scope": "environment",
-    "amount": 0.011,
+    "amount": 0.022,
     "family": "lamp"
   }
 }

@@ -4,7 +4,7 @@
   "name": "Monstera",
   "description": "Monstera. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 110,
+  "price": 165,
   "sprite": "plant",
   "furnitureType": "plant",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#539279",
   "bonus": {
     "scope": "environment",
-    "amount": 0.004,
+    "amount": 0.008,
     "family": "plant"
   }
 }

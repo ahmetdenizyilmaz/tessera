@@ -4,7 +4,7 @@
   "name": "Claude server · Tier 3",
   "description": "Claude server · Tier 3. A place for your team to work and recharge.",
   "category": "server",
-  "price": 4000,
+  "price": 30000,
   "sprite": "server_rack",
   "furnitureType": "server_rack",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#cf927a",
   "bonus": {
     "scope": "provider",
-    "amount": 0.15,
+    "amount": 0.3,
     "family": "server_rack",
     "provider": "claude"
   }

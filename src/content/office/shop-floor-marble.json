@@ -4,7 +4,7 @@
   "name": "Stone flooring",
   "description": "Stone flooring. A place for your team to work and recharge.",
   "category": "floor",
-  "price": 150,
+  "price": 225,
   "sprite": "marble",
   "footprint": {
     "w": 2,

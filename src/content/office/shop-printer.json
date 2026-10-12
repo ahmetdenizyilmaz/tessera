@@ -4,7 +4,7 @@
   "name": "Office printer",
   "description": "Office printer. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 140,
+  "price": 210,
   "sprite": "printer",
   "furnitureType": "printer",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#b1b9ba",
   "bonus": {
     "scope": "environment",
-    "amount": 0.003,
+    "amount": 0.006,
     "family": "printer"
   }
 }

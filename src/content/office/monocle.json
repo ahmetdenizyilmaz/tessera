@@ -3,7 +3,7 @@
   "id": "monocle",
   "name": "Monocle",
   "category": "accessory",
-  "price": 110,
+  "price": 165,
   "sprite": "monocle",
   "slot": "face",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.011
+    "amount": 0.022
   }
 }

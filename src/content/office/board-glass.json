@@ -4,7 +4,7 @@
   "name": "Glass planning board",
   "description": "Glass planning board. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 400,
+  "price": 600,
   "sprite": "whiteboard",
   "furnitureType": "whiteboard",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#bee2da",
   "bonus": {
     "scope": "environment",
-    "amount": 0.01,
+    "amount": 0.02,
     "family": "whiteboard"
   }
 }

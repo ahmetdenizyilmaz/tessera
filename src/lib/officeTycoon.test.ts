@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.hoisted(()=>{const data=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>data.get(k)??null,setItem:(k:string,v:string)=>data.set(k,v),removeItem:(k:string)=>data.delete(k)});vi.stubGlobal('window',{localStorage:globalThis.localStorage});});
 import { useOfficeGameStore as office, migrateOffice } from '../store/officeGameStore';
-import { OFFICE_CATALOG, validateOfficeItem, officeItem } from './officeCatalog';
+import { OFFICE_CATALOG, OFFICE_SHOP_SECTIONS, shopSection, validateOfficeItem, officeItem } from './officeCatalog';
 import { activityAfter, baseCoins, incomeMultiplier, spinFactor, usageRates, ZERO_USAGE } from './officeEconomy';
 import { connectedFloor, ensureWorkstations, furnitureCells, interactionTile, placementError, seatsIn } from './officeSpace';
 import { getDefaultLayout } from '../engine/defaultOffice';
@@ -12,7 +12,7 @@ import type { ActivityRecord } from '../types/activity';
 import type { OfficeLayout } from '../types/office';
 const room=():OfficeLayout=>({width:8,height:8,floorTiles:{},wallTiles:{},rooms:[],furniture:[]});
 const record=(overrides:Partial<ActivityRecord>={}):ActivityRecord=>({id:'response',kind:'turn',actor:{id:'a',name:'Worker',provider:'codex',model:'gpt-6-astra',device:null},sessionId:'thread',startedAt:100,updatedAt:200,status:'running',prompt:'Test work',response:'',usage:{...ZERO_USAGE,input:100000,output:10000},parentId:null,target:null,origin:'user',usageNote:null,...overrides});
-beforeEach(()=>office.setState({layout:room(),workers:{},profiles:{},panelAliases:{},currency:0,totalEarned:0,completedTasks:0,inventory:{},purchasedItems:[],rewards:[],claimed:{},startedAt:50,ledger:{},companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,legacyEarned:0,prices:{},pendingRecords:[],editMode:false,movingId:null,selectedItem:null,editAction:'place',rotation:0}));
+beforeEach(()=>office.setState({layout:room(),workers:{},profiles:{},panelAliases:{},currency:0,totalEarned:0,completedTasks:0,inventory:{},purchasedItems:[],rewards:[],claimed:{},startedAt:50,ledger:{},companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,legacyEarned:0,prices:{},pendingRecords:[],editMode:false,movingId:null,selectedItem:null,editAction:'place',rotation:0,repeatPurchase:false}));
 
 describe('usage economy',()=>{
   it('settles running tokens once, then only the delayed increment at the original multiplier',()=>{
@@ -94,6 +94,50 @@ describe('usage economy',()=>{
 });
 
 describe('items, migration, and space',()=>{
+  it('buys into placement, charges extra copies only on valid drops, and stops at the budget',()=>{
+    const price=officeItem('shop-plant-small')!.price;
+    office.setState({currency:price*3,shopOpen:true});
+    expect(office.getState().buyAndPlace('shop-plant-small')).toBe(true);
+    expect(office.getState().shopOpen).toBe(false);expect(office.getState().editMode).toBe(true);
+    expect(office.getState().placeAt({gridX:1,gridY:1})).toBe(true);
+    expect(office.getState().currency).toBe(price*2);
+    expect(office.getState().placeAt({gridX:1,gridY:1})).toBe(false);
+    expect(office.getState().currency).toBe(price*2);
+    expect(office.getState().placeAt({gridX:3,gridY:1})).toBe(true);
+    expect(office.getState().placeAt({gridX:5,gridY:1})).toBe(true);
+    expect(office.getState().currency).toBe(0);expect(office.getState().layout.furniture).toHaveLength(3);
+    expect(office.getState().editMode).toBe(false);expect(office.getState().selectedItem).toBeNull();
+    expect(office.getState().placeAt({gridX:1,gridY:3})).toBe(false);
+  });
+  it('keeps a cancelled paid item, exhausts stored copies without buying, and safely stores a picked object',()=>{
+    const price=officeItem('shop-couch')!.price;
+    office.setState({currency:price*4});office.getState().buyAndPlace('shop-couch');office.getState().setEditMode(false);
+    expect(office.getState().inventory['shop-couch']).toBe(1);
+    office.getState().selectItem('shop-couch');office.getState().placeAt({gridX:2,gridY:2});
+    expect(office.getState().currency).toBe(price*3);expect(office.getState().editMode).toBe(false);
+    const f=office.getState().layout.furniture[0];office.getState().beginMove(f.id);
+    expect(office.getState().storeHeldItem()).toBe(true);
+    expect(office.getState().layout.furniture).toHaveLength(0);expect(office.getState().inventory['shop-couch']).toBe(1);
+    expect(office.getState().movingId).toBeNull();expect(office.getState().editMode).toBe(false);
+    expect(office.getState().storeHeldItem()).toBe(false);expect(office.getState().inventory['shop-couch']).toBe(1);
+    office.getState().ensureCapacity(['a']);const desk=office.getState().layout.furniture.find(f=>f.workstationFor==='a')!;
+    office.getState().beginMove(desk.id);expect(office.getState().storeHeldItem()).toBe(false);
+    expect(office.getState().layout.furniture.some(f=>f.id===desk.id)).toBe(true);
+  });
+  it('stores an unused purchased item without manufacturing another repeat copy',()=>{
+    const price=officeItem('shop-plant-small')!.price;
+    office.setState({currency:price*3});office.getState().buyAndPlace('shop-plant-small');
+    office.getState().storeHeldItem();expect(office.getState().inventory['shop-plant-small']).toBe(1);
+    office.getState().buyAndPlace('shop-plant-small');
+    office.getState().placeAt({gridX:1,gridY:1});office.getState().placeAt({gridX:3,gridY:1});
+    expect(office.getState().repeatPurchase).toBe(true);office.getState().storeHeldItem();
+    expect(office.getState().currency).toBe(price);expect(office.getState().inventory['shop-plant-small']).toBe(0);
+  });
+  it('gives every product a focused collection and keeps infrastructure above personal equipment',()=>{
+    for(const item of OFFICE_CATALOG)expect(OFFICE_SHOP_SECTIONS[shopSection(item)]).toBeTruthy();
+    expect(officeItem('server-codex-1')!.price).toBeGreaterThan(officeItem('headphones')!.price*20);
+    expect(officeItem('server-codex-3')!.price).toBeGreaterThan(officeItem('pc-4')!.price);
+  });
   it('ships standalone, four-view definitions and rejects executable SVG',()=>{
     expect(OFFICE_CATALOG.length).toBeGreaterThanOrEqual(40);
     expect(OFFICE_CATALOG.filter(i=>i.category==='pc')).toHaveLength(5);
@@ -118,8 +162,8 @@ describe('items, migration, and space',()=>{
   it('caps repeated environment families and uses the best matching provider server',()=>{
     const furniture=['shop-plant-small','plant-olive','server-codex-1','server-codex-3','server-claude-3'].map((itemId,n)=>({id:String(n),itemId,type:officeItem(itemId)!.furnitureType!,position:{gridX:n,gridY:0},rotation:0 as const}));
     office.setState({layout:{...room(),furniture}});
-    expect(incomeMultiplier(office.getState(),'a','codex','x')).toBeCloseTo(1.009*1.15);
-    expect(incomeMultiplier(office.getState(),'a','antigravity','x')).toBeCloseTo(1.009);
+    expect(incomeMultiplier(office.getState(),'a','codex','x')).toBeCloseTo(1.018*1.30);
+    expect(incomeMultiplier(office.getState(),'a','antigravity','x')).toBeCloseTo(1.018);
   });
   it('migrates old shared clothes and coins without awarding historical usage',()=>{
     const layout=getDefaultLayout();

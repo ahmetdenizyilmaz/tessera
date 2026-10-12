@@ -4,7 +4,7 @@
   "name": "Blue carpet",
   "description": "Blue carpet. A place for your team to work and recharge.",
   "category": "floor",
-  "price": 80,
+  "price": 120,
   "sprite": "carpet",
   "footprint": {
     "w": 2,

@@ -29,19 +29,21 @@ The app-wide recorder continues when the office is closed. Claude, Codex, Antigr
 
 ## Store and equipment
 
-There are 64 bundled definitions. Store cards show the actual object, footprint, bonus, price, and stored quantity; click its preview to see all four orientations. Furniture and equipment are individual purchases. Floor finishes are reusable unlocks.
+There are 64 bundled definitions, organized into separate collections for desks, chairs, sofas, plants, clothing slots, each provider's servers, and other item families. Store cards show the actual object, footprint, bonus, price, and stored quantity; click its preview to see all four orientations. Furniture and equipment are individual purchases. Floor finishes are reusable unlocks.
 
-Five PCs cost 0 / 300 / 900 / 2,400 / 6,000 and multiply their worker by 1.00 / 1.05 / 1.12 / 1.22 / 1.35. Every worker receives a basic computer automatically. Buy an upgrade and assign it in that worker's **Agent details**. Replacing equipment returns the old item to storage. Closing a worker's panel returns its equipment too.
+Five PCs cost 0 / 450 / 1,350 / 3,600 / 9,000 and multiply their worker by 1.00 / 1.08 / 1.18 / 1.32 / 1.50. Every worker receives a basic computer automatically. Buy an upgrade and assign it in that worker's **Agent details**. Replacing equipment returns the old item to storage. Closing a worker's panel returns its equipment too.
 
-Accessories cost 20-150 and grant small individual bonuses. Environment items cost 20-1,000. Only the strongest item per environment family applies, capped at +0.15 overall; stored objects and supplied starter furniture grant no environment bonus. Server upgrades cost 500 / 1,500 / 4,000 with +0.03 / +0.08 / +0.15 for Claude, Codex, Antigravity, or OpenRouter. Only the best placed server for each provider applies.
+Accessories cost 30-225 and grant small individual bonuses. Most environment items cost 30-1,500; the archive appliance costs 3,000. Only the strongest item per environment family applies, capped at +0.25 overall; stored objects and supplied starter furniture grant no environment bonus. Server upgrades cost 3,000 / 10,000 / 30,000 with +0.06 / +0.16 / +0.30 for Claude, Codex, Antigravity, or OpenRouter. Only the best placed server for each provider applies. This balance revision preserves existing balances and possessions.
 
 ## Expanding and arranging
 
-The office appends workstation capacity as panels join without moving existing furniture. **Company > Expand studio** adds a four-tile-deep decorating module, starting at 150 coins and doubling for each purchase. Closing panels frees their basic workstations for reuse.
+The office appends workstation capacity as panels join without moving existing furniture. **Company > Expand studio** adds a four-tile-deep decorating module, starting at 450 coins and doubling for each purchase. Closing panels frees their basic workstations for reuse.
 
-Locations change the exterior while preserving furniture and capacity: starter studio, city office (1,200, +0.03), plaza (3,500, +0.08), and seaside (8,000, +0.15). Only the current location gives a bonus.
+Locations change the exterior while preserving furniture and capacity: starter studio, city office (12,000, +0.06), plaza (40,000, +0.16), and seaside (100,000, +0.30). Only the current location gives a bonus.
 
-Double-click an object to pick it up, or use **Decorate > Move**. A translucent preview and the entire rotated grid footprint follow the pointer. **R** or **Rotate** changes orientation; click to place; **Escape** cancels without changing the original object. Green footprints are valid; red footprints indicate blocked placements. Keep workstation approaches, seat approaches, and walking routes clear. Rugs and floor decorations can sit beneath furniture. **Store** returns furniture to inventory; supplied workstation capacity cannot be packed away.
+Buying furniture opens placement immediately. The first copy is paid for and remains in storage if cancelled. Continue clicking valid spots to place more copies; stored copies are used first, and further copies are charged only on valid placement. Placement and its ghost end automatically when there are no stored copies and insufficient coins. Selecting an item from storage never enables automatic purchases.
+
+Hovering furniture highlights its footprint and slightly lifts it. Double-click an object to pick it up, or use **Decorate > Move**. A translucent preview and the entire rotated grid footprint follow the pointer. **Mouse wheel**, **R**, or **Rotate** changes orientation; click or drag to place; **Escape** cancels without changing the original object. The camera buttons still zoom, and Shift-drag pans. Green footprints are valid; red footprints indicate blocked placements. Keep workstation approaches, seat approaches, and walking routes clear. Rugs and floor decorations can sit beneath furniture. Drag a picked object into the bottom-right **Return to storage** target (or click it) to store the object and finish pickup. Unpurchased repeat previews are not converted to inventory. Supplied workstation capacity cannot be packed away.
 
 Workers use pathfinding for reported task destinations. Idle workers occasionally walk, rest, or reserve a couch/chair seat while Office View is visible. Work interrupts wandering. Animation is cosmetic and does not increase income. Office View does not need to stay open.
 

@@ -4,7 +4,7 @@
   "name": "Walnut library",
   "description": "Walnut library. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 850,
+  "price": 1275,
   "sprite": "bookshelf",
   "furnitureType": "bookshelf",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#82644e",
   "bonus": {
     "scope": "environment",
-    "amount": 0.018,
+    "amount": 0.036,
     "family": "bookshelf"
   }
 }

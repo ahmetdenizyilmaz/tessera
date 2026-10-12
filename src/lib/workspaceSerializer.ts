@@ -14,6 +14,7 @@ import type { InstanceConfig } from '../types/instance';
 import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../types/session';
 import { useWorkspaceHistoryStore } from '../store/workspaceHistoryStore';
 import { useRecentPanelStore } from '../store/recentPanelStore';
+import type { PluginManifest } from '../types/plugin';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export interface SavedPlugin {
   pluginName: string;
   title?: string;
   browserUrl?: string;
+  webApp?: PluginManifest;
 }
 
 export interface WorkspaceSnapshotV3 {
@@ -165,6 +167,7 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
     },
     groups: serializedGroups,
     plugins: Array.from(pluginInstances.values()).map((p) => ({
+      webApp:usePluginStore.getState().registry.get(p.pluginName)?.customWebApp?usePluginStore.getState().registry.get(p.pluginName):undefined,
       browserUrl: p.browserUrl,
       id: p.id,
       pluginName: p.pluginName,
@@ -389,6 +392,9 @@ export function deserializeWorkspace(raw: unknown): void {
   const savedPluginIds = new Set<string>();
   for (const plugin of snapshot.plugins) {
     savedPluginIds.add(plugin.id);
+    if(plugin.webApp?.name===plugin.pluginName) {
+      try{usePluginStore.getState().restoreWebApp(plugin.webApp);}catch(error){console.warn('Could not restore web app definition:',error);}
+    }
     const ok = usePluginStore.getState().restoreInstance(plugin.pluginName, plugin.id, plugin.title);
     if (ok && plugin.browserUrl) usePluginStore.getState().setBrowserUrl(plugin.id, plugin.browserUrl);
     if (!ok) deadIds.add(plugin.id);

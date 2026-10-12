@@ -4,7 +4,7 @@
   "name": "Lounge sofa",
   "description": "Lounge sofa. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 180,
+  "price": 270,
   "sprite": "couch",
   "furnitureType": "couch",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#83a9a0",
   "bonus": {
     "scope": "environment",
-    "amount": 0.005,
+    "amount": 0.01,
     "family": "couch"
   },
   "seats": [

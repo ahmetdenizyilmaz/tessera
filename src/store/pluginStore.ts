@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { PluginManifest, PluginInstance } from '../types/plugin';
+import { loadWebApps, saveWebApps, webAppManifest, type WebAppInput } from '../lib/webApps';
 
 // ─── Module-Level Constants (React 19 + Zustand infinite loop prevention) ────
 
-const EMPTY_REGISTRY: Map<string, PluginManifest> = new Map();
+const EMPTY_REGISTRY: Map<string, PluginManifest> = new Map(loadWebApps().map(m=>[m.name,m]));
 const EMPTY_INSTANCES: Map<string, PluginInstance> = new Map();
 
 // ─── Plugin Store ────────────────────────────────────────────────────────────
@@ -18,6 +19,8 @@ interface PluginState {
 
   /** Register a built-in plugin manifest (idempotent) */
   registerBuiltin: (name: string, manifest: PluginManifest) => void;
+  addWebApp: (input:WebAppInput) => string;
+  restoreWebApp: (manifest:PluginManifest) => void;
 
   /** Scan subapps/ directory for manifest.json files */
   scanPlugins: () => Promise<void>;
@@ -58,6 +61,19 @@ interface PluginState {
 export const usePluginStore = create<PluginState>((set, get) => ({
   registry: EMPTY_REGISTRY,
   instances: EMPTY_INSTANCES,
+  addWebApp: input => {
+    const manifest=webAppManifest(input), registry=new Map(get().registry);
+    registry.set(manifest.name,manifest);
+    saveWebApps(registry);
+    set({registry});
+    return manifest.name;
+  },
+  restoreWebApp: saved => {
+    if(get().registry.has(saved.name))return;
+    const manifest=webAppManifest({name:saved.defaultTitle,url:saved.homeUrl??'',icon:saved.icon},saved.name);
+    const registry=new Map(get().registry);registry.set(manifest.name,manifest);
+    saveWebApps(registry);set({registry});
+  },
 
   registerBuiltin: (name: string, manifest: PluginManifest) => {
     set((state) => {
@@ -75,9 +91,9 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       const results = await invoke<Array<{ name: string; manifest: PluginManifest }>>('scan_plugins');
       // Preserve built-in plugins, then add scanned external plugins
       const next = new Map<string, PluginManifest>();
-      get().registry.forEach((m, name) => { if (m.builtin) next.set(name, m); });
+      get().registry.forEach((m, name) => { if (m.builtin || m.customWebApp) next.set(name, m); });
       for (const entry of results) {
-        next.set(entry.name, entry.manifest);
+        if(!next.has(entry.name))next.set(entry.name, entry.manifest);
       }
       set({ registry: next });
     } catch {

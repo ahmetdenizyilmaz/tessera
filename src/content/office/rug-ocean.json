@@ -4,7 +4,7 @@
   "name": "Ocean rug",
   "description": "Ocean rug. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 260,
+  "price": 390,
   "sprite": "rug",
   "furnitureType": "rug",
   "footprint": {
@@ -25,7 +25,7 @@
   "color": "#5c96a9",
   "bonus": {
     "scope": "environment",
-    "amount": 0.006,
+    "amount": 0.012,
     "family": "rug"
   }
 }

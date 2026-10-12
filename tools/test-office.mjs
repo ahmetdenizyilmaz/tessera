@@ -79,15 +79,18 @@ try {
 
   await page.evaluate(()=>window.office.setState({currency:1000}));
   await page.getByRole('button', { name: 'Shop', exact: true }).click();
+  await page.getByRole('button', { name: 'Plants', exact: true }).click();
   await page.getByRole('button', { name: 'Buy Desk-side plant', exact: true }).click();
-  await expect(page.getByTestId('office-balance')).toHaveText('980');
+  await expect(page.getByTestId('office-balance')).toHaveText('970');
   await page.screenshot({ path: '../tessera-office-validation/shop.png' });
-  await page.getByRole('button', { name: 'Place Desk-side plant', exact: true }).click();
+  await expect(page.getByRole('complementary',{name:'Place furniture'})).toBeVisible();
   const originalFurniture = await page.evaluate(() => window.office.getState().layout.furniture.length);
   await clickTile(19, 6);
   await expect.poll(() => page.evaluate(() => window.office.getState().layout.furniture.length)).toBe(originalFurniture + 1);
+  await page.keyboard.press('Escape');
   await clickTile(20, 6);
   await expect.poll(() => page.evaluate(() => window.office.getState().layout.furniture.length)).toBe(originalFurniture + 1);
+  await page.getByRole('button', { name: 'Decorate', exact: true }).click();
   await page.getByRole('button', { name: 'Store', exact: true }).click();
   await clickTile(19, 6);
   await expect.poll(() => page.evaluate(() => window.office.getState().inventory['shop-plant-small'])).toBe(1);
@@ -98,7 +101,7 @@ try {
   console.log('PASS shop debit, actual canvas placement, no free duplicates, packing, and inactive edit controls');
 
   await page.getByRole('button', { name: 'Shop', exact: true }).click();
-  await page.getByRole('button', { name: 'Outfits', exact: true }).click();
+  await page.getByRole('button', { name: 'Headwear', exact: true }).click();
   await page.getByRole('button', { name: 'Buy Studio headphones' }).click();
   await page.getByRole('button', { name: 'Close shop' }).click();
   await page.locator('[data-office-agent="tester"]').click();
@@ -108,7 +111,7 @@ try {
   await expect.poll(() => page.evaluate(() => window.office.getState().profiles.tester.wearables.head)).toBe('headphones');
   await page.getByRole('button', { name: 'Back to panels' }).click();
   await page.evaluate(() => { window.officeRecords.push({ ...window.officeRecords[0], id: 'while-away', updatedAt: Date.now() }); });
-  await expect.poll(() => page.evaluate(() => window.office.getState().currency), { timeout: 10000 }).toBeGreaterThan(901);
+  await expect.poll(() => page.evaluate(() => window.office.getState().currency), { timeout: 10000 }).toBeGreaterThan(850);
   const awayBalance=await page.evaluate(()=>window.office.getState().currency);
   await page.getByRole('button', { name: 'Return to office' }).click();
   await expect(page.locator('.office-canvas canvas')).toHaveCount(1);
@@ -166,7 +169,7 @@ try {
   await expect(page.locator('.office-exchanges')).toContainText('Keep exponential backoff.');
   await page.getByRole('button', { name: 'Close agent chat' }).click();
   await page.getByRole('button', { name: 'Shop', exact: true }).click();
-  await page.getByRole('button', { name: 'Outfits', exact: true }).click();
+  await page.getByRole('button', { name: 'Eyewear', exact: true }).click();
   await page.getByRole('button', { name: 'Buy Reading glasses' }).click();
   await page.getByRole('button', { name: 'Close shop' }).click();
   await page.locator('[data-office-agent="tester"]').click();

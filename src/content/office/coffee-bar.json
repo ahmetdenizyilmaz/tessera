@@ -4,7 +4,7 @@
   "name": "Barista station",
   "description": "Barista station. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 1000,
+  "price": 1500,
   "sprite": "coffee_machine",
   "furnitureType": "coffee_machine",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#d1b899",
   "bonus": {
     "scope": "environment",
-    "amount": 0.02,
+    "amount": 0.04,
     "family": "coffee_machine"
   }
 }

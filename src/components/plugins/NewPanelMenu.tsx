@@ -1,4 +1,5 @@
-import { Folder, Puzzle } from 'lucide-react';
+import { Folder } from 'lucide-react';
+import { PluginIcon } from '../icons/PluginIcon';
 import { usePluginStore } from '../../store/pluginStore';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
 import claudeIcon from '../../assets/claude-icon.ico';
@@ -200,7 +201,7 @@ export function NewPanelMenu({
             {plugins.map(([name, manifest]) => (
               <MenuItem
                 key={name}
-                icon={<Puzzle size={16} />}
+                icon={<PluginIcon icon={manifest.icon} size={16} />}
                 label={manifest.defaultTitle}
                 onClick={() => { onClose(); onNewPlugin(name); }}
               />

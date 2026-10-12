@@ -3,7 +3,7 @@
   "id": "cap",
   "name": "Builder cap",
   "category": "accessory",
-  "price": 30,
+  "price": 45,
   "sprite": "cap",
   "slot": "head",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.003
+    "amount": 0.006
   }
 }

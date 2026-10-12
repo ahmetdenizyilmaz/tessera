@@ -4,7 +4,7 @@
   "name": "Archive appliance",
   "description": "Archive appliance. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 500,
+  "price": 3000,
   "sprite": "server_rack",
   "furnitureType": "server_rack",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#4a596a",
   "bonus": {
     "scope": "environment",
-    "amount": 0.008,
+    "amount": 0.016,
     "family": "server_rack"
   }
 }

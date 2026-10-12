@@ -24,7 +24,7 @@ try {
   await visible(); // Half-screen is playable even while the other panel has focus.
   await page.evaluate(() => window.layout.getState().setFocused(window.gameGroup));
   await hidden();
-  await page.getByText('Click to focus and play').click({ force: true });
+  await page.getByText('Click to focus and interact').click({ force: true });
   await visible();
   await page.getByRole('button', { name: 'Maximize panel', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.views[window.lichess].bounds?.width)).toBeGreaterThan(1300);

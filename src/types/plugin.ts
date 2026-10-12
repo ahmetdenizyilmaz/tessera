@@ -8,7 +8,9 @@ export interface PluginManifest {
   icon: string;                     // Lucide icon name OR filename
   defaultTitle: string;
   builtin?: boolean;                // true for built-in plugins served from /plugins/
-  browserSite?: 'lichess';           // native website module, without the plugin SDK
+  browserSite?: string;             // stable native website profile, without the plugin SDK
+  homeUrl?: string;
+  customWebApp?: boolean;
   titleButtons?: PluginTitleButton[];
   sidebar?: PluginSidebarConfig;
   accentColor?: string;

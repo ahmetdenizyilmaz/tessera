@@ -4,7 +4,7 @@
   "name": "Warm floor lamp",
   "description": "Warm floor lamp. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 40,
+  "price": 60,
   "sprite": "lamp",
   "furnitureType": "lamp",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#bba77d",
   "bonus": {
     "scope": "environment",
-    "amount": 0.002,
+    "amount": 0.004,
     "family": "lamp"
   }
 }

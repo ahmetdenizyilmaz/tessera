@@ -10,11 +10,17 @@ import { useLayoutStore } from '../src/store/layoutStore';
 import { useGroupStore } from '../src/store/groupStore';
 import { useWizardStore } from '../src/store/wizardStore';
 import { openNewSessionWizard } from '../src/lib/newSessionActions';
+import { usePluginStore } from '../src/store/pluginStore';
+import { registerBuiltins } from '../src/lib/builtinPlugins';
 import '../src/styles/global.css';
 import '../src/styles/mosaic.css';
 
 mockWindows('main');
-mockIPC(() => null, { shouldMockEvents: true });
+window.webCalls=[];
+mockIPC((command,args)=>{window.webCalls.push({command,args});if(command==='browser_panel_status')return {url:'https://example.test/player'};return null;}, { shouldMockEvents: true });
+registerBuiltins();
+window.plugins=usePluginStore;
+window.newSession=openNewSessionWizard;
 window.layout = useLayoutStore;
 window.groups = useGroupStore;
 window.wizard = useWizardStore;

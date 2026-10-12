@@ -1,0 +1,51 @@
+import { chromium, expect } from '@playwright/test';
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const page=await browser.newPage({viewport:{width:1500,height:1000}});
+const errors=[];page.on('pageerror',e=>{if(!e.message.includes('WebSocket closed without opened'))errors.push(e.message);});
+const base=process.argv[2]??'http://127.0.0.1:1420';
+async function tile(x,y){return page.evaluate(({x,y})=>{const r=document.querySelector('.office-canvas').getBoundingClientRect(),l=window.office.getState().layout,z=Math.max(.25,Math.min(1.25,(r.width-90)/((l.width+l.height)*32),(r.height-100)/((l.width+l.height)*16)));return{x:r.x+r.width/2-(l.width-l.height)*16*z+(x-y)*32*z,y:r.y+(r.height-(l.width+l.height)*16*z)/2+18+(x+y+1)*16*z};},{x,y});}
+try {
+  await page.goto(`${base}/tools/office-fixture.html`);await expect(page.locator('.office-canvas canvas')).toHaveCount(1,{timeout:60000});
+  const badges=await page.evaluate(()=>window.providerBadgeBounds());
+  for(const b of badges){expect(b.x,b.provider).toBeGreaterThanOrEqual(-8);expect(b.x+b.w,b.provider).toBeLessThanOrEqual(8);expect(b.y,b.provider).toBeGreaterThanOrEqual(-27);expect(b.y+b.h,b.provider).toBeLessThanOrEqual(-10);}
+  console.log('PASS all four provider SVGs remain inside the shirt coordinate range');
+  await page.evaluate(()=>{window.office.setState({currency:20000});window.office.getState().expand();window.office.setState({currency:70});});
+  await page.getByRole('button',{name:'Fit office',exact:true}).click();
+  await page.getByRole('button',{name:'Shop',exact:true}).click();await page.getByRole('button',{name:'Plants',exact:true}).click();
+  expect(await page.locator('[data-shop-item]').count()).toBe(3);
+  await page.getByRole('button',{name:'Buy Desk-side plant',exact:true}).click();
+  await expect(page.locator('.office-shop')).toHaveCount(0);await expect(page.locator('.office-placement-bar')).toBeVisible();
+  const y=await page.evaluate(()=>window.office.getState().layout.height-3),p=await tile(3,y);
+  await page.mouse.move(p.x,p.y);await page.mouse.wheel(0,100);
+  await expect.poll(()=>page.evaluate(()=>window.office.getState().rotation)).toBe(1);
+  await page.waitForTimeout(120);await page.mouse.wheel(0,-100);
+  await expect.poll(()=>page.evaluate(()=>window.office.getState().rotation)).toBe(0);
+  await page.mouse.click(p.x,p.y);expect(await page.evaluate(()=>window.office.getState().currency)).toBe(40);
+  await page.mouse.click(p.x,p.y);expect(await page.evaluate(()=>window.office.getState().currency)).toBe(40);
+  const next=await tile(5,y);await page.mouse.click(next.x,next.y);
+  expect(await page.evaluate(()=>window.office.getState().currency)).toBe(10);
+  await expect(page.locator('.office-placement-bar')).toHaveCount(0);await expect(page.locator('.office-storage-drop')).toHaveCount(0);
+  expect(await page.evaluate(()=>window.office.getState().selectedItem)).toBe(null);
+  console.log('PASS direct purchase, wheel rotation, invalid-drop accounting, repeated placement, budget exhaustion');
+  await page.mouse.move(p.x,p.y-5);await expect(page.locator('.office-canvas')).toHaveCSS('cursor','grab');
+  await page.screenshot({path:'../tessera-office-validation/placement-hover.png'});
+  await page.mouse.dblclick(p.x,p.y-5);
+  await expect.poll(()=>page.evaluate(()=>window.office.getState().movingId)).not.toBe(null);
+  const moving=await page.evaluate(()=>window.office.getState().movingId);
+  const drop=await page.locator('.office-storage-drop').boundingBox();
+  await page.mouse.down();await page.mouse.move(drop.x+drop.width/2,drop.y+drop.height/2,{steps:15});
+  await expect(page.locator('.office-storage-drop')).toHaveClass(/is-over/);
+  await page.screenshot({path:'../tessera-office-validation/placement-storage.png'});
+  await page.mouse.up();
+  expect(await page.evaluate(id=>window.office.getState().layout.furniture.some(f=>f.id===id),moving)).toBe(false);
+  expect(await page.evaluate(()=>window.office.getState().inventory['shop-plant-small'])).toBe(1);
+  await expect(page.locator('.office-storage-drop')).toHaveCount(0);
+  console.log('PASS physical furniture hover, double-click pickup, captured drag into storage, pickup termination');
+  await page.getByRole('button',{name:'Shop',exact:true}).click();await page.screenshot({path:'../tessera-office-validation/shop-collections.png'});
+  await page.setViewportSize({width:600,height:850});await page.getByRole('button',{name:'Close shop'}).click();
+  await page.evaluate(()=>window.office.getState().selectItem('shop-plant-small'));
+  await expect(page.locator('.office-placement-bar')).toBeVisible();
+  expect(await page.locator('.office-storage-drop').evaluate(el=>el.getBoundingClientRect().right<=innerWidth)).toBe(true);
+  await page.screenshot({path:'../tessera-office-validation/placement-narrow.png'});
+  await page.keyboard.press('Escape');expect(errors).toEqual([]);
+}catch(e){await page.screenshot({path:'../tessera-office-validation/placement-failure.png'});throw e;}finally{await browser.close();}

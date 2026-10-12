@@ -4,7 +4,7 @@
   "name": "Task board",
   "description": "Task board. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 120,
+  "price": 180,
   "sprite": "task_board",
   "furnitureType": "task_board",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#b8b39d",
   "bonus": {
     "scope": "environment",
-    "amount": 0.003,
+    "amount": 0.006,
     "family": "task_board"
   }
 }

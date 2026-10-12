@@ -117,7 +117,8 @@ export function drawOfficeCharacter(g: Graphics, id: string, color: number, wear
   g.rect(-11, -11 - step, 4, 4).rect(7, -11 + step, 4, 4).fill(skin);
   const top = officeItem(shirt);
   if (top?.art && top.attachment) {
-    g.save();g.context.translate(top.attachment.x,top.attachment.y);g.context.scale(top.attachment.scale);g.context.translate(-top.anchor!.x,-top.anchor!.y);drawOfficeSvg(g,top.art[0]);g.restore();
+    const {x,y,scale}=top.attachment;
+    g.save();g.context.transform(scale,0,0,scale,x-top.anchor!.x*scale,y-top.anchor!.y*scale);drawOfficeSvg(g,top.art[0]);g.restore();
   }
   const badge = providerBadges[(provider === 'anthropic' ? 'claude' : provider === 'openai' ? 'codex' : provider) as keyof typeof providerBadges];
   const badgeAnchor = top?.badgeAnchor ?? {x:0,y:-19.5};
@@ -150,7 +151,7 @@ export function drawOfficeCharacter(g: Graphics, id: string, color: number, wear
     const item = officeItem(id);
     if (!item?.art || !item.attachment || builtins.has(id)) continue;
     const {x,y,scale}=item.attachment;
-    g.save();g.context.translate(x,y);g.context.scale(scale);g.context.translate(-item.anchor!.x,-item.anchor!.y);drawOfficeSvg(g,item.art[0]);g.restore();
+    g.save();g.context.transform(scale,0,0,scale,x-item.anchor!.x*scale,y-item.anchor!.y*scale);drawOfficeSvg(g,item.art[0]);g.restore();
   }
   if (!walking && (activity === 'reading_file' || activity === 'searching_files')) g.poly([-9, -19, 0, -16, 9, -19, 9, -7, 0, -4, -9, -7]).fill(0xf0d7a6).stroke({ color: 0x9e805b, width: 1 });
   const active = !['idle', 'unknown', 'new'].includes(activity);

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Puzzle, Plus, Monitor, Activity, X } from 'lucide-react';
+import { FolderOpen, Folder, Bot, Server, BarChart3, GitBranch, Plus, Monitor, Activity, X } from 'lucide-react';
+import { PluginIcon } from '../icons/PluginIcon';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
@@ -184,7 +185,7 @@ export function TabItem({ id, onContextMenu, isDragActive, dragSourceId }: TabIt
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'var(--accent)', width: 16, height: 16,
         }}>
-          <Puzzle size={13} />
+          <PluginIcon icon={pluginInstance?.icon} size={15} />
         </span>
       ) : isRemote ? (
         <span className="tab-provider-icon" style={{

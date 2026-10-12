@@ -4,7 +4,7 @@
   "name": "Ergonomic chair",
   "description": "Ergonomic chair. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 40,
+  "price": 60,
   "sprite": "chair",
   "furnitureType": "chair",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#668e96",
   "bonus": {
     "scope": "environment",
-    "amount": 0.001,
+    "amount": 0.002,
     "family": "chair"
   },
   "seats": [

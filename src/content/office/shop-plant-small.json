@@ -4,7 +4,7 @@
   "name": "Desk-side plant",
   "description": "Desk-side plant. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 20,
+  "price": 30,
   "sprite": "plant",
   "furnitureType": "plant",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#89b58b",
   "bonus": {
     "scope": "environment",
-    "amount": 0.001,
+    "amount": 0.002,
     "family": "plant"
   }
 }

@@ -4,7 +4,7 @@
   "name": "Professional PC",
   "description": "Assign to one worker. Their desk displays this computer.",
   "category": "pc",
-  "price": 900,
+  "price": 1350,
   "sprite": "desk",
   "footprint": {
     "w": 2,
@@ -37,5 +37,5 @@
       1
     ]
   ],
-  "pcMultiplier": 1.12
+  "pcMultiplier": 1.18
 }

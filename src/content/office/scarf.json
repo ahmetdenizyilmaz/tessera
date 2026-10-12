@@ -3,7 +3,7 @@
   "id": "scarf",
   "name": "Autumn scarf",
   "category": "accessory",
-  "price": 55,
+  "price": 80,
   "sprite": "scarf",
   "slot": "neck",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.0055
+    "amount": 0.011
   }
 }

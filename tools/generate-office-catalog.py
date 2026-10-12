@@ -125,5 +125,17 @@ for id,name,price,slot,color in [('headphones','Studio headphones',80,'head','#d
 for id,name,price,style in [('shop-floor-wood','Oak flooring',100,'wood'),('shop-floor-marble','Stone flooring',150,'marble'),('shop-floor-carpet','Blue carpet',80,'carpet')]:
     it=furniture(id,name,'rug',price,'#829aa0');it.update(category='floor',sprite=style);it.pop('furnitureType');items.append(it)
 for item in items:
+    # Furniture stays attainable; infrastructure and relocation are long-term goals.
+    if item['category']=='server':
+        tier=int(item['id'].rsplit('-',1)[1])-1
+        item['price']=[3000,10000,30000][tier]
+        item['bonus']['amount']=[.06,.16,.30][tier]
+    elif item['category']=='pc':
+        tier=int(item['id'].rsplit('-',1)[1])
+        item['price']=[0,450,1350,3600,9000][tier]
+        item['pcMultiplier']=[1,1.08,1.18,1.32,1.50][tier]
+    else:
+        item['price']=3000 if item['id']=='shop-server' else round(item['price']*1.5/5)*5
+        if 'bonus' in item:item['bonus']['amount']=round(item['bonus']['amount']*2,4)
     (ROOT / (item['id']+'.json')).write_text(json.dumps(item,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
 print(f'{len(items)} self-contained office definitions generated')

@@ -80,11 +80,11 @@ describe('office purchases and movement', () => {
   it('charges atomically, consumes placed inventory, and returns packed pieces', () => {
     expect(office.getState().purchase('shop-server')).toBe(false);
     expect(office.getState().purchase('shop-plant-small')).toBe(true);
-    expect(office.getState().currency).toBe(130);
+    expect(office.getState().currency).toBe(120);
     office.getState().selectItem('shop-plant-small');
     expect(office.getState().placeAt({ gridX: 2, gridY: 2 })).toBe(true);
     expect(office.getState().placeAt({ gridX: 3, gridY: 3 })).toBe(false);
-    office.setState({ editAction: 'pack' });
+    office.setState({ editMode:true, editAction: 'pack' });
     expect(office.getState().placeAt({ gridX: 2, gridY: 2 })).toBe(true);
     expect(office.getState().inventory['shop-plant-small']).toBe(1);
     expect(office.getState().layout.furniture).toHaveLength(0);

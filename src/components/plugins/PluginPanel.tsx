@@ -7,6 +7,7 @@ import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
 import { BrowserPanel } from '../browser/BrowserPanel';
+import { PluginIcon } from '../icons/PluginIcon';
 import { closePanel } from '../../lib/panelCleanup';
 
 // ─── Module-Level Bridge Registry ───────────────────────────────────────────
@@ -22,10 +23,7 @@ const bridgeRegistry: Map<string, PluginBridge> =
 // supported inline; the rest fall back to Puzzle.
 
 function ToolbarIcon({ name, size = 14 }: { name: string; size?: number }) {
-  // We just render the name as a title attribute on a generic icon.
-  // A real implementation would dynamically import from lucide-react.
-  // For now, all custom buttons use the Puzzle icon.
-  return <Puzzle size={size} aria-label={name} />;
+  return <PluginIcon icon={name} size={size}/>;
 }
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -245,7 +243,7 @@ function IframePluginPanel({ instanceId }: PluginPanelProps) {
       >
         {/* Plugin icon */}
         <span style={{ color: 'var(--accent)', display: 'flex', alignItems: 'center' }}>
-          <Puzzle size={14} />
+          <PluginIcon icon={pluginInstance.icon} size={15} />
         </span>
 
         {/* Plugin title */}

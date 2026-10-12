@@ -3,7 +3,7 @@
   "id": "crown",
   "name": "Tiny crown",
   "category": "accessory",
-  "price": 140,
+  "price": 210,
   "sprite": "crown",
   "slot": "head",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.014
+    "amount": 0.028
   }
 }

@@ -29,6 +29,9 @@ export interface OfficeGameState {
   relocate: (location: OfficeLocation) => void;
   spinoff: () => boolean;
   beginMove: (id: string) => void;
+  buyAndPlace: (id: string) => boolean;
+  storeHeldItem: () => boolean;
+  repeatPurchase: boolean;
   layout: OfficeLayout;
   workers: Record<string, OfficeWorker>;
   profiles: Record<string, WorkerProfile>;
@@ -69,7 +72,7 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
   companyBase: 0, modelBase: {}, permanent: 1, location: 'studio', expansions: 0, spinoffs: 0, lifetimeCoins: 0, legacyEarned: 0, ledger: {}, prices: {}, companyOpen: false,
   layout: getDefaultLayout(), workers: {}, profiles: {}, panelAliases: {}, currency: 0, totalEarned: 0, completedTasks: 0,
   inventory: {}, purchasedItems: [], rewards: [], claimed: {}, startedAt: Date.now(), pendingRecords: [], syncError: null,
-  editMode: false, shopOpen: false, selectedItem: null, rotation: 0, editAction: 'place', movingId: null, notice: null,
+  editMode: false, shopOpen: false, selectedItem: null, rotation: 0, editAction: 'place', movingId: null, repeatPurchase: false, notice: null,
   settleUsage: record => {
     const s = get();
     if (record.kind !== 'turn' || record.actor.device || record.startedAt < s.startedAt) return;
@@ -115,10 +118,32 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
     const at=Date.now();
     set({currency:0,totalEarned:0,completedTasks:0,companyBase:0,modelBase:{},permanent:s.permanent*spinFactor(s.companyBase),spinoffs:s.spinoffs+1,
       location:'studio',expansions:0,inventory:{},purchasedItems:[],profiles:{},workers:{},rewards:[],claimed:{},ledger:{},pendingRecords:[],startedAt:at,
-      layout:ensureWorkstations(getDefaultLayout(),Object.keys(s.workers)),editMode:false,shopOpen:false,companyOpen:false,selectedItem:null,movingId:null,notice:'Your new company starts here.'});
+      layout:ensureWorkstations(getDefaultLayout(),Object.keys(s.workers)),editMode:false,shopOpen:false,companyOpen:false,selectedItem:null,movingId:null,repeatPurchase:false,notice:'Your new company starts here.'});
     return true;
   },
-  beginMove: id => {const f=get().layout.furniture.find(f=>f.id===id);if(f) set({editMode:true,shopOpen:false,companyOpen:false,selectedItem:null,editAction:'move',movingId:id,rotation:f.rotation,notice:'Click to place · R to rotate · Escape to cancel'});},
+  beginMove: id => {const f=get().layout.furniture.find(f=>f.id===id);if(f) set({editMode:true,shopOpen:false,companyOpen:false,selectedItem:null,repeatPurchase:false,editAction:'move',movingId:id,rotation:f.rotation,notice:'Click or drag to place · Wheel / R to rotate · Escape to cancel'});},
+  buyAndPlace: id => {
+    if (!get().purchase(id)) return false;
+    const item=officeItem(id)!;
+    if (item.furnitureType || item.category==='floor') {
+      get().selectItem(id);
+      set({repeatPurchase:!!item.furnitureType});
+    }
+    return true;
+  },
+  storeHeldItem: () => {
+    const s=get(), f=s.layout.furniture.find(f=>f.id===s.movingId);
+    if (!s.editMode || (!f && !s.selectedItem)) return false;
+    if (f?.workstationFor || f?.id.startsWith('auto-desk-')) {set({notice:'Your team needs this workstation. Choose a new position.'});return false;}
+    const item=f ? officeItem(f.itemId??'')??OFFICE_CATALOG.find(i=>i.furnitureType===f.type) : undefined;
+    if (f && !item) return false;
+    set({...(f && item ? {
+      layout:{...s.layout,furniture:s.layout.furniture.filter(x=>x.id!==f.id)},
+      inventory:{...s.inventory,[item.id]:(s.inventory[item.id]??0)+1},
+      workers:Object.fromEntries(Object.entries(s.workers).map(([id,w])=>[id,w.seat?.furnitureId===f.id?{...w,seat:undefined}:w])),
+    } : {}),editMode:false,movingId:null,selectedItem:null,repeatPurchase:false,notice:item?`${item.name} returned to storage.`:'Placement finished. Unused items stay in storage.'});
+    return true;
+  },
   addWorker: (id, p) => set(s => s.workers[id] ? s : ({ profiles: s.profiles[id] ? s.profiles : { ...s.profiles, [id]: { ...emptyProfile(), appearanceId: id, activity:1, activityAt:Date.now() } }, workers: { ...s.workers, [id]: {
     instanceId: id, position: { x: p.gridX, y: p.gridY }, targetPosition: p, activity: 'new', assignedDesk: p,
     direction: 0, isWalking: false, task: '', detail: '',
@@ -158,7 +183,7 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
   selectItem: id => {
     const item = officeItem(id), s = get();
     if (!item || (item.furnitureType ? !(s.inventory[id] > 0) : !s.purchasedItems.includes(id))) return;
-    set({ selectedItem: id, editMode: true, shopOpen: false, editAction: 'place', movingId: null, notice: null });
+    set({ selectedItem: id, editMode: true, shopOpen: false, companyOpen:false, editAction: 'place', movingId: null, repeatPurchase:false, notice: null });
   },
   placeAt: position => {
     const s = get();
@@ -176,7 +201,11 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
     }
     const existing = s.movingId ? s.layout.furniture.find(f => f.id === s.movingId) : undefined;
     const item = officeItem(s.selectedItem ?? '');
-    if (!existing && (!item || (item.furnitureType ? !(s.inventory[item.id] > 0) : !s.purchasedItems.includes(item.id)))) return false;
+    const buyingNext = !existing && !!item?.furnitureType && !(s.inventory[item.id]>0) && s.repeatPurchase;
+    if (!existing && (!item || (item.furnitureType ? !(s.inventory[item.id] > 0) && !(buyingNext && s.currency>=item.price) : !s.purchasedItems.includes(item.id)))) {
+      if (s.repeatPurchase) set({editMode:false,selectedItem:null,repeatPurchase:false,notice:'Not enough coins for another copy.'});
+      return false;
+    }
     if (!existing && item?.category === 'floor') {
       set({ layout: { ...s.layout, floorTiles: { ...s.layout.floorTiles, [`${position.gridX},${position.gridY}`]: item.sprite } }, notice: null }); return true;
     }
@@ -185,10 +214,14 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
     const furniture = { ...existing, id: existing?.id ?? crypto.randomUUID(), itemId: existing?.itemId ?? item?.id, type, position, rotation: s.rotation };
     const error = placementError(s.layout, furniture, s.workers);
     if (error) { set({ notice: error }); return false; }
+    const currency=s.currency-(buyingNext?item!.price:0);
+    const inventory=existing || !item || buyingNext ? s.inventory : {...s.inventory,[item.id]:s.inventory[item.id]-1};
+    const continuePlacing=!existing && !!item && ((inventory[item.id]??0)>0 || s.repeatPurchase && currency>=item.price);
     set({ layout: { ...s.layout, furniture: [...s.layout.furniture.filter(f => f.id !== furniture.id), furniture] },
-      inventory: existing || !item ? s.inventory : { ...s.inventory, [item.id]: s.inventory[item.id] - 1 },
+      currency, inventory,
       workers:existing?Object.fromEntries(Object.entries(s.workers).map(([id,w])=>[id,w.seat?.furnitureId===existing.id?{...w,seat:undefined}:w])):s.workers,
-      movingId: null, notice: existing ? 'Furniture moved.' : `${item?.name} placed.` });
+      movingId:null,editMode:continuePlacing,selectedItem:continuePlacing?s.selectedItem:null,repeatPurchase:continuePlacing&&s.repeatPurchase,
+      notice:existing?'Furniture moved.':continuePlacing?`${item?.name} placed. Place another or finish.`:`${item?.name} placed. Placement finished.` });
     return true;
   },
   equip: (panelId,itemId) => {
@@ -213,8 +246,8 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
     }
     return { profiles, panelAliases, layout:{...s.layout,furniture:s.layout.furniture.map(f=>f.workstationFor ? {...f,workstationFor:ids.get(f.workstationFor)??f.workstationFor}:f)} };
   }),
-  setEditMode: editMode => set({ editMode, companyOpen:false, shopOpen: false, movingId: null, notice: null }),
-  setShopOpen: shopOpen => set({ shopOpen, companyOpen:false, editMode: false, movingId: null, notice: null }),
+  setEditMode: editMode => set({ editMode, companyOpen:false, shopOpen: false, movingId: null, selectedItem:null,repeatPurchase:false, notice: null }),
+  setShopOpen: shopOpen => set({ shopOpen, companyOpen:false, editMode: false, movingId: null,selectedItem:null,repeatPurchase:false, notice: null }),
 }), {
   name: 'tessera-office', version: 3,
   migrate: migrateOffice,

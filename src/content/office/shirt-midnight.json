@@ -3,7 +3,7 @@
   "id": "shirt-midnight",
   "name": "Midnight tee",
   "category": "accessory",
-  "price": 60,
+  "price": 90,
   "sprite": "shirt-midnight",
   "slot": "shirt",
   "description": "One item for one worker. Provider badge stays visible.",
@@ -34,6 +34,6 @@
   },
   "bonus": {
     "scope": "worker",
-    "amount": 0.006
+    "amount": 0.012
   }
 }

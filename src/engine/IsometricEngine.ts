@@ -20,10 +20,15 @@ export class IsometricEngine {
   private grid = new Graphics();
   private ghost = new Graphics();
   private ghostArt = new Graphics();
+  private furnitureHover = new Graphics();
+  private hoveredFurniture: string | null = null;
+  private heldFurniture: string | null = null;
   private furnitureGraphics = new Map<string,Graphics>();
+  private furnitureProfiles: Record<string, WorkerProfile> = {};
   private hoverTile?: {gx:number;gy:number};
   private onTileHoverHandler?: (gx:number,gy:number)=>void;
   private onFurnitureDoubleClickHandler?: (id:string)=>void;
+  private placementControls?: { holding:()=>boolean; rotate:(direction:number)=>void; storageAt:(x:number,y:number)=>boolean; storageHover:(hovered:boolean)=>void; store:()=>void };
   private ready = false;
   private disposed = false;
   private cameraX = 0;
@@ -46,10 +51,10 @@ export class IsometricEngine {
     if (this.disposed) { this.app.destroy(true, { children: true }); return; }
     this.ready = true;
     parent.appendChild(this.app.canvas);
-    this.world.addChild(this.exterior, this.floor, this.walls, this.entities, this.links, this.labels, this.bubbles, this.grid, this.ghost, this.ghostArt);
+    this.world.addChild(this.exterior, this.floor, this.walls, this.furnitureHover, this.entities, this.links, this.labels, this.bubbles, this.grid, this.ghost, this.ghostArt);
     this.app.stage.addChild(this.world);
     this.entities.sortableChildren = true;
-    this.exterior.eventMode='none';this.ghostArt.eventMode='none';
+    this.exterior.eventMode='none';this.ghostArt.eventMode='none';this.furnitureHover.eventMode='none';
     this.labels.eventMode = 'none'; this.grid.eventMode = 'none'; this.ghost.eventMode = 'none'; this.links.eventMode = 'none'; this.bubbles.eventMode = 'none';
     this.resizeObserver = new ResizeObserver(() => { if (parent.clientWidth && parent.clientHeight) { this.app.renderer.resize(parent.clientWidth, parent.clientHeight); this.centerCamera(); } });
     this.resizeObserver.observe(parent);
@@ -118,6 +123,7 @@ export class IsometricEngine {
     }
   }
   drawFurniture(furniture: OfficeFurniture[], profiles:Record<string,WorkerProfile> = {}) {
+    this.furnitureProfiles = profiles;
     for (const child of [...this.entities.children]) if (child.label === 'furniture') { this.entities.removeChild(child); child.destroy({ children: true }); }
     this.furnitureGraphics.clear();
     for (const f of furniture) {
@@ -130,14 +136,30 @@ export class IsometricEngine {
       g.zIndex = f.type === 'rug' ? -10000 : p.y + ((item?.footprint?.w??1)+(item?.footprint?.h??1))*16-1;
       this.entities.addChild(g);this.furnitureGraphics.set(f.id,g);
     }
+    this.updateFurnitureFeedback();
+  }
+  private updateFurnitureFeedback() {
+    this.furnitureHover.clear();
+    for(const [id,g] of this.furnitureGraphics) {
+      const f=this.layout?.furniture.find(f=>f.id===id);if(!f)continue;
+      const hovered=id===this.hoveredFurniture && !this.heldFurniture;
+      g.alpha=id===this.heldFurniture ? .25 : 1;
+      g.tint=hovered?0xdffff0:0xffffff;
+      g.y=this.gridToScreen(f.position.gridX,f.position.gridY).y-(hovered?1.5:0);
+      if(hovered) for(const cell of furnitureCells(f)) {
+        const p=this.gridToScreen(cell.gridX,cell.gridY);
+        this.furnitureHover.poly([p.x,p.y,p.x+32,p.y+16,p.x,p.y+32,p.x-32,p.y+16]).fill({color:0xc5e5d5,alpha:.18}).stroke({color:0xd8f2de,width:1.2,alpha:.7});
+      }
+    }
   }
   showPlacement(f?:OfficeFurniture, error?:string|null) {
     this.ghost.clear();this.ghostArt.clear();
-    for(const [id,g] of this.furnitureGraphics) g.alpha=f?.id===id ? .25 : 1;
+    this.heldFurniture=f?.id??null;this.updateFurnitureFeedback();
     if(!f) return;
     const color=error ? 0xe38f86 : 0x9ed9b3;
     for(const cell of furnitureCells(f)) {const p=this.gridToScreen(cell.gridX,cell.gridY);this.ghost.poly([p.x,p.y,p.x+32,p.y+16,p.x,p.y+32,p.x-32,p.y+16]).fill({color,alpha:.28}).stroke({color,width:1.5});}
-    const item=itemForFurniture(f),p=this.gridToScreen(f.position.gridX,f.position.gridY);
+    const item=f.workstationFor ? officeItem(this.furnitureProfiles[f.workstationFor]?.pc ?? 'pc-0') : itemForFurniture(f);
+    const p=this.gridToScreen(f.position.gridX,f.position.gridY);
     this.ghostArt.position.set(p.x,p.y);this.ghostArt.alpha=.55;
     if(item?.art) {this.ghostArt.save();this.ghostArt.context.translate(-item.anchor!.x,-item.anchor!.y);drawOfficeSvg(this.ghostArt,item.art[f.rotation]);this.ghostArt.restore();}
     else drawOfficeFurniture(this.ghostArt,f.type);
@@ -217,7 +239,11 @@ export class IsometricEngine {
   onWorkerHover(handler: (id: string | null, x: number, y: number) => void) { this.onWorkerHoverHandler = handler; }
   showGrid(layout: OfficeLayout, enabled: boolean) {
     this.edit = enabled; this.grid.clear(); this.ghost.clear();this.ghostArt.clear();
-    if (!enabled) {this.showPlacement();}
+    if (!enabled) {
+      this.showPlacement();
+      const parent = this.app.canvas?.parentElement;
+      if (parent) parent.style.cursor = '';
+    }
     if (!enabled) return;
     for (let y = 0; y <= layout.height; y++) { const a = this.gridToScreen(0, y), b = this.gridToScreen(layout.width, y); this.grid.moveTo(a.x, a.y).lineTo(b.x, b.y); }
     for (let x = 0; x <= layout.width; x++) { const a = this.gridToScreen(x, 0), b = this.gridToScreen(x, layout.height); this.grid.moveTo(a.x, a.y).lineTo(b.x, b.y); }
@@ -225,8 +251,9 @@ export class IsometricEngine {
   }
   onTileHover(handler:(gx:number,gy:number)=>void) {this.onTileHoverHandler=handler;}
   onFurnitureDoubleClick(handler:(id:string)=>void) {this.onFurnitureDoubleClickHandler=handler;}
+  setPlacementControls(controls:NonNullable<IsometricEngine['placementControls']>) {this.placementControls=controls;}
   private setupInteraction(parent: HTMLElement) {
-    let dragging = false, downX = 0, downY = 0, lastX = 0, lastY = 0, panning = false, moved = false;
+    let dragging = false, downX = 0, downY = 0, lastX = 0, lastY = 0, panning = false, moved = false, heldOnDown=false, pointerId=-1, lastRotate=0;
     let pressedWorker: string | undefined;
     const workerAt = (e: PointerEvent) => {
       const r = parent.getBoundingClientRect();
@@ -236,35 +263,52 @@ export class IsometricEngine {
         .find(([, { body }]) => body.hitArea?.contains(x - body.x, y - body.y))?.[0];
     };
     const point = (e: MouseEvent) => { const r = parent.getBoundingClientRect(); return this.screenToGrid((e.clientX - r.left - this.cameraX) / this.zoomLevel, (e.clientY - r.top - this.cameraY) / this.zoomLevel); };
-    const down = (e: PointerEvent) => { if (e.button > 1) return; dragging = true; moved = e.shiftKey || e.button !== 0; pressedWorker = workerAt(e); panning = e.shiftKey || e.button === 1 || !this.edit; downX = lastX = e.clientX; downY = lastY = e.clientY; };
+    const overCanvas=(e:MouseEvent)=>parent.contains(document.elementFromPoint(e.clientX,e.clientY));
+    const furnitureAt=(e:MouseEvent)=>{
+      const r=parent.getBoundingClientRect(), x=(e.clientX-r.left-this.cameraX)/this.zoomLevel,y=(e.clientY-r.top-this.cameraY)/this.zoomLevel;
+      return [...this.furnitureGraphics].sort((a,b)=>b[1].zIndex-a[1].zIndex).find(([,g])=>g.containsPoint({x:x-g.x,y:y-g.y}))?.[0];
+    };
+    const down = (e: PointerEvent) => { if (e.button > 1) return; dragging = true; pointerId=e.pointerId; heldOnDown=!!this.placementControls?.holding(); moved = e.shiftKey || e.button !== 0; pressedWorker = workerAt(e); panning = e.shiftKey || e.button === 1 || !this.edit; downX = lastX = e.clientX; downY = lastY = e.clientY; parent.setPointerCapture(e.pointerId); };
     const move = (e: PointerEvent) => {
+      if(dragging && e.pointerId!==pointerId)return;
       if (dragging && Math.hypot(e.clientX - downX, e.clientY - downY) >= 5) moved = true;
       if (dragging && panning) { this.cameraX += e.clientX - lastX; this.cameraY += e.clientY - lastY; this.updateCamera(); }
       lastX = e.clientX; lastY = e.clientY;
-      if(this.edit) {this.hoverTile=point(e);this.onTileHoverHandler?.(this.hoverTile.gx,this.hoverTile.gy);}
-
+      const over=overCanvas(e), holding=!!this.placementControls?.holding();
+      this.placementControls?.storageHover(holding && this.placementControls.storageAt(e.clientX,e.clientY));
+      const hovered=over && !holding && !workerAt(e) && !dragging ? furnitureAt(e)??null : null;
+      if(hovered!==this.hoveredFurniture){this.hoveredFurniture=hovered;this.updateFurnitureFeedback();}
+      parent.style.cursor=holding?'grabbing':hovered?'grab':this.edit?'crosshair':'';
+      if(this.edit && over) {this.hoverTile=point(e);this.onTileHoverHandler?.(this.hoverTile.gx,this.hoverTile.gy);}
+      else {this.hoverTile=undefined;this.ghost.clear();this.ghostArt.clear();}
     };
     const up = (e: PointerEvent) => {
-      if (dragging && !moved && e.button === 0 && Math.hypot(e.clientX - downX, e.clientY - downY) < 5) {
-        if (this.edit && !panning) { const { gx, gy } = point(e); this.onTileClickHandler?.(gx, gy); }
-        else if (!this.edit) {
+      if(!dragging || e.pointerId!==pointerId)return;
+      if (e.button === 0 && (!moved || heldOnDown) && !panning) {
+        if(heldOnDown && this.placementControls?.storageAt(e.clientX,e.clientY)) this.placementControls.store();
+        else if (this.edit && overCanvas(e)) { const { gx, gy } = point(e); this.onTileClickHandler?.(gx, gy); }
+      } else if (!this.edit && !moved && e.button===0 && overCanvas(e)) {
           const worker = workerAt(e);
           if (worker && worker === pressedWorker) this.onWorkerClickHandler?.(worker);
           else if (!worker && !pressedWorker) this.onBackgroundClickHandler?.();
-        }
       }
-      dragging = false;
+      dragging = false;this.placementControls?.storageHover(false);
+      if(parent.hasPointerCapture(e.pointerId))parent.releasePointerCapture(e.pointerId);
     };
-    const leave = () => { dragging = false; this.ghost.clear();this.ghostArt.clear(); this.onWorkerHoverHandler?.(null, 0, 0); };
-    const wheel = (e: WheelEvent) => { e.preventDefault(); this.zoomBy(e.deltaY > 0 ? -.08 : .08); };
+    const leave = () => {if(!dragging){this.hoverTile=undefined;this.ghost.clear();this.ghostArt.clear();}this.onWorkerHoverHandler?.(null,0,0);};
+    const cancel = () => {dragging=false;this.placementControls?.storageHover(false);leave();};
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();if(!e.deltaY)return;
+      if(this.placementControls?.holding()) {const now=performance.now();if(now-lastRotate>100){lastRotate=now;this.placementControls.rotate(e.deltaY>0?1:-1);}}
+      else this.zoomBy(e.deltaY > 0 ? -.08 : .08);
+    };
     const doubleClick=(e:MouseEvent)=>{
       if(this.edit) return;
-      const r=parent.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;
-      const found=[...this.furnitureGraphics].sort((a,b)=>b[1].zIndex-a[1].zIndex).find(([,g])=>g.getBounds().rectangle.contains(x,y));
-      if(found){e.preventDefault();this.onFurnitureDoubleClickHandler?.(found[0]);}
+      const found=furnitureAt(e);
+      if(found){e.preventDefault();this.onFurnitureDoubleClickHandler?.(found);}
     };
     parent.addEventListener('dblclick',doubleClick);
-    parent.addEventListener('pointerdown', down); parent.addEventListener('pointermove', move); parent.addEventListener('pointerup', up); parent.addEventListener('pointerleave', leave); parent.addEventListener('pointercancel', leave); parent.addEventListener('wheel', wheel, { passive: false });
-    this.cleanup = () => { parent.removeEventListener('dblclick',doubleClick); parent.removeEventListener('pointerdown', down); parent.removeEventListener('pointermove', move); parent.removeEventListener('pointerup', up); parent.removeEventListener('pointerleave', leave); parent.removeEventListener('pointercancel', leave); parent.removeEventListener('wheel', wheel); };
+    parent.addEventListener('pointerdown', down); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); parent.addEventListener('pointerleave', leave); parent.addEventListener('pointercancel', cancel); parent.addEventListener('wheel', wheel, { passive: false });
+    this.cleanup = () => { parent.removeEventListener('dblclick',doubleClick); parent.removeEventListener('pointerdown', down); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); parent.removeEventListener('pointerleave', leave); parent.removeEventListener('pointercancel', cancel); parent.removeEventListener('wheel', wheel); };
   }
 }

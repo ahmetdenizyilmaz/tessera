@@ -4,7 +4,7 @@
   "name": "Codex server · Tier 2",
   "description": "Codex server · Tier 2. A place for your team to work and recharge.",
   "category": "server",
-  "price": 1500,
+  "price": 10000,
   "sprite": "server_rack",
   "furnitureType": "server_rack",
   "footprint": {
@@ -34,7 +34,7 @@
   "color": "#7da998",
   "bonus": {
     "scope": "provider",
-    "amount": 0.08,
+    "amount": 0.16,
     "family": "server_rack",
     "provider": "codex"
   }

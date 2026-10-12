@@ -1,4 +1,5 @@
-import { Folder, Monitor, LayoutGrid, Puzzle, LogIn, MessageSquare, Brain, X, WifiOff, Terminal } from 'lucide-react';
+import { Folder, Monitor, LayoutGrid, LogIn, MessageSquare, Brain, X, WifiOff, Terminal } from 'lucide-react';
+import { PluginIcon } from '../icons/PluginIcon';
 import { useGroupStore } from '../../store/groupStore';
 import { useLayoutStore, type PanelType } from '../../store/layoutStore';
 import { useInstanceStore } from '../../store/instanceStore';
@@ -68,7 +69,7 @@ function ChildTile({ childId }: { childId: string }) {
     name = instance?.name ?? 'LLM';
   } else if (panelType === 'plugin') {
     color = '#cc5de8';
-    icon = <Puzzle size={ICON_SIZE} />;
+    icon = <PluginIcon icon={pluginInstance?.icon} size={ICON_SIZE} />;
     name = pluginInstance?.title ?? 'Plugin';
   } else {
     // terminal (Claude chat)

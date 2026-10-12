@@ -4,7 +4,7 @@
   "name": "Terracotta rug",
   "description": "Terracotta rug. A place for your team to work and recharge.",
   "category": "decoration",
-  "price": 60,
+  "price": 90,
   "sprite": "rug",
   "furnitureType": "rug",
   "footprint": {
@@ -25,7 +25,7 @@
   "color": "#b98478",
   "bonus": {
     "scope": "environment",
-    "amount": 0.002,
+    "amount": 0.004,
     "family": "rug"
   }
 }

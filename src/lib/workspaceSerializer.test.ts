@@ -35,7 +35,7 @@ const config: InstanceConfig = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubGlobal("localStorage", { getItem: () => null });
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
   useInstanceStore.setState({ instances: new Map() });
   usePluginStore.setState({ instances: new Map() });
   useWorkspaceWindowStore.setState({ windows: [] });
@@ -105,6 +105,25 @@ it('restores a Lichess panel, saved page, and group after a complete restart', (
   const next = serializeWorkspace();
   deserializeWorkspace({ ...next, plugins: [], groups: {}, layout: { ...next.layout, tabOrder: [], panelTypes: {} } });
   expect(usePluginStore.getState().instances.has(id)).toBe(false);
+});
+it('restores a custom website definition and its grouped panel from an exported workspace', () => {
+  const name = usePluginStore.getState().addWebApp({ name: 'My player', url: 'https://player.example.test', icon: 'Music' });
+  const manifest = usePluginStore.getState().registry.get(name)!;
+  const id = usePluginStore.getState().createInstance(name);
+  usePluginStore.getState().setBrowserUrl(id, 'https://player.example.test/library');
+  useLayoutStore.getState().addPanel(id, 'plugin');
+  const group = useGroupStore.getState().createGroup(null, 'Music');
+  useLayoutStore.getState().addPanel(group, 'group');
+  useGroupStore.getState().movePanelToLevel(id, group);
+  const saved = JSON.parse(JSON.stringify(serializeWorkspace()));
+  expect(saved.plugins[0].webApp).toEqual(manifest);
+  usePluginStore.setState({ registry: new Map(), instances: new Map() });
+  deserializeWorkspace(saved);
+  expect(usePluginStore.getState().registry.get(name)).toEqual(manifest);
+  expect(usePluginStore.getState().instances.get(id)).toMatchObject({ pluginName: name, title: 'My player', icon: 'Music', browserUrl: 'https://player.example.test/library' });
+  expect(useGroupStore.getState().groups.get(group)?.childIds).toContain(id);
+  expect(useLayoutStore.getState().panelTypes[id]).toBe('plugin');
+  expect(serializeWorkspace().plugins[0].webApp?.browserSite).toBe(manifest.browserSite);
 });
 it("restores an unsent Codex panel without an unresumable thread ID", () => {
   const id = useInstanceStore

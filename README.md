@@ -61,6 +61,12 @@ agents, credentials, model discovery, permissions, and session storage.
 
 ## Features
 
+- **Website panels** — Lichess is included. To add your own, open **New session → More → +**,
+  enter a name and web address, then choose an icon or upload an image. The shortcut stays in
+  More for future sessions. Website panels follow the same grouping, resizing, detached-window,
+  and small-panel click-to-focus behavior as Lichess. Each saved app keeps its own browser
+  profile, including cookies, when its panels close or Tessera restarts; a website can still
+  expire its own login. Workspace exports include the app definition, not its login data.
 - **Tiled multi-provider workspace** — open coding agents, cloud chats, and local models together. Focus a panel and it
   grows; the others yield space.
 - **Chat _and_ terminal panels** — use Claude Code and Codex in rich chat or native xterm terminal

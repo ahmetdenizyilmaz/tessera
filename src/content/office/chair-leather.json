@@ -4,7 +4,7 @@
   "name": "Executive chair",
   "description": "Executive chair. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 320,
+  "price": 480,
   "sprite": "chair",
   "furnitureType": "chair",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#b28669",
   "bonus": {
     "scope": "environment",
-    "amount": 0.008,
+    "amount": 0.016,
     "family": "chair"
   },
   "seats": [

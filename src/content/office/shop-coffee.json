@@ -4,7 +4,7 @@
   "name": "Espresso machine",
   "description": "Espresso machine. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 220,
+  "price": 330,
   "sprite": "coffee_machine",
   "furnitureType": "coffee_machine",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#a8b7ad",
   "bonus": {
     "scope": "environment",
-    "amount": 0.006,
+    "amount": 0.012,
     "family": "coffee_machine"
   }
 }

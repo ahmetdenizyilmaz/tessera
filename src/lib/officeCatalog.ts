@@ -30,6 +30,16 @@ const registry = new Map(OFFICE_CATALOG.map(i => [i.id, i]));
 if (registry.size !== OFFICE_CATALOG.length) throw new Error('Duplicate office item id');
 export function officeItem(id: string) { return registry.get(id); }
 export const SLOT_LABELS: Record<WearableSlot, string> = { head: 'Head', face: 'Face', neck: 'Neck', shirt: 'Shirt' };
+export const OFFICE_SHOP_SECTIONS: Record<string,string> = {
+  pc:'Computers',desk:'Desks',chair:'Chairs',couch:'Sofas',plant:'Plants',lamp:'Lighting',bookshelf:'Shelves',
+  whiteboard:'Planning boards',task_board:'Task boards',filing_cabinet:'Cabinets',coffee_machine:'Coffee stations',
+  water_cooler:'Water coolers',printer:'Printers',server_rack:'Archives',rug:'Rugs',poster:'Wall art',floor:'Floors',
+  shirt:'Shirts',head:'Headwear',face:'Eyewear',neck:'Neckwear',
+  'server-claude':'Claude servers','server-codex':'Codex servers','server-antigravity':'Antigravity servers','server-openrouter':'OpenRouter servers',
+};
+export function shopSection(item:ShopItem) {
+  return item.category==='server'?`server-${item.bonus?.provider}`:item.slot??item.furnitureType??item.category;
+}
 export function wearableKey(wearables?: Partial<Record<WearableSlot, string>>): string {
   return WEARABLE_SLOTS.map(slot => wearables?.[slot] ?? '').join('|');
 }

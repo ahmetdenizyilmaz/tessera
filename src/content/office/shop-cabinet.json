@@ -4,7 +4,7 @@
   "name": "Filing cabinet",
   "description": "Filing cabinet. A place for your team to work and recharge.",
   "category": "furniture",
-  "price": 90,
+  "price": 135,
   "sprite": "filing_cabinet",
   "furnitureType": "filing_cabinet",
   "footprint": {
@@ -30,7 +30,7 @@
   "color": "#899cad",
   "bonus": {
     "scope": "environment",
-    "amount": 0.002,
+    "amount": 0.004,
     "family": "filing_cabinet"
   }
 }

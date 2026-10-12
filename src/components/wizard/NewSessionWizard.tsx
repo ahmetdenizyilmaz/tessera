@@ -4,7 +4,9 @@ import { AntigravitySetup } from '../antigravity/AntigravitySetup';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { KeyRound, BadgeCheck, Folder as FolderIcon, Puzzle, ChevronDown, ChevronUp, Monitor, GitFork } from 'lucide-react';
+import { KeyRound, BadgeCheck, Folder as FolderIcon, Plus, ChevronDown, ChevronUp, Monitor, GitFork } from 'lucide-react';
+import { PluginIcon } from '../icons/PluginIcon';
+import { AddWebApp } from './AddWebApp';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { removePanelsFromWorkspace } from '../../store/groupStore';
@@ -67,6 +69,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
   const [keyDraft, setKeyDraft] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
+  const [addingWebApp,setAddingWebApp]=useState(false);
 
   const meta = s.route ? routeMeta(s.route) : null;
   const visibleRoutes = s.panelView === 'terminal' ? TERMINAL_ROUTES : CHAT_ROUTES;
@@ -637,10 +640,12 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         </button>
         {Array.from(pluginRegistry.keys()).map((name) => (
           <button key={name} className="btn btn-secondary btn-sm" onClick={() => replaceWizard(instanceId, (destination, replacingId) => createPluginPanel(name, destination, replacingId))}>
-            <Puzzle size={12} style={{ marginRight: 4 }} /> {pluginRegistry.get(name)?.defaultTitle ?? name}
+            <PluginIcon icon={pluginRegistry.get(name)?.icon} size={15} /> {pluginRegistry.get(name)?.defaultTitle ?? name}
           </button>
         ))}
+        <button className="btn btn-secondary btn-sm" title="Add a web app" aria-label="Add web app" onClick={()=>setAddingWebApp(v=>!v)}><Plus size={16}/></button>
       </div>
+      {addingWebApp && <AddWebApp onCancel={()=>setAddingWebApp(false)} onAdded={name=>replaceWizard(instanceId,(destination,replacingId)=>createPluginPanel(name,destination,replacingId))}/>}
       {!s.fork && <RecentPanels wizardId={instanceId} />}
     </div>
   );
