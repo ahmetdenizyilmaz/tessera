@@ -31,6 +31,13 @@ export const PLUGIN_SDK_SOURCE = `
   var _currentTheme = null;
   var REQUEST_TIMEOUT = 300000;  // 5min timeout for long-running SDK calls (e.g. agent creation)
 
+  window.addEventListener('keydown', function(event) {
+    if (event.key !== 'F11' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!event.repeat) parent.postMessage({ type: 'tessera:maximize-panel' }, '*');
+  }, true);
+
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   function nextRequestId() {

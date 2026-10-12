@@ -7,6 +7,7 @@ interface AboutDialogProps {
 }
 
 const SHORTCUTS: { key: string; label: string }[] = [
+  { key: 'F11', label: 'Maximize / Restore Focused Panel' },
   { key: 'Ctrl+Z', label: 'Undo Panel Close / Resize (outside text inputs)' },
   { key: 'Ctrl+Y', label: 'Redo Panel Close / Resize (outside text inputs)' },
   { key: 'Alt+0–9', label: 'Assign Number to Focused Panel' },

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
 import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
 import { ProviderIcon } from "../icons/ProviderIcons";
-import { GitFork } from "lucide-react";
+import { GitFork, X } from "lucide-react";
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { usePanelWindow, usePanelLayout } from '../windows/PanelWindowContext';
@@ -257,8 +257,8 @@ export function AgentPanelHeader({
             className="toolbar-btn"
             title={
               isMaximized
-                ? "Restore panel (show all)"
-                : "Maximize panel (hide the others)"
+                ? "Restore panel (show all) — F11"
+                : "Maximize panel (hide the others) — F11"
             }
             onClick={() =>
               useLayoutStore.getState().toggleMaximized(instanceId)
@@ -299,7 +299,7 @@ export function AgentPanelHeader({
             title="Close instance"
             onClick={onClose}
           >
-            ×
+            <X size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
       </div>

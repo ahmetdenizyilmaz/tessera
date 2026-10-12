@@ -20,6 +20,7 @@ import { beginWindowPanelDrag, endWindowPanelDrag, finishWindowTabDrag } from '.
 import { useWindowDragStore } from '../../store/windowDragStore';
 import { usePanelWindow } from '../windows/PanelWindowContext';
 import { beginPanelResize } from '../../lib/layoutHistory';
+import { installPanelMaximizeShortcut } from '../../lib/panelMaximize';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
@@ -35,6 +36,10 @@ export function MosaicLayout() {
   const sourceWindow = panelWindow.label ?? 'main';
   const enterGroup = panelWindow.enterGroup ?? useGroupStore.getState().enterGroup;
   const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => installPanelMaximizeShortcut(window, useLayoutStore, () =>
+    !containerRef.current || !!containerRef.current.closest('[inert], [aria-hidden="true"]') ||
+    !!document.querySelector('.mosaic-tile-dragging, .mosaic-gutter-dragging')
+  ), [window, document, useLayoutStore]);
   const tabOrder = useLayoutStore((s) => s.tabOrder ?? EMPTY_TAB_ORDER);
   const focusedId = useLayoutStore((s) => s.focusedId);
   const maximizedId = useLayoutStore((s) => s.maximizedId);

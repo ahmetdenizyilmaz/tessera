@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { GitFork } from 'lucide-react';
+import { GitFork, X } from 'lucide-react';
 import { startFork } from '../../lib/forkActions';
 import { useInstanceStore } from '../../store/instanceStore';
 import { closePanel } from '../../lib/panelCleanup';
@@ -271,7 +271,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
           <button
             className="toolbar-btn"
             onClick={(e) => { e.stopPropagation(); toggleMaximized(instanceId); }}
-            title={isMaximized ? 'Restore panel (show all)' : 'Maximize panel (hide the others)'}
+            title={isMaximized ? 'Restore panel (show all) — F11' : 'Maximize panel (hide the others) — F11'}
           >
             {isMaximized ? (
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -289,7 +289,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
             onClick={handleClose}
             title="Close LLM chat"
           >
-            {'\u00D7'}
+            <X size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
       </div>

@@ -33,6 +33,40 @@ fn saved_url(url: &tauri::Url) -> String {
     url.to_string()
 }
 
+/// Website keyboard events cannot bubble to the host UI. Handle F11 on the
+/// native controller without exposing any Tessera commands to the website.
+#[cfg(windows)]
+fn install_panel_shortcut(view: &Webview, app: tauri::AppHandle, id: String) -> Result<(), String> {
+    use tauri::Emitter;
+    use webview2_com::{AcceleratorKeyPressedEventHandler, Microsoft::Web::WebView2::Win32::{COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN, COREWEBVIEW2_PHYSICAL_KEY_STATUS}};
+    #[link(name = "user32")]
+    extern "system" { fn GetKeyState(key: i32) -> i16; }
+    view.with_webview(move |platform| unsafe {
+        let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut key = 0;
+            args.VirtualKey(&mut key)?;
+            if key != 0x7A || [0x10, 0x11, 0x12, 0x5B, 0x5C].iter().any(|key| GetKeyState(*key) < 0) { return Ok(()); }
+            args.SetHandled(true)?;
+            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
+            args.KeyEventKind(&mut kind)?;
+            let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+            args.PhysicalKeyStatus(&mut status)?;
+            if kind == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && !status.WasKeyDown.as_bool() {
+                let app = app.clone();
+                let id = id.clone();
+                // WebView2 holds its input lock during this callback. Deliver
+                // the UI event after returning instead of issuing sync IPC.
+                tauri::async_runtime::spawn(async move { let _ = app.emit_to("main", "browser-panel-maximize", id); });
+            }
+            Ok(())
+        }));
+        if let Err(error) = platform.controller().add_AcceleratorKeyPressed(&handler, &mut 0) {
+            eprintln!("Could not install browser panel shortcut: {error}");
+        }
+    }).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String, site: String, url: Option<String>) -> Result<(), String> {
     authorize(&caller)?;
@@ -67,6 +101,8 @@ pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state:
     // Start offscreen; the renderer supplies measured bounds after creation.
     let view = window.add_child(builder, tauri::LogicalPosition::new(-10000.0, -10000.0), tauri::LogicalSize::new(1.0, 1.0))
         .map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    install_panel_shortcut(&view, app.clone(), id)?;
     view.hide().map_err(|e| e.to_string())
 }
 

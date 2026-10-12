@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Plus, ChevronDown } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -358,11 +359,12 @@ export function TabBar() {
       {isOverflowing && (
         <div style={{ position: 'relative' }}>
           <button
+            type="button"
             className="tab-bar-add"
             onClick={() => setShowTabList((v) => !v)}
             title="All tabs"
           >
-            {'⌄'}
+            <ChevronDown size={16} aria-hidden="true" />
           </button>
           {showTabList && (
             <div className="tab-overflow-menu" onMouseLeave={() => setShowTabList(false)}>
@@ -386,11 +388,13 @@ export function TabBar() {
 
       <div style={{ position: 'relative' }}>
         <button
+          type="button"
           className="tab-bar-add"
           onClick={() => openNewSessionWizard()}
           title="New session"
+          aria-label="New session"
         >
-          +
+          <Plus size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
 

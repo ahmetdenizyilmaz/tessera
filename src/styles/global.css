@@ -135,6 +135,8 @@ body,
   justify-content: center;
   width: 28px;
   height: 28px;
+  padding: 0;
+  line-height: 1;
   margin-left: 4px;
   border: none;
   border-radius: 6px;
@@ -150,6 +152,8 @@ body,
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
+
+.tab-bar-add svg { display: block; flex-shrink: 0; }
 
 /* ======================================
    Tab Item

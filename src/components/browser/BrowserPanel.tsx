@@ -7,6 +7,8 @@ import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import './browser.css';
 import { usePanelLayout } from '../windows/PanelWindowContext';
 import { closePanel } from '../../lib/panelCleanup';
+import { listen } from '@tauri-apps/api/event';
+import { PANEL_MAXIMIZE_EVENT } from '../../lib/panelMaximize';
 
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: 'lichess' }) {
   const useLayoutStore = usePanelLayout();
@@ -17,6 +19,15 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: '
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [clickToFocus, setClickToFocus] = useState(false);
+
+  useEffect(() => {
+    let disposed = false;
+    const listener = listen<string>('browser-panel-maximize', event => {
+      if (disposed || event.payload !== instanceId) return;
+      surface.current?.ownerDocument.defaultView?.dispatchEvent(new CustomEvent(PANEL_MAXIMIZE_EVENT, { detail: instanceId }));
+    });
+    return () => { disposed = true; void listener.then(unlisten => unlisten()); };
+  }, [instanceId]);
 
   useEffect(() => {
     const view = surface.current?.ownerDocument.defaultView ?? window;
