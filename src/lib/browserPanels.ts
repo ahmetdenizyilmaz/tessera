@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { usePluginStore } from '../store/pluginStore';
 import { browserDisplayMode, browserPanelShare, type BrowserSizePreference } from './browserDisplay';
+import { useWindowDragStore } from '../store/windowDragStore';
 
 // Native views survive React unmounts when navigating into/out of groups.
 // Serialize operations per view, including StrictMode cleanup and recreation.
@@ -36,10 +37,13 @@ export function measureBrowserSurface(element: HTMLElement, preference?: Browser
   const view = document.defaultView;
   if (!view) return null;
   const { innerWidth, innerHeight, devicePixelRatio } = view;
-  if (document.documentElement.hasAttribute('data-tab-dragging')) return null;
+  const tile = element.closest<HTMLElement>('[data-panel-id]');
+  const keepPinnedView = !!tile?.hasAttribute('data-panel-locked') && !tile.hasAttribute('data-panel-resizing') && !tile.hasAttribute('data-panel-preview-moving')
+    && !tile.classList.contains('mosaic-tile-dragging') && useWindowDragStore.getState().drag?.panelId !== tile.dataset.panelId;
+  if (!keepPinnedView && document.documentElement.hasAttribute('data-tab-dragging')) return null;
   if (!element.isConnected || document.hidden) return null;
   if (browserNeedsFocus(element, preference)) return null;
-  if (document.querySelector('.mosaic-tile-dragging, .mosaic-gutter-dragging')) return null;
+  if (!keepPinnedView && document.querySelector('.mosaic-tile-dragging, .mosaic-gutter-dragging')) return null;
   for (const overlay of document.querySelectorAll<HTMLElement>('.dialog-overlay, .menu-dropdown, .context-menu, [data-browser-overlay], [role="dialog"]')) {
     if (overlay.getClientRects().length && getComputedStyle(overlay).visibility !== 'hidden') return null;
   }

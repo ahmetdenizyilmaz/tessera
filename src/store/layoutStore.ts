@@ -400,7 +400,9 @@ export interface Gutter {
 export function computeGutters(rects: Map<string, PanelRect>): Gutter[] {
   const gutters: Gutter[] = [];
   const ids = Array.from(rects.keys());
-  const TOLERANCE = 1;
+  // These coordinates are percentages, not pixels. A 1% tolerance joined
+  // nearby independent dividers and made their resize limits fight each other.
+  const TOLERANCE = .0001;
 
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) {
@@ -473,11 +475,14 @@ export function computeGutters(rects: Map<string, PanelRect>): Gutter[] {
     }
   }
 
-  // Merge gutters at same position on same axis
+  // Merge only connected segments of the same actual edge. Separate rows
+  // may happen to align without sharing a divider across the panel between.
   const merged: Gutter[] = [];
+  gutters.sort((a, b) => a.axis.localeCompare(b.axis) || a.position - b.position || a.start - b.start);
   for (const g of gutters) {
     const existing = merged.find(
-      (m) => m.axis === g.axis && Math.abs(m.position - g.position) < TOLERANCE,
+      (m) => m.axis === g.axis && Math.abs(m.position - g.position) < TOLERANCE
+        && g.start <= m.end + TOLERANCE && g.end >= m.start - TOLERANCE,
     );
     if (existing) {
       for (const id of g.panelsBefore) {
@@ -608,7 +613,33 @@ export function buildSnapConfig(
 }
 
 /** Shared by the drag preview and commit; the drop selects the moved panel. */
-export function computeSnapLayout(tabOrder: string[], snappedId: string, zone: SnapZone, currentConfig: LayoutConfig | null, stealFraction: StealFraction, sideFractions?: number[]) {
+export function computeSnapLayout(tabOrder: string[], snappedId: string, zone: SnapZone, currentConfig: LayoutConfig | null,
+  stealFraction: StealFraction, sideFractions?: number[], currentRects?: Map<string, PanelRect>, lockedIds: ReadonlySet<string> = new Set()) {
+  // A local drop must respect the same pinned small slots as focus rotation.
+  // With pins, swap into an available slot instead of rebuilding the entire
+  // layout around the dragged panel (which displaced every locked neighbor).
+  if (currentConfig && currentRects && currentConfig.panelOrder.length === tabOrder.length
+    && currentConfig.panelOrder.every(id => tabOrder.includes(id))) {
+    const order = [...currentConfig.panelOrder], slots = order.map(id => currentRects.get(id)!);
+    if (validSlotRects(slots, order.length)) {
+      const main = currentConfig.type === 'main' || currentConfig.type === 'grid' ? 0
+        : slots.reduce((best, r, i) => r.w * r.h > slots[best].w * slots[best].h ? i : best, 0);
+      const pinned = (i: number) => i !== main && order[i] !== snappedId && lockedIds.has(order[i]);
+      const from = order.indexOf(snappedId);
+      if (from >= 0 && order.some((_, i) => pinned(i))) {
+        const x = zone.includes('left') ? 0 : zone.includes('right') ? 100 : 50;
+        const y = zone.includes('top') ? 0 : zone.includes('bottom') ? 100 : 50;
+        const distance = (r: PanelRect) => Math.max(r.x - x, 0, x - r.x - r.w) ** 2
+          + Math.max(r.y - y, 0, y - r.y - r.h) ** 2
+          + ((r.x + r.w / 2 - x) ** 2 + (r.y + r.h / 2 - y) ** 2) * 1e-6;
+        const target = zone === 'center' ? main : order.reduce((best, _, i) =>
+          !pinned(i) && distance(slots[i]) < distance(slots[best]) ? i : best, from);
+        [order[from], order[target]] = [order[target], order[from]];
+        const layoutConfig = { ...currentConfig, panelOrder: order, slotRects: slots };
+        return { layoutConfig, panelRects: computeRects(layoutConfig, snappedId, stealFraction, sideFractions) };
+      }
+    }
+  }
   const layoutConfig = buildSnapConfig(tabOrder, snappedId, zone, currentConfig);
   return { layoutConfig, panelRects: computeRects(layoutConfig, snappedId, stealFraction, sideFractions) };
 }
@@ -1100,7 +1131,8 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
   applySnap: (snappedId: string, zone: SnapZone) => {
     const state = get();
     if (!state.tabOrder.includes(snappedId)) return;
-    const geometry = computeSnapLayout(state.tabOrder, snappedId, zone, state.layoutConfig, state.stealFraction, state.sidebarSlotFractions);
+    const geometry = computeSnapLayout(state.tabOrder, snappedId, zone, state.layoutConfig, state.stealFraction,
+      state.sidebarSlotFractions, state.panelRects, usePanelLockStore.getState().lockedIds);
     set({ ...geometry, focusedId: snappedId, activeTabId: snappedId, maximizedId: null });  },
 }));
 

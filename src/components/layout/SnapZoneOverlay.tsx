@@ -15,9 +15,9 @@ function panelLabel(id: string) {
 }
 
 /** One preview slot per real panel, using the exact committed geometry. */
-export function SnapZoneOverlay({ rects, targetId }: { rects: Map<string, PanelRect>; targetId: string }) {
-  return <div className="snap-layout-preview" aria-hidden="true">
-    {[...rects].map(([id, r]) => <div key={id} data-preview-panel-id={id}
+export function SnapZoneOverlay({ rects, targetId, passthroughIds }: { rects: Map<string, PanelRect>; targetId: string; passthroughIds?: ReadonlySet<string> }) {
+  return <div className="snap-layout-preview" style={passthroughIds?.size ? { background: 'transparent' } : undefined} aria-hidden="true">
+    {[...rects].filter(([id]) => !passthroughIds?.has(id)).map(([id, r]) => <div key={id} data-preview-panel-id={id}
       className={`snap-zone-preview${id === targetId ? ' snap-zone-preview-target' : ''}`}
       style={{ left: `calc(${r.x}% + 3px)`, top: `calc(${r.y}% + 3px)`, width: `calc(${r.w}% - 6px)`, height: `calc(${r.h}% - 6px)` }}>
       <div className="snap-preview-label"><span>{panelLabel(id)}</span>{id === targetId && <small>Drop here</small>}</div>

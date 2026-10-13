@@ -21,10 +21,11 @@ import { useWindowDragStore } from '../../store/windowDragStore';
 import { usePanelWindow } from '../windows/PanelWindowContext';
 import { beginPanelResize } from '../../lib/layoutHistory';
 import { installPanelMaximizeShortcut } from '../../lib/panelMaximize';
+import { resizePanels, samePanelRect } from '../../lib/panelResize';
+import { usePanelLockStore } from '../../store/panelLockStore';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
-const MIN_PANEL_PCT = 10;
 const DRAG_THRESHOLD = 6;
 const GAP = 3;
 
@@ -52,6 +53,7 @@ export function MosaicLayout() {
   const applySnap = useLayoutStore((s) => s.applySnap);
   const resetStealFraction = useLayoutStore((s) => s.resetStealFraction);
   const panelTypes = useLayoutStore((s) => s.panelTypes);
+  const lockedIds = usePanelLockStore(s => s.lockedIds);
 
   const sidebarDragging = useLayoutStore((s) => s.sidebarDragging);
   const sidebarDragSnap = useLayoutStore((s) => s.sidebarDragSnap);
@@ -85,6 +87,10 @@ export function MosaicLayout() {
     startPos: number;
     startRects: Map<string, PanelRect>;
     commit: () => void;
+    pointerId: number;
+    captureTarget: HTMLElement;
+    previousCursor: string;
+    previousUserSelect: string;
   } | null>(null);
 
   // Panel bodies use final pixel dimensions while their outer tiles animate.
@@ -178,8 +184,10 @@ export function MosaicLayout() {
     const zone = sidebarDragging ? sidebarDragSnap : activeSnap;
     if (!id || !zone || (!sidebarDragging && nativeTarget !== undefined && nativeTarget !== sourceWindow)) return null;
     const order = sidebarDragging ? [...tabOrder, id] : tabOrder;
-    return { id, ...computeSnapLayout(order, id, zone, layoutConfig, stealFraction, sidebarSlotFractions) };
-  }, [sidebarDragging, sidebarDragSnap, draggingId, activeSnap, nativeTarget, tabOrder, layoutConfig, stealFraction, sidebarSlotFractions, sourceWindow]);
+    return { id, ...computeSnapLayout(order, id, zone, layoutConfig, stealFraction, sidebarSlotFractions, panelRects, lockedIds) };
+  }, [sidebarDragging, sidebarDragSnap, draggingId, activeSnap, nativeTarget, tabOrder, layoutConfig, stealFraction, sidebarSlotFractions, sourceWindow, panelRects, lockedIds]);
+  const previewPassthrough = useMemo(() => new Set(snapPreview ? [...lockedIds].filter(id =>
+    id !== snapPreview.id && samePanelRect(panelRects.get(id), snapPreview.panelRects.get(id))) : []), [snapPreview, panelRects, lockedIds]);
 
   // Override rects during group enter/exit animation
   const animatedRects = useMemo((): Map<string, PanelRect> => {
@@ -223,14 +231,22 @@ export function MosaicLayout() {
   const gutters = useMemo(() => {
     // Nothing to resize against while one panel fills the area.
     if (draggingId || isAnimating || maximizedId) return [];
+    if (gutterDragging && resizeRef.current) {
+      const { gutter } = resizeRef.current;
+      const before = displayRects.get(gutter.panelsBefore[0]);
+      return before ? [{ ...gutter, position: gutter.axis === 'x' ? before.x + before.w : before.y + before.h }] : [];
+    }
     return computeGutters(displayRects);
-  }, [displayRects, draggingId, isAnimating, maximizedId]);
+  }, [displayRects, draggingId, isAnimating, maximizedId, gutterDragging]);
 
   // Gutter resize start
   const handleGutterDown = useCallback((e: React.PointerEvent, gutter: Gutter) => {
+    if (e.button !== 0 || resizeRef.current || !containerRef.current) return;
     e.stopPropagation();
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Gutters merge/split as edges align. Capture on the stable container so
+    // replacing a gutter cannot lose mouse-up or strand the resize gesture.
+    containerRef.current.setPointerCapture(e.pointerId);
     (e.currentTarget as HTMLElement).focus({ preventScroll: true });
     const currentRects = useLayoutStore.getState().panelRects;
     resizeRef.current = {
@@ -238,6 +254,10 @@ export function MosaicLayout() {
       startPos: gutter.axis === 'x' ? e.clientX : e.clientY,
       startRects: new Map(currentRects),
       commit: beginPanelResize(useLayoutStore),
+      pointerId: e.pointerId,
+      captureTarget: containerRef.current,
+      previousCursor: document.body.style.cursor,
+      previousUserSelect: document.body.style.userSelect,
     };
     setGutterDragging(true);
     document.body.style.userSelect = 'none';
@@ -301,44 +321,15 @@ export function MosaicLayout() {
       // Gutter resize
       const rs = resizeRef.current;
       if (rs) {
+        if (e.pointerId !== rs.pointerId) return;
+        if (!(e.buttons & 1)) { void onUp(e); return; }
         const c = containerRef.current;
         if (!c) return;
         const b = c.getBoundingClientRect();
         const containerDim = rs.gutter.axis === 'x' ? b.width : b.height;
         const mousePos = rs.gutter.axis === 'x' ? e.clientX : e.clientY;
         const deltaPx = mousePos - rs.startPos;
-        let delta = (deltaPx / containerDim) * 100;
-
-        // Clamp so no panel goes below MIN_PANEL_PCT
-        for (const id of rs.gutter.panelsBefore) {
-          const r = rs.startRects.get(id)!;
-          const size = rs.gutter.axis === 'x' ? r.w : r.h;
-          if (size + delta < MIN_PANEL_PCT) delta = MIN_PANEL_PCT - size;
-        }
-        for (const id of rs.gutter.panelsAfter) {
-          const r = rs.startRects.get(id)!;
-          const size = rs.gutter.axis === 'x' ? r.w : r.h;
-          if (size - delta < MIN_PANEL_PCT) delta = size - MIN_PANEL_PCT;
-        }
-
-        const newRects = new Map(rs.startRects);
-        for (const id of rs.gutter.panelsBefore) {
-          const r = rs.startRects.get(id)!;
-          if (rs.gutter.axis === 'x') {
-            newRects.set(id, { ...r, w: r.w + delta });
-          } else {
-            newRects.set(id, { ...r, h: r.h + delta });
-          }
-        }
-        for (const id of rs.gutter.panelsAfter) {
-          const r = rs.startRects.get(id)!;
-          if (rs.gutter.axis === 'x') {
-            newRects.set(id, { ...r, x: r.x + delta, w: r.w - delta });
-          } else {
-            newRects.set(id, { ...r, y: r.y + delta, h: r.h - delta });
-          }
-        }
-        setRawPanelRectsRef.current(newRects);
+        setRawPanelRectsRef.current(resizePanels(rs.startRects, rs.gutter, (deltaPx / containerDim) * 100));
         return;
       }
 
@@ -386,14 +377,21 @@ export function MosaicLayout() {
       // Sidebar widget drag is now handled by Sidebar component directly
     };
 
-    const onUp = async () => {
+    const releaseResize = () => {
+      const rs = resizeRef.current;
+      resizeRef.current = null;
+      if (!rs) return;
+      if (rs.captureTarget.hasPointerCapture(rs.pointerId)) rs.captureTarget.releasePointerCapture(rs.pointerId);
+      document.body.style.userSelect = rs.previousUserSelect;
+      document.body.style.cursor = rs.previousCursor;
+      setGutterDragging(false);
+      return rs;
+    };
+    const onUp = async (event: PointerEvent) => {
       // Gutter resize end
       if (resizeRef.current) {
-        const { gutter, commit } = resizeRef.current;
-        resizeRef.current = null;
-        setGutterDragging(false);
-        document.body.style.userSelect = '';
-        document.body.style.cursor = '';
+        if (event.pointerId !== resizeRef.current.pointerId) return;
+        const { gutter, commit } = releaseResize()!;
         window.getSelection()?.removeAllRanges();
         finishResizeRef.current(gutter.axis, gutter.panelsBefore, gutter.panelsAfter);
         commit();
@@ -447,24 +445,36 @@ export function MosaicLayout() {
     };
 
     const cancel = () => {
-      if (resizeRef.current) setRawPanelRectsRef.current(resizeRef.current.startRects);
-      resizeRef.current = null;
+      const rs = releaseResize();
+      if (rs) {
+        const current = useLayoutStore.getState().panelRects;
+        if (current.size === rs.startRects.size && [...current.keys()].every(id => rs.startRects.has(id))) {
+          setRawPanelRectsRef.current(rs.startRects);
+        }
+      }
       dragState.current = null;
       setGutterDragging(false); setDraggingId(null); setActiveSnap(null);
       useLayoutStore.getState().setDragReturnToSidebar(false);
       endWindowPanelDrag();
-      document.body.style.userSelect = ''; document.body.style.cursor = '';
+      if (!rs) { document.body.style.userSelect = ''; document.body.style.cursor = ''; }
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && (dragState.current || resizeRef.current)) { e.preventDefault(); cancel(); } };
+    const onLostCapture = (e: PointerEvent) => { if (resizeRef.current?.pointerId === e.pointerId) cancel(); };
+    const onBlur = () => { if (resizeRef.current) cancel(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', cancel);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('lostpointercapture', onLostCapture);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', cancel);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('lostpointercapture', onLostCapture);
+      window.removeEventListener('blur', onBlur);
+      if (resizeRef.current) cancel();
     };
   }, [startResizeLock, useLayoutStore, window, document, sourceWindow, enterGroup]);
 
@@ -516,11 +526,14 @@ export function MosaicLayout() {
           <div
             key={id}
             data-panel-id={id}
+            data-panel-locked={lockedIds.has(id) ? '' : undefined}
+            data-panel-resizing={gutterDragging && !samePanelRect(resizeRef.current?.startRects.get(id), rect) ? '' : undefined}
+            data-panel-preview-moving={snapPreview && !samePanelRect(panelRects.get(id), snapPreview.panelRects.get(id)) ? '' : undefined}
             tabIndex={-1}
             className={
               'mosaic-tile'
               + (isDrag ? ' mosaic-tile-dragging' : '')
-              + (resizing ? ' mosaic-tile-resizing' : '')
+              + (resizing && !lockedIds.has(id) ? ' mosaic-tile-resizing' : '')
               + (isDrag || gutterDragging || isCollapsePhase ? ' no-transition' : '')
             }
             style={{
@@ -531,7 +544,7 @@ export function MosaicLayout() {
               height: `calc(${rect.h}% - ${GAP * 2}px)`,
               zIndex: isDrag ? 50
                 : (isEnterTarget || isExitTarget) ? 50
-                : isFocused ? 10 : 1,
+                : lockedIds.has(id) ? 11 : isFocused ? 10 : 1,
               transition: isDrag || gutterDragging || isCollapsePhase
                 ? 'none'
                 : 'left 0.28s ease, top 0.28s ease, width 0.28s ease, height 0.28s ease, opacity 0.2s ease',
@@ -589,16 +602,16 @@ export function MosaicLayout() {
       })}
 
       {/* Gutter resize handles at panel borders */}
-      {gutters.map((g, i) => {
+      {gutters.map((g) => {
         const isV = g.axis === 'x';
         return (
           <div
-            key={`gutter-${i}`}
+            key={`${g.axis}:${g.panelsBefore.slice().sort().join(',')}:${g.panelsAfter.slice().sort().join(',')}`}
             className={`mosaic-gutter mosaic-gutter-${g.axis}`}
             tabIndex={-1}
             style={isV ? {
               position: 'absolute',
-              zIndex: 10,
+              zIndex: 30,
               left: `calc(${g.position}% - 4px)`,
               top: `calc(${g.start}% + ${GAP}px)`,
               width: 8,
@@ -606,7 +619,7 @@ export function MosaicLayout() {
               cursor: 'col-resize',
             } : {
               position: 'absolute',
-              zIndex: 10,
+              zIndex: 30,
               top: `calc(${g.position}% - 4px)`,
               left: `calc(${g.start}% + ${GAP}px)`,
               width: `calc(${g.end - g.start}% - ${GAP * 2}px)`,
@@ -626,7 +639,7 @@ export function MosaicLayout() {
 
       {/* Snap zone highlight during tab drag or sidebar drag */}
       {snapPreview && containerSize.width > 0 && (
-        <SnapZoneOverlay rects={snapPreview.panelRects} targetId={snapPreview.id} />
+        <SnapZoneOverlay rects={snapPreview.panelRects} targetId={snapPreview.id} passthroughIds={previewPassthrough} />
       )}
     </div>
   );
