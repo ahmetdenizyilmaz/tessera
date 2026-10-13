@@ -329,7 +329,8 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
     let suppress_events: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
     let size = pair.master.get_size().ok();
-    let input = Arc::new(if quiet_goal_resume { TerminalInput::with_quiet_goal_resume(writer, true) }
+    let input = Arc::new(if quiet_goal_resume { TerminalInput::with_quiet_goal_resume(writer,
+        size.map_or(80, |s| s.cols), size.map_or(24, |s| s.rows)) }
         else { TerminalInput::new(writer) });
     let instance = PtyInstance {
         master: pair.master,
@@ -550,10 +551,15 @@ pub async fn pty_resize(
             return Ok(());
         }
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
-        instance
-            .master
-            .resize(size)
-            .map_err(|e| format!("Resize failed: {}", e))?;
+        // Prepare for the redraw without holding the input lock during the
+        // native resize: the reader must remain free to drain ConPTY output.
+        instance.input.resize_prompt(cols, rows);
+        if let Err(e) = instance.master.resize(size) {
+            // A failed resize leaves uncertain screen geometry. Disarm the
+            // startup watcher rather than sending a key based on stale cells.
+            instance.input.resize_prompt(0, 0);
+            return Err(format!("Resize failed: {}", e));
+        }
         instance.size = Some(size);
     } else {
         return Err(format!("PTY instance '{}' not found", id));

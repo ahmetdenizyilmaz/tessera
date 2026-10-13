@@ -2,9 +2,12 @@ import type { GridPosition, OfficeFurniture, OfficeLayout, OfficeWorker, WorkerA
 import { FURNITURE_SIZES } from '../engine/SpriteManager';
 import { itemForFurniture } from './officeCatalog';
 
-export function furnitureCells(f: OfficeFurniture): GridPosition[] {
+export function furnitureFootprint(f: OfficeFurniture) {
   const size = itemForFurniture(f)?.footprint ?? FURNITURE_SIZES[f.type];
-  const w = f.rotation % 2 ? size.h : size.w, h = f.rotation % 2 ? size.w : size.h;
+  return f.rotation % 2 ? { w: size.h, h: size.w } : size;
+}
+export function furnitureCells(f: OfficeFurniture): GridPosition[] {
+  const { w, h } = furnitureFootprint(f);
   return Array.from({ length: w * h }, (_, i) => ({ gridX: f.position.gridX + i % w, gridY: f.position.gridY + Math.floor(i / w) }));
 }
 export const insideOffice = (layout: OfficeLayout, p: GridPosition) => Number.isInteger(p.gridX) && Number.isInteger(p.gridY) && p.gridX >= 0 && p.gridY >= 0 && p.gridX < layout.width && p.gridY < layout.height;

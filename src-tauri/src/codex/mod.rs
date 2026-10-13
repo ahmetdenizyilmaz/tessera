@@ -696,13 +696,17 @@ pub async fn codex_terminal_spawn(
     }
     // Reopening Tessera restores the conversation, not permission to restart
     // a stopped goal. Dismiss only the known startup dialog with Escape.
-    let quiet_goal_resume = matches!(
+    let quiet_goal_resume = quiet_goal_resume(&c, &sid).await;
+    crate::pty::manager::spawn_prepared(id, cmd, cols, rows, &app, &pty, quiet_goal_resume)
+}
+
+async fn quiet_goal_resume(c: &Client, sid: &str) -> bool {
+    matches!(
         tokio::time::timeout(std::time::Duration::from_secs(2),
             c.call("thread/goal/get", json!({"threadId":sid}))).await,
         Ok(Ok(goal)) if matches!(goal["goal"]["status"].as_str(),
             Some("paused" | "blocked" | "usageLimited" | "budgetLimited"))
-    );
-    crate::pty::manager::spawn_prepared(id, cmd, cols, rows, &app, &pty, quiet_goal_resume)
+    )
 }
 
 pub async fn deliver(

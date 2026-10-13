@@ -3,8 +3,9 @@ import { Application, Container, Graphics, Matrix, Rectangle, Text } from 'pixi.
 import type { OfficeLayout, OfficeFurniture, OfficeLocation, WorkerProfile } from '../types/office';
 import { BUBBLE_FRAMES, drawOfficeCharacter, drawOfficeFurniture, drawSpeechBubble, type BubbleKind, type CharacterMood } from './officeArt';
 import { itemForFurniture, officeItem } from '../lib/officeCatalog';
-import { furnitureCells } from '../lib/officeSpace';
+import { furnitureCells, furnitureFootprint } from '../lib/officeSpace';
 import type { WorkerPose } from './WorkerAnimator';
+import { orderOfficeDepth, type OfficeDepth } from './officeDepth';
 
 const ROOM_NAMES: Record<string, string> = { reception: 'WELCOME', open_floor: 'THE STUDIO', manager_office: 'YOUR OFFICE', meeting_room: 'PLANNING', server_room: 'BUILD LAB', break_room: 'COFFEE LOUNGE', archive: 'LIBRARY', computer_lab: 'RESEARCH', maintenance: 'SUPPORT' };
 export class IsometricEngine {
@@ -24,6 +25,8 @@ export class IsometricEngine {
   private hoveredFurniture: string | null = null;
   private heldFurniture: string | null = null;
   private furnitureGraphics = new Map<string,Graphics>();
+  private depths = new Map<Graphics, OfficeDepth>();
+  private depthDirty = false;
   private furnitureProfiles: Record<string, WorkerProfile> = {};
   private hoverTile?: {gx:number;gy:number};
   private onTileHoverHandler?: (gx:number,gy:number)=>void;
@@ -124,7 +127,7 @@ export class IsometricEngine {
   }
   drawFurniture(furniture: OfficeFurniture[], profiles:Record<string,WorkerProfile> = {}) {
     this.furnitureProfiles = profiles;
-    for (const child of [...this.entities.children]) if (child.label === 'furniture') { this.entities.removeChild(child); child.destroy({ children: true }); }
+    for (const child of this.furnitureGraphics.values()) { this.depths.delete(child); child.destroy({ children: true }); }
     this.furnitureGraphics.clear();
     for (const f of furniture) {
       const g = new Graphics(); g.label = 'furniture'; g.eventMode = 'none';
@@ -133,9 +136,11 @@ export class IsometricEngine {
       else drawOfficeFurniture(g,f.type);
       const p = this.gridToScreen(f.position.gridX, f.position.gridY);
       g.position.set(p.x,p.y);
-      g.zIndex = f.type === 'rug' ? -10000 : p.y + ((item?.footprint?.w??1)+(item?.footprint?.h??1))*16-1;
+      this.depths.set(g, { id: `furniture:${f.id}`, x: f.position.gridX, y: f.position.gridY,
+        ...furnitureFootprint(f), floor: f.type === 'rug' });
       this.entities.addChild(g);this.furnitureGraphics.set(f.id,g);
     }
+    this.depthDirty = true; this.sortDepths();
     this.updateFurnitureFeedback();
   }
   private updateFurnitureFeedback() {
@@ -167,7 +172,7 @@ export class IsometricEngine {
   refreshPlacement() {if(this.hoverTile)this.onTileHoverHandler?.(this.hoverTile.gx,this.hoverTile.gy);}
   highlightWorker(id:string|null) {for(const [key,w] of this.workerGraphics) {w.label.alpha=key===id?1:.42;w.label.style.fontSize=key===id?12:10;}}
   syncWorkers(ids: string[]) {
-    for (const [id, worker] of this.workerGraphics) if (!ids.includes(id)) { worker.body.destroy(); worker.label.destroy(); worker.bubble.destroy(); worker.glyph.destroy(); this.workerGraphics.delete(id); }
+    for (const [id, worker] of this.workerGraphics) if (!ids.includes(id)) { this.depths.delete(worker.body); this.depthDirty = true; worker.body.destroy(); worker.label.destroy(); worker.bubble.destroy(); worker.glyph.destroy(); this.workerGraphics.delete(id); }
     for (const id of ids) if (!this.workerGraphics.has(id)) {
       const body = new Graphics(); body.eventMode = 'static'; body.cursor = 'pointer'; body.hitArea = new Rectangle(-17, -55, 34, 65);
       body.on('pointerover', e => { if (!this.edit) this.onWorkerHoverHandler?.(id, e.global.x, e.global.y); });
@@ -186,10 +191,24 @@ export class IsometricEngine {
       const w = this.workerGraphics.get(id); if (!w) continue;
       const p = pos.seat ? this.gridToScreen(pos.seat.position.gridX,pos.seat.position.gridY) : this.gridToScreen(pos.x + .5, pos.y + .5);
       if(pos.seat) p.y-=10;
-      w.body.position.set(p.x, p.y); w.body.zIndex = pos.seat ? (this.furnitureGraphics.get(pos.seat.furnitureId)?.zIndex ?? p.y)+1 : p.y;
+      w.body.position.set(p.x, p.y);
+      const x = pos.seat?.position.gridX ?? pos.x + .5, y = pos.seat?.position.gridY ?? pos.y + .5;
+      const seatOf = pos.seat ? `furniture:${pos.seat.furnitureId}` : undefined;
+      const depth = this.depths.get(w.body);
+      if (!depth || depth.x !== x || depth.y !== y || depth.seatOf !== seatOf) {
+        this.depths.set(w.body, { id: `worker:${id}`, x, y, w: 0, h: 0, seatOf });
+        this.depthDirty = true;
+      }
       w.label.position.set(p.x, p.y + 10);
       w.bubble.position.set(p.x, p.y); w.glyph.position.set(p.x, p.y - 72);
     }
+    this.sortDepths();
+  }
+  private sortDepths() {
+    if (!this.depthDirty) return;
+    this.depthDirty = false;
+    orderOfficeDepth([...this.depths].map(([body, depth]) => ({ ...depth, body })))
+      .forEach(({ body }, index) => { body.zIndex = index; });
   }
   updateWorkerGraphic(id: string, color: number, activity: string, name: string, provider = '', wearables = '', walking = false, frame = 0, appearanceId = id, mood: CharacterMood = '', seated=false) {
     const w = this.workerGraphics.get(id); if (!w) return;

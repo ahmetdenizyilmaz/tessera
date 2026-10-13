@@ -1,13 +1,15 @@
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const PASTE_SETTLE: Duration = Duration::from_millis(500);
+const RESUME_DIALOG_SETTLE: Duration = Duration::from_millis(500);
 
 struct Writer {
     stream: Option<Box<dyn Write + Send>>,
     revision: u64,
     resume_prompt: Option<super::resume_prompt::ResumePrompt>,
+    dismiss_pending: bool,
 }
 
 /// One handle per PTY lifetime: a delayed Enter can never reach a replacement
@@ -20,36 +22,60 @@ pub(crate) struct TerminalInput {
 
 impl TerminalInput {
     pub fn new(stream: Box<dyn Write + Send>) -> Self {
-        Self::with_quiet_goal_resume(stream, false)
+        Self::with_prompt(stream, None)
     }
 
-    pub fn with_quiet_goal_resume(stream: Box<dyn Write + Send>, quiet: bool) -> Self {
+    pub fn with_quiet_goal_resume(stream: Box<dyn Write + Send>, cols: u16, rows: u16) -> Self {
+        Self::with_prompt(stream, super::resume_prompt::ResumePrompt::new(cols, rows))
+    }
+
+    fn with_prompt(stream: Box<dyn Write + Send>, resume_prompt: Option<super::resume_prompt::ResumePrompt>) -> Self {
         Self {
             session: uuid::Uuid::new_v4().to_string(),
             writer: Mutex::new(Writer { stream: Some(stream), revision: 0,
-                resume_prompt: quiet.then(super::resume_prompt::ResumePrompt::new) }),
+                resume_prompt, dismiss_pending: false }),
             messages: tokio::sync::Mutex::new(()),
         }
     }
 
-    pub fn observe_output(&self, output: &str) {
+    pub fn resize_prompt(&self, cols: u16, rows: u16) {
+        let Ok(mut writer) = self.writer.lock() else { return };
+        if writer.resume_prompt.as_mut().is_some_and(|prompt| !prompt.resize(cols, rows)) {
+            writer.resume_prompt = None;
+        }
+    }
+
+    pub fn observe_output(self: &Arc<Self>, output: &str) {
         let Ok(mut writer) = self.writer.lock() else { return };
         if writer.resume_prompt.as_ref().is_some_and(|prompt| prompt.expired()) {
             writer.resume_prompt = None;
         }
-        if writer.resume_prompt.as_mut().is_some_and(|prompt| prompt.observe(output)) {
-            writer.resume_prompt = None;
-            // Hold the same lock as keyboard input: once the user interacts,
-            // a delayed automatic Escape can never interrupt their action.
-            if let Some(stream) = writer.stream.as_mut() {
-                let _ = stream.write_all(b"\x1b").and_then(|_| stream.flush());
-            }
+        let visible = writer.resume_prompt.as_mut().is_some_and(|prompt| prompt.observe(output));
+        if visible && !writer.dismiss_pending {
+            writer.dismiss_pending = true;
+            drop(writer);
+            // Codex can paint the popup before its startup input queries have
+            // finished. Let them settle without blocking the PTY reader, then
+            // recheck the screen and user-input guard under the same lock.
+            let input = self.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(RESUME_DIALOG_SETTLE);
+                let Ok(mut writer) = input.writer.lock() else { return };
+                writer.dismiss_pending = false;
+                if writer.resume_prompt.as_ref().is_some_and(|prompt| !prompt.expired() && prompt.visible()) {
+                    writer.resume_prompt = None;
+                    if let Some(stream) = writer.stream.as_mut() {
+                        let _ = stream.write_all(b"\x1b").and_then(|_| stream.flush());
+                    }
+                }
+            });
         }
     }
 
     pub fn close(&self) {
         if let Ok(mut writer) = self.writer.lock() {
             writer.stream = None;
+            writer.resume_prompt = None;
         }
     }
 
@@ -118,25 +144,44 @@ mod tests {
 
     #[test]
     fn paused_goal_dismissal_is_once_only_and_never_overrides_user_input() {
-        let dialog = "Resume paused goal? Mark it active and continue when idle Keep it paused; use /goal resume later";
+        let dialog = "Resume paused goal? 1. Resume goal 2. Leave paused enter select · esc back";
         let capture = Capture::default();
-        let input = TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), true);
+        let input = Arc::new(TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), 120, 32));
         input.write("\x1b[?1;2c").unwrap();
         input.observe_output(dialog);
         input.observe_output(dialog);
+        std::thread::sleep(RESUME_DIALOG_SETTLE + Duration::from_millis(100));
         assert_eq!(capture.0.lock().unwrap().iter().map(|(_, bytes)| bytes.clone()).collect::<Vec<_>>(),
             vec![b"\x1b[?1;2c".to_vec(), b"\x1b".to_vec()]);
         for key in ["hello", "\x1b[B", "\r", "\x1b"] {
             let capture = Capture::default();
-            let input = TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), true);
+            let input = Arc::new(TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), 120, 32));
             input.write(key).unwrap();
             input.observe_output(dialog);
             assert_eq!(capture.0.lock().unwrap().len(), 1);
         }
         let capture = Capture::default();
-        let input = TerminalInput::new(Box::new(capture.clone()));
+        let input = Arc::new(TerminalInput::new(Box::new(capture.clone())));
         input.observe_output(dialog);
         assert!(capture.0.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn typing_closing_or_dismissing_during_settle_cancels_automatic_escape() {
+        let captures: Vec<_> = (0..3).map(|_| Capture::default()).collect();
+        for (i, capture) in captures.iter().enumerate() {
+            let input = Arc::new(TerminalInput::with_quiet_goal_resume(Box::new(capture.clone()), 120, 32));
+            input.observe_output("Resume paused goal? 1. Resume goal 2. Leave paused enter select · esc back");
+            match i {
+                0 => input.write("typing").unwrap(),
+                1 => input.close(),
+                _ => input.observe_output("\x1b[2J\x1b[HAsk Codex to do anything"),
+            }
+        }
+        std::thread::sleep(RESUME_DIALOG_SETTLE + Duration::from_millis(100));
+        assert_eq!(captures[0].0.lock().unwrap().iter().map(|(_, bytes)| bytes.clone()).collect::<Vec<_>>(), vec![b"typing".to_vec()]);
+        assert!(captures[1].0.lock().unwrap().is_empty());
+        assert!(captures[2].0.lock().unwrap().is_empty());
     }
 
     #[test]

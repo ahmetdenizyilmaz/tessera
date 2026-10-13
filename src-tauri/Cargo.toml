@@ -18,6 +18,8 @@ preview = []
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "unstable"] }
 tauri-build = { version = "2", features = [] }
 portable-pty = "0.8"
+# Inspect Codex's rendered startup dialog, including ConPTY partial repaints.
+vt100 = "0.16.2"
 sysinfo = "0.33"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

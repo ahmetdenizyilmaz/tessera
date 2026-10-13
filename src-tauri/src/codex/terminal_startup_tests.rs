@@ -17,16 +17,35 @@ impl Drop for PtyGuard {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
 async fn live_codex_empty_terminal_startup() {
-    check_empty_terminal_startup(false).await;
+    check_empty_terminal_startup(None, 120, 32).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
 async fn live_codex_paused_goal_terminal_startup() {
-    check_empty_terminal_startup(true).await;
+    check_empty_terminal_startup(Some("paused"), 120, 32).await;
 }
 
-async fn check_empty_terminal_startup(paused_goal: bool) {
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
+async fn live_codex_paused_goal_narrow_terminal_startup() {
+    check_empty_terminal_startup(Some("paused"), 38, 16).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
+async fn live_codex_blocked_goal_small_terminal_startup() {
+    check_empty_terminal_startup(Some("blocked"), 44, 14).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "native CLI required; isolated CODEX_HOME, no real inference"]
+async fn live_codex_paused_goal_terminal_resize() {
+    check_empty_terminal_startup(Some("paused"), 8, 4).await;
+}
+
+async fn check_empty_terminal_startup(goal_status: Option<&str>, cols: u16, rows: u16) {
+    let paused_goal = goal_status.is_some();
     let path =
         std::env::var("TESSERA_CODEX_TEST_EXECUTABLE").expect("Set TESSERA_CODEX_TEST_EXECUTABLE");
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -86,19 +105,24 @@ requires_openai_auth = false
     assert_eq!(initial["thread"]["id"], sid);
     assert_eq!(initial["thread"]["turns"], json!([]));
 
-    if paused_goal {
+    if let Some(status) = goal_status {
+        let objective = if status == "blocked" {
+            "Tessera isolated startup fixture. Preserve this stopped goal while restoring its conversation. Do not send a model turn or change its state. ".repeat(5)
+        } else { "Tessera isolated startup fixture".into() };
         client.call("thread/goal/set", json!({
-            "threadId":sid, "objective":"Tessera isolated startup fixture",
-            "status":"paused", "origin":"user"
+            "threadId":sid, "objective":objective,
+            "status":status, "origin":"user"
         })).await.unwrap();
     }
     let goal_before = client.call("thread/goal/get", json!({"threadId":sid})).await.unwrap();
+    let quiet = super::super::quiet_goal_resume(&client, &sid).await;
+    assert_eq!(quiet, paused_goal, "Production attach must arm only for stopped goals");
 
     // The real remote TUI resumes the pinned ID before any prompt is sent.
     let pair = portable_pty::native_pty_system()
         .openpty(portable_pty::PtySize {
-            rows: 32,
-            cols: 120,
+            rows,
+            cols,
             pixel_width: 0,
             pixel_height: 0,
         })
@@ -142,9 +166,11 @@ requires_openai_auth = false
         fn flush(&mut self) -> std::io::Result<()> { self.stream.flush() }
     }
     let escapes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let input = crate::pty::TerminalInput::with_quiet_goal_resume(Box::new(ObservedWriter {
+    let writer = Box::new(ObservedWriter {
         stream: pair.master.take_writer().unwrap(), escapes: escapes.clone(),
-    }), paused_goal);
+    });
+    let input = std::sync::Arc::new(if quiet { crate::pty::TerminalInput::with_quiet_goal_resume(writer, cols, rows) }
+        else { crate::pty::TerminalInput::new(writer) });
     let mut reader = pair.master.try_clone_reader().unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -158,7 +184,13 @@ requires_openai_auth = false
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut wire = String::new();
     let mut dismissed_at = None;
+    let mut resizes = Vec::new();
     while Instant::now() < deadline {
+        if cols == 8 && resizes.is_empty() && deadline.saturating_duration_since(Instant::now()) < Duration::from_secs(28) {
+            resizes.push(json!({"offset":wire.encode_utf16().count(),"cols":80,"rows":24}));
+            input.resize_prompt(80, 24);
+            pair.master.resize(portable_pty::PtySize { rows:24, cols:80, pixel_width:0, pixel_height:0 }).unwrap();
+        }
         if let Ok(bytes) = rx.recv_timeout(Duration::from_millis(100)) {
             let text = String::from_utf8_lossy(&bytes);
             wire.push_str(&text);
@@ -187,9 +219,9 @@ requires_openai_auth = false
         }
     }
     std::fs::write(root.join("terminal-output.txt"), &wire).unwrap();
+    std::fs::write(root.join("terminal-size.json"), json!({"cols":cols,"rows":rows,"resizes":resizes}).to_string()).unwrap();
     assert!(
-        wire.contains("show current session configuration")
-            && wire.contains("tessera-startup-fixture"),
+        wire.contains("Ask Codex"),
         "Native TUI was not ready; see {}",
         root.display()
     );
@@ -229,6 +261,7 @@ requires_openai_auth = false
     assert_eq!(restored["thread"]["turns"], json!([]));
     assert_eq!(restored["approvalPolicy"], "on-request");
     assert_eq!(restored["sandbox"]["type"], "readOnly");
+    assert_eq!(resumed.call("thread/goal/get", json!({"threadId":sid})).await.unwrap(), goal_before);
     resumed.stop();
     println!(
         "PASS native empty TUI, zero hidden turns, exact-ID reopen and read-only policy: {}",
