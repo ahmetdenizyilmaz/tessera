@@ -34,4 +34,9 @@
 .browser-settings-saved { display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 11px; }
 .browser-settings-saved > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .browser-settings-saved small { display: block; color: var(--text-muted); margin-top: 5px; font-size: 10px; }
+.browser-settings-icon { display:flex; align-items:center; gap:9px; border-top:1px solid var(--border); padding-top:12px; margin-top:12px; font-size:12px; }
+.browser-settings-icon > span { flex:1; min-width:0; }
+.browser-settings-icon small { display:block; margin-top:4px; font-size:10px; color:var(--text-muted); }
+.browser-settings-icon > button { padding:6px 8px; border:1px solid var(--border); border-radius:6px; color:var(--text-primary); background:var(--bg-hover); font:inherit; font-size:11px; cursor:pointer; }
+.browser-settings-icon > button:disabled { opacity:.5; cursor:default; }
 .browser-settings-error { color: var(--error); font-size: 11px; margin: 10px 0 0; }

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { PluginManifest, PluginInstance } from '../types/plugin';
-import { loadWebApps, saveWebApps, webAppManifest, type WebAppInput } from '../lib/webApps';
+import { loadWebApps, saveWebApps, webAppManifest, webAppIcon, validWebAppIcon, type WebAppInput } from '../lib/webApps';
+import { fetchWebsiteIcon } from '../lib/websiteIcon';
 
 // ─── Module-Level Constants (React 19 + Zustand infinite loop prevention) ────
 
@@ -21,6 +22,8 @@ interface PluginState {
   registerBuiltin: (name: string, manifest: PluginManifest) => void;
   addWebApp: (input:WebAppInput) => string;
   restoreWebApp: (manifest:PluginManifest) => void;
+  setWebAppIcon: (name: string, icon: string) => void;
+  refreshWebAppIcon: (name: string, force?: boolean) => Promise<void>;
 
   /** Scan subapps/ directory for manifest.json files */
   scanPlugins: () => Promise<void>;
@@ -66,14 +69,40 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     registry.set(manifest.name,manifest);
     saveWebApps(registry);
     set({registry});
+    void get().refreshWebAppIcon(manifest.name);
     return manifest.name;
   },
   restoreWebApp: saved => {
     if(typeof saved.name!=='string')throw new Error('A saved web app must have a stable identity.');
     if(get().registry.has(saved.name))return;
-    const manifest=webAppManifest({name:saved.defaultTitle,url:saved.homeUrl??'',icon:saved.icon},saved.name);
+    const manifest=webAppManifest({name:saved.defaultTitle,url:saved.homeUrl??'',icon:saved.icon ?? '',favicon:saved.favicon},saved.name);
     const registry=new Map(get().registry);registry.set(manifest.name,manifest);
     saveWebApps(registry);set({registry});
+  },
+  setWebAppIcon: (name, icon) => {
+    const current = get().registry.get(name);
+    if (!current?.customWebApp || !validWebAppIcon(icon)) return;
+    const manifest = { ...current, icon };
+    const registry = new Map(get().registry).set(name, manifest);
+    saveWebApps(registry);
+    const instances = new Map(get().instances);
+    for (const [id, instance] of instances) if (instance.pluginName === name) instances.set(id, { ...instance, icon: webAppIcon(manifest) });
+    set({ registry, instances });
+    void get().refreshWebAppIcon(name);
+  },
+  refreshWebAppIcon: async (name, force = false) => {
+    const original = get().registry.get(name);
+    if (!original?.customWebApp || original.icon !== '' || !original.homeUrl || original.favicon && !force) return;
+    try {
+      const favicon = await fetchWebsiteIcon(original.homeUrl, force);
+      const current = get().registry.get(name);
+      if (!favicon || !current || current.icon !== '' || current.homeUrl !== original.homeUrl) return;
+      const manifest = { ...current, favicon }, registry = new Map(get().registry).set(name, manifest);
+      saveWebApps(registry);
+      const instances = new Map(get().instances);
+      for (const [id, instance] of instances) if (instance.pluginName === name) instances.set(id, { ...instance, icon: favicon });
+      set({ registry, instances });
+    } catch { /* Icon discovery must never prevent opening a website panel. */ }
   },
 
   registerBuiltin: (name: string, manifest: PluginManifest) => {
@@ -116,7 +145,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       pluginName,
       iframeReady: false,
       title: manifest.defaultTitle,
-      icon: manifest.icon,
+      icon: webAppIcon(manifest),
       badge: null,
       accentColor: manifest.accentColor ?? null,
       userColor: null,
@@ -128,6 +157,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       return { instances: next };
     });
 
+    void get().refreshWebAppIcon(pluginName);
     return id;
   },
 
@@ -144,7 +174,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       pluginName,
       iframeReady: false,
       title: title ?? manifest.defaultTitle,
-      icon: manifest.icon,
+      icon: webAppIcon(manifest),
       badge: null,
       accentColor: manifest.accentColor ?? null,
       userColor: null,
@@ -156,6 +186,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       return { instances: next };
     });
 
+    void get().refreshWebAppIcon(pluginName);
     return true;
   },
 

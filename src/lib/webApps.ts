@@ -2,7 +2,7 @@ import type { PluginManifest } from '../types/plugin';
 
 export const WEB_APPS_KEY='tessera-web-apps';
 export const WEB_APP_ICONS=['Globe','Chess','Music','Video','Gamepad2','MessageCircle','BookOpen','FileText','Clock'] as const;
-export interface WebAppInput { name:string; url:string; icon:string }
+export interface WebAppInput { name:string; url:string; icon:string; favicon?:string }
 export function webAppUrl(value:string):string {
   const text=value.trim();
   const url=new URL(/^[a-z][a-z\d+.-]*:/i.test(text) && !/^[\w.-]+:\d+(?:\/|$)/.test(text)?text:`https://${text}`);
@@ -10,14 +10,18 @@ export function webAppUrl(value:string):string {
   return url.href;
 }
 export function validWebAppIcon(icon:unknown):icon is string {
-  return typeof icon==='string' && ((WEB_APP_ICONS as readonly string[]).includes(icon) || icon.length<=100000 && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(icon));
+  return typeof icon==='string' && (icon === '' || (WEB_APP_ICONS as readonly string[]).includes(icon) || icon.length<=100000 && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(icon));
 }
 export function webAppManifest(input:WebAppInput,id=`web-app-${crypto.randomUUID()}`):PluginManifest {
   const name=input.name.trim();
   if(!name || name.length>60) throw new Error('Choose a name between 1 and 60 characters.');
   if(!/^web-app-[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new Error('Invalid web app identity.');
   if(!validWebAppIcon(input.icon)) throw new Error('Choose an icon or upload an image.');
-  return {name:id,version:'1.0.0',description:`${name} web panel`,entry:'',icon:input.icon,defaultTitle:name,customWebApp:true,browserSite:id,homeUrl:webAppUrl(input.url)};
+  const favicon = input.icon === '' && input.favicon?.startsWith('data:') && validWebAppIcon(input.favicon) ? input.favicon : undefined;
+  return {name:id,version:'1.0.0',description:`${name} web panel`,entry:'',icon:input.icon,...(favicon ? {favicon} : {}),defaultTitle:name,customWebApp:true,browserSite:id,homeUrl:webAppUrl(input.url)};
+}
+export function webAppIcon(manifest: PluginManifest): string {
+  return manifest.customWebApp && manifest.icon === '' ? manifest.favicon || 'Globe' : manifest.icon;
 }
 export function loadWebApps():PluginManifest[] {
   try {
@@ -25,7 +29,7 @@ export function loadWebApps():PluginManifest[] {
     if(!Array.isArray(entries))return [];
     return entries.flatMap(entry=>{
       if(!entry || typeof entry.name!=='string')return [];
-      try{return [webAppManifest({name:entry.defaultTitle,url:entry.homeUrl,icon:entry.icon},entry.name)];}catch{return [];}
+      try{return [webAppManifest({name:entry.defaultTitle,url:entry.homeUrl,icon:entry.icon ?? '',favicon:entry.favicon},entry.name)];}catch{return [];}
     });
   } catch {return [];}
 }

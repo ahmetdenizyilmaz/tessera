@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { KeyRound, BadgeCheck, Folder as FolderIcon, Plus, ChevronDown, ChevronUp, Monitor, GitFork } from 'lucide-react';
 import { PluginIcon } from '../icons/PluginIcon';
+import { webAppIcon } from '../../lib/webApps';
 import { AddWebApp } from './AddWebApp';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -640,7 +641,7 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         </button>
         {Array.from(pluginRegistry.keys()).map((name) => (
           <button key={name} className="btn btn-secondary btn-sm nsw-plugin" title={pluginRegistry.get(name)?.defaultTitle ?? name} onClick={() => replaceWizard(instanceId, (destination, replacingId) => createPluginPanel(name, destination, replacingId))}>
-            <PluginIcon icon={pluginRegistry.get(name)?.icon} size={15} /><span>{pluginRegistry.get(name)?.defaultTitle ?? name}</span>
+            <PluginIcon icon={pluginRegistry.has(name) ? webAppIcon(pluginRegistry.get(name)!) : undefined} size={15} /><span>{pluginRegistry.get(name)?.defaultTitle ?? name}</span>
           </button>
         ))}
         <button className="btn btn-secondary btn-sm" title="Add a web app" aria-label="Add web app" onClick={()=>setAddingWebApp(v=>!v)}><Plus size={16}/></button>

@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import { Check, MousePointer2, PanelTop, RotateCcw, Settings2, X } from 'lucide-react';
 import { browserDisplayMode, browserPanelShare, DEFAULT_BROWSER_LIVE_SHARE, type BrowserDisplayMode } from '../../lib/browserDisplay';
 import { useBrowserViewStore } from '../../store/browserViewStore';
+import { usePluginStore } from '../../store/pluginStore';
+import { webAppIcon } from '../../lib/webApps';
+import { PluginIcon } from '../icons/PluginIcon';
 
 export function BrowserViewSettings({ site, title, surface }: { site: string; title: string; surface: RefObject<HTMLDivElement | null> }) {
   const [open, setOpen] = useState(false), [error, setError] = useState('');
@@ -10,6 +13,8 @@ export function BrowserViewSettings({ site, title, surface }: { site: string; ti
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const trigger = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
   const preference = useBrowserViewStore(s => s.preferences[site]);
+  const webApp = usePluginStore(s => s.registry.get(site));
+  const [fetchingIcon, setFetchingIcon] = useState(false);
   const id = useId();
   const document = trigger.current?.ownerDocument;
   const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
@@ -83,6 +88,15 @@ export function BrowserViewSettings({ site, title, surface }: { site: string; ti
         : 'Panels at one-third of the workspace or larger always stay live. Make this panel smaller to change its behavior.'}</p>
       <div className="browser-settings-saved"><span>{preference ? `Live ${preference.mode === 'live' ? 'from' : 'above'} ${percent(preference.share)} of workspace` : 'Default: live from one-third of workspace'}<small>Saved for all {title} panels.</small></span>
         <button type="button" title="Reset to default size" aria-label="Reset to default size" disabled={!preference} onClick={() => choose(null)}><RotateCcw size={15} /></button></div>
+      {webApp?.customWebApp && <div className="browser-settings-icon"><PluginIcon icon={webAppIcon(webApp)} size={23}/><span>Website icon<small>{webApp.icon === '' ? 'Automatic from this website' : 'Custom icon'}</small></span>
+        <button type="button" disabled={fetchingIcon} onClick={async () => {
+          setError(''); setFetchingIcon(true);
+          try {
+            if (webApp.icon !== '') usePluginStore.getState().setWebAppIcon(site, '');
+            await usePluginStore.getState().refreshWebAppIcon(site, true);
+          } catch { setError('Could not save the icon setting. Please try again.'); }
+          finally { setFetchingIcon(false); }
+        }}>{fetchingIcon ? 'Checking…' : webApp.icon === '' ? 'Refresh icon' : 'Use website icon'}</button></div>}
       {error && <p className="browser-settings-error" role="alert">{error}</p>}
     </div>, document.body)}
   </>;

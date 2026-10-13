@@ -23,6 +23,7 @@ pub mod system;
 pub mod util;
 pub mod ws;
 pub mod workspace_windows;
+pub mod website_icon;
 
 use analytics::posthog::PostHogTracker;
 use db::Database;
@@ -151,6 +152,7 @@ pub fn run() {
             browser::browser_panel_action,
             browser::browser_panel_status,
             browser::browser_panel_close,
+            website_icon::website_icon_fetch,
             // Codex commands
             codex::codex_discover,
             opencode::opencode_discover,

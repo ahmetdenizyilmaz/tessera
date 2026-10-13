@@ -1,8 +1,29 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.hoisted(()=>{const data=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>data.get(k)??null,setItem:(k:string,v:string)=>data.set(k,v),removeItem:(k:string)=>data.delete(k),clear:()=>data.clear()});});
-import { loadWebApps, webAppManifest, webAppUrl, WEB_APPS_KEY } from './webApps';
+import { loadWebApps, webAppManifest, webAppUrl, webAppIcon, WEB_APPS_KEY } from './webApps';
 import { usePluginStore } from '../store/pluginStore';
 beforeEach(()=>{localStorage.clear();usePluginStore.setState({registry:new Map(),instances:new Map()});});
+it('persists automatic icon choice and a cached PNG separately without changing the browser profile',()=>{
+  const favicon='data:image/png;base64,iVBORw0KGgo=';
+  const automatic=webAppManifest({name:'Auto',url:'https://example.test',icon:'',favicon});
+  expect(webAppIcon(automatic)).toBe(favicon);
+  localStorage.setItem(WEB_APPS_KEY,JSON.stringify([automatic]));
+  expect(loadWebApps()).toEqual([automatic]);
+  expect(loadWebApps()[0].browserSite).toBe(automatic.name);
+  const fallback=webAppManifest({name:'Auto',url:'https://example.test',icon:''});
+  expect(webAppIcon(fallback)).toBe('Globe');
+  expect(webAppIcon(webAppManifest({name:'Manual',url:'https://example.test',icon:'Music',favicon}))).toBe('Music');
+});
+it('discards unsafe favicon cache values and accepts an empty icon from a saved custom app',()=>{
+  const app=webAppManifest({name:'Auto',url:'https://example.test',icon:''});
+  for(const favicon of ['https://example.test/icon.svg','data:image/svg+xml;base64,PHN2Zz4=', 'Globe']) {
+    localStorage.setItem(WEB_APPS_KEY,JSON.stringify([{...app,favicon}]));
+    expect(loadWebApps()).toEqual([app]);
+  }
+  const {icon:_,...withoutIcon}=app;
+  localStorage.setItem(WEB_APPS_KEY,JSON.stringify([withoutIcon]));
+  expect(loadWebApps()).toEqual([app]);
+});
 it('normalizes web addresses and rejects local files, executable URLs, and embedded credentials',()=>{
   expect(webAppUrl('example.com/player')).toBe('https://example.com/player');
   expect(webAppUrl('http://localhost:3000/music')).toBe('http://localhost:3000/music');
