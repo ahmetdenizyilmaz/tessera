@@ -14,7 +14,8 @@ import { useLlmChatStore } from '../src/store/llmChatStore';
 import { useLayoutStore } from '../src/store/layoutStore';
 import { useOfficeTalkStore } from '../src/lib/officeTalk';
 import { Toasts } from '../src/lib/toast';
-import { Graphics } from 'pixi.js';
+import { Application, Graphics } from 'pixi.js';
+import { drawSpeechBubble } from '../src/engine/officeArt';
 import { drawOfficeSvg } from '../src/engine/officeSvg';
 import providerBadges from '../src/content/office-provider-icons.json';
 import '../src/styles/global.css';
@@ -24,6 +25,17 @@ import '../src/styles/antigravity.css';
 const native = !!window.__TAURI_INTERNALS__;
 if (!native) mockWindows('main');
 window.office = useOfficeGameStore;
+window.previewThoughtBubbles = async () => {
+  const app = new Application();
+  await app.init({ width: 480, height: 155, background: 0x263b41, antialias: true, resolution: 2 });
+  app.canvas.setAttribute('data-bubble-preview', '');
+  Object.assign(app.canvas.style, { position: 'fixed', left: '0', top: '0', zIndex: '9999', width: '480px', height: '155px' });
+  document.body.appendChild(app.canvas);
+  for (let frame = 0; frame < 3; frame++) {
+    const bubble = new Graphics(); drawSpeechBubble(bubble, 'think', frame);
+    bubble.scale.set(3.5); bubble.position.set(80 + frame * 160, 320); app.stage.addChild(bubble);
+  }
+};
 window.providerBadgeBounds=()=>Object.entries(providerBadges).map(([provider,svg])=>{
   const g=new Graphics();g.context.translate(-4.5,-24);drawOfficeSvg(g,svg);
   const r=g.getLocalBounds(),bounds={provider,x:r.x,y:r.y,w:r.width,h:r.height};g.destroy();return bounds;
@@ -49,7 +61,7 @@ const handler = async (command, args) => {
     const messages = window.officeHistory[args.sessionId] ?? [];
     await new Promise(resolve => setTimeout(resolve, window.officeHistoryDelay));
     if (window.officeHistoryFail) throw new Error('History temporarily unavailable');
-    return messages;
+    return structuredClone(messages);
   }
   if (command === 'panel_send_text') return { delivered: true, panel: args.id };
   if (command === 'resolve_path_smart') return args.path.includes('missing') ? null : {path:args.path,isDir:! /\.\w+$/.test(args.path),base:'cwd'};

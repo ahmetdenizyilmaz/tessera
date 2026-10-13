@@ -52,7 +52,7 @@ function LocalPathLink({ path, cwd, inline, children }: {
   </Tag>;
 }
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
+export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   const cwd = useChatCwd();
   const handleLinkClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
     const href = e.currentTarget.getAttribute('href') ?? '';
@@ -165,6 +165,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
       </ReactMarkdown>
     </div>
   );
-};
+});
 
 export default MarkdownRenderer;

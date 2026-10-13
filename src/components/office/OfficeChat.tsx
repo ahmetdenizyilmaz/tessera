@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowDown, ChevronDown, MessageSquare, X } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
@@ -27,14 +27,16 @@ import type { AntigravitySnapshot } from '../../types/antigravity';
 interface HistoryMessage { role: string; content: string; timestamp?: string | null }
 interface History { claude?: HistoryMessage[]; codex?: CodexItem[]; opencode?: OpenCodeSnapshot; antigravity?: AntigravitySnapshot }
 
-function TranscriptMessage({ role, text, provider }: { role: string; text: string; provider: string }) {
+const HISTORY_PAGE_SIZE = 40;
+
+const TranscriptMessage = memo(function TranscriptMessage({ role, text, provider }: { role: string; text: string; provider: string }) {
   return <article className={`msg msg--${role === 'user' ? 'user' : 'assistant'}`}>
     <div className={`msg-header${role === 'user' ? ' msg-header--user' : ''}`}><span className="msg-label">{role === 'user' ? 'You' : role === 'system' ? 'System' : provider}</span></div>
     <div className={`msg-body msg-body--${role === 'user' ? 'user' : 'assistant'}`}>
       {role === 'user' ? <p className="msg-user-text">{stripForkPreamble(text)}</p> : <MarkdownRenderer content={text} />}
     </div>
   </article>;
-}
+});
 
 /** Observe the existing sessions. Opening this view never configures a provider,
  * starts a turn, mounts a second terminal, or registers a second stream consumer. */
@@ -51,6 +53,10 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
   const [loading, setLoading] = useState(false);
   const [readError, setReadError] = useState('');
   const [following, setFollowing] = useState(true);
+  // Null follows a small tail; an explicit index keeps older messages stable
+  // while the user reads them, even when new messages arrive.
+  const [historyStart, setHistoryStart] = useState<number | null>(null);
+  const prependScroll = useRef<{ height: number; top: number } | null>(null);
   const follow = useRef(true), body = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const isLlm = !!instance.config.llmConfig;
   const terminal = instance.config.panelView === 'terminal';
@@ -86,6 +92,7 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
 
   const scrollToLatest = useCallback(() => {
     follow.current = true; setFollowing(true);
+    setHistoryStart(null);
     if (body.current) body.current.scrollTop = body.current.scrollHeight;
   }, []);
   // Content resizes as Markdown, tool results, and streaming messages arrive.
@@ -101,6 +108,20 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
   const openCodeSession = opencode ?? history.opencode;
   const antigravitySession = antigravity ?? history.antigravity;
   const count = isLlm ? llm?.messages.length ?? 0 : provider === 'codex' ? codexItems.length : provider === 'antigravity' ? antigravitySession?.items.length ?? 0 : provider === 'opencode' ? openCodeSession?.messages.length ?? 0 : claudeMessages.length || historicClaude.length;
+  const start = Math.min(historyStart ?? Math.max(0, count - HISTORY_PAGE_SIZE), count);
+  const showEarlier = () => {
+    if (body.current) prependScroll.current = { height: body.current.scrollHeight, top: body.current.scrollTop };
+    follow.current = false; setFollowing(false);
+    setHistoryStart(Math.max(0, start - HISTORY_PAGE_SIZE));
+  };
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    if (prependScroll.current) {
+      el.scrollTop = prependScroll.current.top + el.scrollHeight - prependScroll.current.height;
+      prependScroll.current = null;
+    } else if (follow.current) el.scrollTop = el.scrollHeight;
+  }, [start, count]);
   const error = readError || (isLlm ? llm?.error : provider === 'codex' ? codex?.error : provider === 'antigravity' ? antigravitySession?.error : provider === 'opencode' ? openCodeSession?.error : claude?.error);
   const needsYou = worker?.activity === 'awaiting_permission';
   const busy = isLlm ? llm?.isStreaming : provider === 'codex' ? codex?.busy : provider === 'antigravity' ? antigravitySession?.busy : provider === 'opencode' ? openCodeSession && openCodeSession.status.type !== 'idle' : claude?.isStreaming;
@@ -123,14 +144,16 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
     {error && <p className="office-chat-error" role="alert">{error}</p>}
     <PathCwdContext.Provider value={cwd}><div ref={body} className="office-chat-messages" role="region" aria-label="Agent conversation" tabIndex={0} onScroll={() => {
       const el = body.current!; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64; setFollowing(follow.current);
+      if (!follow.current && historyStart === null) setHistoryStart(start);
     }}>
       <div ref={content}>
-        {isLlm ? llm?.messages.map(m => <TranscriptMessage key={m.id} role={m.role} text={m.content} provider={providerName} />)
-          : provider === 'codex' ? codexItems.map(item => <CodexItemView key={item.id} item={item} />)
-          : provider === 'antigravity' ? antigravitySession?.items.map(item => <AntigravityItemView key={item.id} item={item} />)
-          : provider === 'opencode' ? openCodeSession?.messages.map(message => <OpenCodeMessageView key={message.info.id} message={message} />)
-          : claudeMessages.length ? claudeMessages.map((message, i) => <ChatMessage key={message.id} message={message} isContinuation={message.role === 'assistant' && claudeMessages[i - 1]?.role === 'assistant'} isGroupEnd={claudeMessages[i + 1]?.role !== 'assistant'} />)
-          : historicClaude.map((m, i) => <TranscriptMessage key={i} role={m.role} text={m.content} provider={providerName} />)}
+        {start > 0 && <button className="office-chat-earlier" onClick={showEarlier}>Show earlier messages <span>({start})</span></button>}
+        {isLlm ? llm?.messages.slice(start).map(m => <TranscriptMessage key={m.id} role={m.role} text={m.content} provider={providerName} />)
+          : provider === 'codex' ? codexItems.slice(start).map(item => <CodexItemView key={item.id} item={item} />)
+          : provider === 'antigravity' ? antigravitySession?.items.slice(start).map(item => <AntigravityItemView key={item.id} item={item} />)
+          : provider === 'opencode' ? openCodeSession?.messages.slice(start).map(message => <OpenCodeMessageView key={message.info.id} message={message} />)
+          : claudeMessages.length ? claudeMessages.slice(start).map((message, i) => <ChatMessage key={message.id} message={message} isContinuation={i > 0 && message.role === 'assistant' && claudeMessages[start + i - 1]?.role === 'assistant'} isGroupEnd={claudeMessages[start + i + 1]?.role !== 'assistant'} />)
+          : historicClaude.slice(start).map((m, i) => <TranscriptMessage key={start + i} role={m.role} text={m.content} provider={providerName} />)}
         {!count && <div className="office-chat-empty"><MessageSquare size={24} /><p>{loading ? 'Loading conversation…' : 'No messages to show yet.'}</p><small>{loading ? 'Reading this agent’s conversation.' : 'Open the full chat to start or resume this agent.'}</small></div>}
         {busy && <p className="office-chat-working" role="status"><span className="office-live-dot" />{providerName} is working…</p>}
       </div>

@@ -24,11 +24,16 @@ export function drawSpeechBubble(g: Graphics, kind: BubbleKind, frame: number) {
   if (!kind) return;
   const outline = { color: 0x2a3a44, width: 1.2, alpha: .5 };
   if (kind === 'think') {
-    const fill = 0xf7f4e8;
-    // Cloud: overlapping circles for a bumpy outline, with a trail of small circles to the head.
-    for (const [x, y, r] of [[-9, -73, 7], [0, -76, 9], [9, -73, 7], [-4, -68, 6], [5, -68, 6]]) g.circle(x, y, r).fill(fill);
-    for (const [x, y, r] of [[-9, -73, 7], [0, -76, 9], [9, -73, 7]]) g.circle(x, y, r).stroke(outline);
-    g.circle(-3, -60, 2.4).fill(fill).stroke(outline); g.circle(-6, -55, 1.5).fill(fill).stroke(outline);
+    const fill = 0xffffff;
+    // One continuous silhouette: outlining overlapping circles drew seams
+    // through the cloud and made the thinking dots look like broken eyes.
+    g.moveTo(-8, -64)
+      .bezierCurveTo(-19, -64, -21, -78, -10, -80, .98)
+      .bezierCurveTo(-7, -89, 8, -87, 11, -80, .98)
+      .bezierCurveTo(22, -78, 19, -63, 9, -64, .98)
+      .bezierCurveTo(4, -60, -3, -60, -8, -64, .98)
+      .closePath().fill(fill).stroke({ color: fill, width: 1, join: 'round' });
+    g.circle(-3, -58, 2.4).fill(fill); g.circle(-6, -53, 1.5).fill(fill);
     for (let i = 0; i < 3; i++) g.circle(-6 + i * 6, -73, frame % 3 === i ? 2.6 : 1.7).fill(0x5a6b78);
     return;
   }

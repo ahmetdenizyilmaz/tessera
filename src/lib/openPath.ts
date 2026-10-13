@@ -8,10 +8,9 @@
  */
 import { createContext, useContext } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { findAndReplace } from 'mdast-util-find-and-replace';
-import type { Root } from 'mdast';
+import type { Nodes, Parents, Root } from 'mdast';
 import { notify } from './toast';
-import { findPathReferences, PATH_TOKENS, trimPath } from './pathDetection';
+import { findPathReferences, trimPath } from './pathDetection';
 export { looksLikePath } from './pathDetection';
 
 export interface OpenedPath { path: string; isDir: boolean; base: string }
@@ -32,11 +31,32 @@ export function extractPaths(text: string): string[] {
  * links and inline code is left alone (inline code is handled by the renderer). */
 export function remarkPaths() {
   return (tree: Root) => {
-    findAndReplace(tree, [[new RegExp(PATH_TOKENS.source, PATH_TOKENS.flags), (match: string) => {
-      const path = findPathReferences(match)[0]?.path;
-      if (!path) return false;
-      return { type: 'link', url: PATH_SCHEME + encodeURIComponent(path), children: [{ type: 'text', value: match }] };
-    }]], { ignore: ['link', 'linkReference', 'inlineCode'] });
+    const walk = (parent: Parents) => {
+      const children = parent.children as Nodes[];
+      for (let i = 0; i < children.length; i++) {
+        const node = children[i];
+        if (node.type !== 'text') {
+          if ('children' in node && node.type !== 'link' && node.type !== 'linkReference') walk(node);
+          continue;
+        }
+        // Scan each text node once. find-and-replace retries rejected matches
+        // one UTF-16 unit later; with /u that can move backwards into an emoji's
+        // surrogate pair and loop forever. It also links suffixes of non-paths.
+        const references = findPathReferences(node.value);
+        if (!references.length) continue;
+        const replacement: Nodes[] = [];
+        let end = 0;
+        for (const reference of references) {
+          if (reference.start > end) replacement.push({ type: 'text', value: node.value.slice(end, reference.start) });
+          replacement.push({ type: 'link', url: PATH_SCHEME + encodeURIComponent(reference.path), children: [{ type: 'text', value: node.value.slice(reference.start, reference.end) }] });
+          end = reference.end;
+        }
+        if (end < node.value.length) replacement.push({ type: 'text', value: node.value.slice(end) });
+        children.splice(i, 1, ...replacement);
+        i += replacement.length - 1;
+      }
+    };
+    walk(tree);
   };
 }
 

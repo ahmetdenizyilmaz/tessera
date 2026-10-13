@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { extractPaths, looksLikePath } from './openPath';
+import { extractPaths, looksLikePath, remarkPaths, PATH_SCHEME } from './openPath';
 import { findPathReferences } from './pathDetection';
+import type { Root, Nodes } from 'mdast';
 
 describe('path detection in chats', () => {
   it('accepts absolute, home and relative paths with a separator', () => {
@@ -33,5 +34,40 @@ describe('path detection in chats', () => {
     expect(extractPaths('📁 src/資料/çalışma.md:12 ~/Documents/notes.md#L4')).toEqual(['src/資料/çalışma.md:12', '~/Documents/notes.md#L4']);
     expect(extractPaths('`.` `..` README.md#L4')).toEqual(['.', '..', 'README.md#L4']);
     for (const s of ['javascript:alert(1)', 'data:text/plain,hello', 'ssh://host/tmp', 'C:\\bad\nname']) expect(looksLikePath(s, true)).toBe(false);
+  });
+});
+
+describe('path links in Markdown', () => {
+  const plainText = (node: Nodes): string => 'value' in node ? node.value : 'children' in node ? node.children.map(plainText).join('') : '';
+  const links = (node: Nodes): string[] => node.type === 'link' ? [node.url] : 'children' in node ? node.children.flatMap(links) : [];
+  it('finishes on emoji and preserves Unicode, quotes and punctuation around paths', () => {
+    const text = '\u{1f4a1} Thinking \u{1f469}\u200d\u{1f4bb} \u{1f680}\u{1f680} See "src/lib/work.ts", then \u{1f4c1} ~/Desktop/project.';
+    const tree: Root = { type: 'root', children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }] };
+    remarkPaths()(tree);
+    expect(plainText(tree)).toBe(text);
+    expect(links(tree)).toEqual([PATH_SCHEME + encodeURIComponent('src/lib/work.ts'), PATH_SCHEME + encodeURIComponent('~/Desktop/project')]);
+    const once = JSON.stringify(tree);
+    remarkPaths()(tree);
+    expect(JSON.stringify(tree)).toBe(once);
+  });
+  it('does not retry suffixes of URLs, fractions or ordinary words as local paths', () => {
+    const text = 'https://example.com/docs 3/4 and/or \u{1f600} regular prose';
+    const tree: Root = { type: 'root', children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }] };
+    remarkPaths()(tree);
+    expect(links(tree)).toEqual([]);
+    expect(tree.children[0]).toEqual({ type: 'paragraph', children: [{ type: 'text', value: text }] });
+  });
+  it('leaves existing links, inline code and fenced code alone', () => {
+    const tree: Root = { type: 'root', children: [
+      { type: 'paragraph', children: [
+        { type: 'link', url: 'https://example.com', children: [{ type: 'text', value: 'src/link.ts \u{1f600}' }] },
+        { type: 'linkReference', identifier: 'ref', referenceType: 'full', children: [{ type: 'text', value: 'src/ref.ts' }] },
+        { type: 'inlineCode', value: 'src/inline.ts' },
+      ] },
+      { type: 'code', value: 'src/code.ts', lang: 'text' },
+    ] };
+    const before = JSON.stringify(tree);
+    remarkPaths()(tree);
+    expect(JSON.stringify(tree)).toBe(before);
   });
 });
