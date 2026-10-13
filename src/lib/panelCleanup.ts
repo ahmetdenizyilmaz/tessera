@@ -14,6 +14,7 @@ import { clearTerminalState } from '../components/terminal/XTermView';
 import { invoke } from '@tauri-apps/api/core';
 import { closeRemoteGroup, closeRemotePanel, splitRemotePanelId } from '../store/lanStore';
 import { captureClosedPanel, recordPanelClose } from './panelHistory';
+import { usePanelLockStore } from '../store/panelLockStore';
 
 const closing = new Map<string, Promise<void>>();
 
@@ -27,6 +28,7 @@ export function closePanel(id: string, recordHistory = true): Promise<void> {
   const task = Promise.resolve().then(async () => {
     const saved = recordHistory ? captureClosedPanel(id) : null;
     await closePanelContents(id);
+    usePanelLockStore.getState().setLocked(id, false);
     if (saved) recordPanelClose(saved, panelId => closePanel(panelId, false));
   }).finally(() => closing.delete(id));
   closing.set(id, task);

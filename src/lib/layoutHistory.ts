@@ -32,7 +32,7 @@ export const samePanels = (a: string[], b: string[]) => a.length === b.length &&
 function applyGeometry(parentId: string | null, saved: LevelGeometry): boolean {
   const current = readLevelGeometry(parentId);
   if (!current || !samePanels(current.tabOrder, saved.tabOrder) || !current.layoutConfig) return false;
-  const config = { ...current.layoutConfig, mainWidthPercent: saved.layoutConfig?.mainWidthPercent };
+  const config = { ...current.layoutConfig, mainWidthPercent: saved.layoutConfig?.mainWidthPercent, slotRects: saved.layoutConfig?.slotRects };
   const exact = current.focusedId === saved.focusedId &&
     config.panelOrder.join('\0') === saved.layoutConfig?.panelOrder.join('\0');
   updateLevelLayout(parentId, {

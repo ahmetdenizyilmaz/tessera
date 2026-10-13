@@ -9,6 +9,7 @@ import { useLayoutStore } from "../store/layoutStore";
 import { useGroupStore } from "../store/groupStore";
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import { usePluginStore } from '../store/pluginStore';
+import { usePanelLockStore } from '../store/panelLockStore';
 import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
 import { registerBuiltins } from './builtinPlugins';
 import type { InstanceConfig } from "../types/instance";
@@ -51,6 +52,25 @@ beforeEach(() => {
   useGroupStore.setState({ groups: new Map(), groupStack: [] });
   useGroupStore.getState().restoreGroups(new Map());
   usePanelShortcutStore.getState().restore({});
+  usePanelLockStore.setState({ lockedIds: new Set() });
+});
+it('restores panel locks with remapped agent IDs and keeps custom slot geometry through focus changes', () => {
+  const agent = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' });
+  useLayoutStore.getState().addPanel(agent, 'terminal');
+  const widget = useLayoutStore.getState().addWidgetPanel('timer');
+  usePanelLockStore.getState().setLocked(agent, true);
+  usePanelLockStore.getState().setLocked(widget, true);
+  usePanelLockStore.getState().setLocked('closed-orphan', true);
+  useLayoutStore.getState().setRawPanelRects(new Map([[agent, { x: 0, y: 0, w: 60, h: 100 }], [widget, { x: 60, y: 0, w: 40, h: 100 }]]));
+  useLayoutStore.getState().finishResize('x', [agent], [widget]);
+  const saved = serializeWorkspace();
+  expect(saved.lockedPanelIds).toEqual([agent, widget]);
+  deserializeWorkspace(saved);
+  const restoredAgent = [...useInstanceStore.getState().instances.keys()][0];
+  expect(usePanelLockStore.getState().lockedIds).toEqual(new Set([restoredAgent, widget]));
+  expect(useLayoutStore.getState().layoutConfig?.slotRects?.map(r => r.w)).toEqual([60, 40]);
+  useLayoutStore.getState().setFocused(restoredAgent);
+  expect([...useLayoutStore.getState().panelRects.values()].map(r => r.w).sort()).toEqual([40, 60]);
 });
 it('retains a pinned Claude session ID before its first transcript is written', async () => {
   const id = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' });

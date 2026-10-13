@@ -1,8 +1,8 @@
-.browser-panel { display: flex; flex-direction: column; height: 100%; min-width: 0; background: var(--bg-primary); }
+.browser-panel { display: flex; flex-direction: column; height: 100%; min-width: 0; background: var(--bg-primary); container-type: inline-size; }
 .browser-toolbar { display: flex; align-items: center; gap: 5px; padding: 6px 10px; min-height: 34px; flex-shrink: 0; background: var(--bg-surface); border-bottom: 1px solid var(--border); cursor: grab; }
 .browser-brand { color: #82b86b; flex-shrink: 0; }
 .browser-title { flex: 1; min-width: 30px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.browser-toolbar button { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; padding: 4px; color: var(--text-muted); background: transparent; cursor: pointer; }
+.browser-toolbar button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; border: 0; border-radius: 4px; padding: 4px; color: var(--text-muted); background: transparent; cursor: pointer; }
 .browser-toolbar button:hover { background: var(--bg-hover); color: var(--text-primary); }
 .browser-toolbar button:disabled { opacity: .35; cursor: default; }
 .browser-surface { flex: 1; min-height: 0; position: relative; overflow: hidden; background: #161512; }
@@ -10,3 +10,28 @@
 .browser-placeholder strong { font-size: 18px; }
 .browser-error { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 12px; color: var(--error); background: var(--bg-surface); }
 .browser-error button { margin-left: auto; cursor: pointer; }
+.browser-toolbar .browser-settings-active { background: var(--bg-hover); color: var(--accent); }
+@container (max-width: 360px) { .browser-toolbar .browser-navigation { display: none; } }
+.browser-view-settings { position: fixed; z-index: 10050; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-y: auto; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 12px 36px #0007; font-size: 12px; outline: none; }
+.browser-settings-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.browser-settings-heading > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.browser-settings-heading strong { font-size: 14px; }
+.browser-settings-heading span { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-view-settings button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid transparent; border-radius: 6px; padding: 6px; color: var(--text-secondary); background: transparent; cursor: pointer; }
+.browser-view-settings button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.browser-view-settings button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.browser-view-settings button:disabled { cursor: default; opacity: .5; }
+.browser-settings-size { display: flex; justify-content: space-between; gap: 8px; margin: 17px 0 10px; color: var(--text-muted); font-size: 11px; }
+.browser-settings-size strong { color: var(--text-secondary); font-weight: 500; }
+.browser-settings-choices { display: flex; flex-direction: column; gap: 6px; }
+.browser-settings-choices button { width: 100%; justify-content: flex-start; gap: 10px; padding: 10px; text-align: left; border-color: var(--border); border-radius: 8px; }
+.browser-settings-choices button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 9%, var(--bg-surface)); }
+.browser-settings-choices button > svg { flex-shrink: 0; }
+.browser-settings-choices button > span { display: flex; flex-direction: column; flex: 1; gap: 4px; }
+.browser-settings-choices strong { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.browser-settings-choices small { font-size: 11px; line-height: 1.4; color: var(--text-muted); }
+.browser-settings-hint { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 12px 0; }
+.browser-settings-saved { display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 11px; }
+.browser-settings-saved > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.browser-settings-saved small { display: block; color: var(--text-muted); margin-top: 5px; font-size: 10px; }
+.browser-settings-error { color: var(--error); font-size: 11px; margin: 10px 0 0; }

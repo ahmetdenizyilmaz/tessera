@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { notify } from '../lib/toast';
 import type { PanelRect, LayoutConfig, SnapZone, StealFraction } from '../types/session';
+import { usePanelLockStore } from './panelLockStore';
 
 // ─── Panel Type ──────────────────────────────────────────────────────────────
 
@@ -118,7 +119,9 @@ export function restoreClockwiseOrder(config: LayoutConfig, rects: Map<string, P
     const a = rect!, b = points[(i + 1) % points.length]!;
     return sum + (a.x + a.w / 2) * (b.y + b.h / 2) - (b.x + b.w / 2) * (a.y + a.h / 2);
   }, 0);
-  return area < 0 ? { ...config, panelOrder: [config.panelOrder[0], ...config.panelOrder.slice(1).reverse()] } : config;
+  if (area >= 0) return config;
+  const panelOrder = [config.panelOrder[0], ...config.panelOrder.slice(1).reverse()];
+  return { ...config, panelOrder, ...(config.slotRects ? { slotRects: panelOrder.map(id => rects.get(id)!) } : {}) };
 }
 
 export function computeRects(
@@ -132,6 +135,11 @@ export function computeRects(
   const n = order.length;
 
   if (n === 0) return rects;
+
+  if (validSlotRects(config.slotRects, n)) {
+    order.forEach((id, i) => rects.set(id, { ...config.slotRects![i] }));
+    return rects;
+  }
 
   const focusIdx = focusedId ? order.indexOf(focusedId) : -1;
 
@@ -340,6 +348,42 @@ export function computeRects(
   }
 
   return rects;
+}
+
+/** Reject incomplete or corrupt saved geometry instead of hiding or overlapping panels. */
+export function validSlotRects(rects: PanelRect[] | undefined, count: number): boolean {
+  if (!Array.isArray(rects) || rects.length !== count || !count) return false;
+  if (!rects.every(r => r && [r.x, r.y, r.w, r.h].every(Number.isFinite) && r.w > 0 && r.h > 0
+    && r.x >= -.001 && r.y >= -.001 && r.x + r.w <= 100.001 && r.y + r.h <= 100.001)) return false;
+  if (Math.abs(rects.reduce((sum, r) => sum + r.w * r.h, 0) - 10000) > 1) return false;
+  return rects.every((a, i) => rects.slice(i + 1).every(b =>
+    Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) < .001
+    || Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) < .001));
+}
+
+export function computeFocusedLayout(config: LayoutConfig, id: string | null, fraction: StealFraction,
+  sideFractions: number[], previousRects: Map<string, PanelRect>, lockedIds: ReadonlySet<string>) {
+  const rotates = config.type === 'main' || config.type === 'grid';
+  const order = [...config.panelOrder];
+  const targetIndex = id ? order.indexOf(id) : -1;
+  const slots = order.map(panelId => previousRects.get(panelId)!);
+  // Smaller layouts normally resize in place. With locks, keep their physical
+  // slots and move only eligible panels so a pinned neighbor cannot be pushed.
+  const useLockedSlots = !rotates && order.some(panelId => lockedIds.has(panelId)) && validSlotRects(slots, order.length);
+  if (useLockedSlots) config = { ...config, slotRects: slots };
+  const mainIndex = rotates ? 0 : slots.reduce((best, rect, i) =>
+    rect && rect.w * rect.h > (slots[best]?.w ?? 0) * (slots[best]?.h ?? 0) ? i : best, 0);
+  if ((rotates || useLockedSlots) && targetIndex >= 0 && targetIndex !== mainIndex) {
+    const movable = order.map((panelId, i) => ({ panelId, i })).filter(({ panelId, i }) =>
+      i === mainIndex || panelId === id || !lockedIds.has(panelId));
+    // Start at the main slot while preserving the existing clockwise ring.
+    const start = movable.findIndex(entry => entry.i === mainIndex);
+    const ring = [...movable.slice(start), ...movable.slice(0, start)];
+    const next = [id!, ...ring.map(entry => entry.panelId).filter(panelId => panelId !== id)];
+    ring.forEach((entry, i) => { order[entry.i] = next[i]; });
+    config = { ...config, panelOrder: order, ...(useLockedSlots ? { slotRects: slots } : {}) };
+  }
+  return { layoutConfig: config, panelRects: computeRects(config, id, fraction, sideFractions) };
 }
 
 // ─── Gutter Detection ───────────────────────────────────────────────────────
@@ -887,6 +931,10 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
             ? panelRects.get(layoutConfig.panelOrder[0])?.h : panelRects.get(layoutConfig.panelOrder[0])?.w) : undefined)),
       };
       layoutConfig = restoreClockwiseOrder(layoutConfig, panelRects);
+      // Old builds saved the actual resized rectangles but could forget
+      // footer dividers and split segments. Recover every slot on restore.
+      const slots = layoutConfig.panelOrder.map(id => panelRects.get(id)!);
+      if (layoutConfig.type === 'main' && validSlotRects(slots, slots.length)) layoutConfig = { ...layoutConfig, slotRects: slots };
     }
     set((state) => ({
       layout: tabOrder[0] ?? null,
@@ -955,27 +1003,14 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
   setFocused: (id: string | null) => {
     const state = get();
     if (!state.layoutConfig) return;
-
-    let config = state.layoutConfig;
-
-    // For 'main' layout: promote focused panel to order[0] (the large main panel)
-    if ((config.type === 'main' || config.type === 'grid') && id && config.panelOrder[0] !== id) {
-      const order = [...config.panelOrder];
-      const idx = order.indexOf(id);
-      if (idx > 0) {
-        order.splice(idx, 1);
-        order.unshift(id);
-        config = { ...config, panelOrder: order };
-      }
-    }
-
-    const rects = computeRects(config, id, state.stealFraction, state.sidebarSlotFractions);
+    if (id !== null && !state.tabOrder.includes(id)) return;
+    const geometry = computeFocusedLayout(state.layoutConfig, id, state.stealFraction,
+      state.sidebarSlotFractions, state.panelRects, usePanelLockStore.getState().lockedIds);
     // Focusing a panel is selecting it: the tab strip highlight follows, so
     // clicking inside the mosaic and clicking a tab stay one concept.
     set({
       focusedId: id,
-      layoutConfig: config,
-      panelRects: rects,
+      ...geometry,
       ...(id ? { activeTabId: id } : {}),
     });  },
 
@@ -1005,6 +1040,9 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
   finishResize: (gutterAxis: 'x' | 'y', gutterBefore: string[], gutterAfter: string[]) => {
     const state = get();
     if (!state.layoutConfig) return;
+    const slots = state.layoutConfig.panelOrder.map(id => state.panelRects.get(id)!);
+    const resizedConfig = { ...state.layoutConfig, slotRects: validSlotRects(slots, slots.length) ? slots : undefined };
+    set({ layoutConfig: resizedConfig });
 
     // Main+sidebar widths belong to the layout, not to the focused panel.
     // Only capture the main/sidebar gutter, not dividers inside the bottom strip.
@@ -1015,7 +1053,7 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
       const neighbours = gutterBefore.includes(mainId) ? gutterAfter : gutterAfter.includes(mainId) ? gutterBefore : [];
       if (otherIds.slice(0, 4).some(id => neighbours.includes(id))) {
         set({ layoutConfig: {
-          ...state.layoutConfig,
+          ...resizedConfig,
           mainWidthPercent: normalizeMainWidth(vertical ? state.panelRects.get(mainId)?.h : state.panelRects.get(mainId)?.w),
         } });
       }
@@ -1051,7 +1089,7 @@ export const createLayoutStore = () => create<LayoutState>((set, get) => ({
 
     const reset = { x: 0.5, y: 0.5 };
     // Gutter double-click resets the main split and sidebar slot heights too.
-    const config = { ...state.layoutConfig, mainWidthPercent: undefined };
+    const config = { ...state.layoutConfig, mainWidthPercent: undefined, slotRects: undefined };
     const rects = computeRects(config, state.focusedId, reset, []);
     set({ layoutConfig: config, stealFraction: reset, sidebarSlotFractions: [], panelRects: rects });  },
 

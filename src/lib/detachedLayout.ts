@@ -1,5 +1,6 @@
-import { computeRects, createLayoutStore, getDefaultConfig, restoreClockwiseOrder, useLayoutStore, type LayoutStore } from '../store/layoutStore';
+import { computeRects, computeFocusedLayout, createLayoutStore, getDefaultConfig, restoreClockwiseOrder, validSlotRects, useLayoutStore, type LayoutStore } from '../store/layoutStore';
 import { useGroupStore, type GroupState } from '../store/groupStore';
+import { usePanelLockStore } from '../store/panelLockStore';
 
 /** A detached group uses the exact same layout actions as Main, with its own
  * state. Membership and saved geometry stay in the workspace's group record. */
@@ -23,12 +24,13 @@ function readGroupLayout(store: LayoutStore, group?: GroupState, previousGroup?:
     config = getDefaultConfig(ids, focused, current.layoutConfig);
   }
   if (group?.panelRects) config = restoreClockwiseOrder(config, group.panelRects);
-  if (changedSelection && (config.type === 'main' || config.type === 'grid') && focused) {
-    config = { ...config, panelOrder: [focused, ...config.panelOrder.filter(id => id !== focused)] };
-  }
   const savedRects = group?.panelRects;
-  const rects = !changedSelection && savedRects?.size === ids.length && ids.every(id => savedRects.has(id))
-    ? savedRects : computeRects(config, focused, fraction, slots);
+  const savedSlots = config.panelOrder.map(id => savedRects?.get(id)!);
+  if (config.type === 'main' && validSlotRects(savedSlots, ids.length)) config = { ...config, slotRects: savedSlots };
+  const geometry = changedSelection ? computeFocusedLayout(config, focused, fraction, slots, savedRects ?? current.panelRects, usePanelLockStore.getState().lockedIds) : null;
+  const rects = geometry?.panelRects ?? (savedRects?.size === ids.length && ids.every(id => savedRects.has(id))
+    ? savedRects : computeRects(config, focused, fraction, slots));
+  config = geometry?.layoutConfig ?? config;
   store.setState({
     layout: ids[0] ?? null, tabOrder: ids, activeTabId: active, focusedId: focused,
     layoutConfig: config, panelRects: rects, stealFraction: fraction, sidebarSlotFractions: slots,

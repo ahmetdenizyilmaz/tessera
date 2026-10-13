@@ -9,6 +9,7 @@ import { closePanel } from '../../lib/panelCleanup';
 import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { AddExistingPanelButton, MovePanelButton } from './GroupPanelPicker';
+import { PanelLockButton } from '../layout/PanelLockButton';
 import { usePanelWindow } from '../windows/PanelWindowContext';
 
 interface GroupPreviewProps {
@@ -221,6 +222,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
         </span>
         <AddExistingPanelButton groupId={groupId} compact />
         <MovePanelButton panelId={groupId} />
+        <PanelLockButton panelId={groupId} />
         <button
           onClick={(e) => { e.stopPropagation(); handleEnter(); }}
           style={{

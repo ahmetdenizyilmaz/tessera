@@ -10,11 +10,15 @@ import { usePanelLayout } from '../windows/PanelWindowContext';
 import { closePanel } from '../../lib/panelCleanup';
 import { listen } from '@tauri-apps/api/event';
 import { PANEL_MAXIMIZE_EVENT } from '../../lib/panelMaximize';
+import { BrowserViewSettings } from './BrowserViewSettings';
+import { useBrowserViewStore } from '../../store/browserViewStore';
+import { PanelLockButton } from '../layout/PanelLockButton';
 
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: string }) {
   const useLayoutStore = usePanelLayout();
   const instance = usePluginStore(s => s.instances.get(instanceId));
   const homeUrl=usePluginStore(s=>s.registry.get(instance?.pluginName??'')?.homeUrl);
+  const appTitle=usePluginStore(s=>s.registry.get(instance?.pluginName??'')?.defaultTitle) ?? 'Web app';
   const title=instance?.title??'Web app';
   const maximized = useLayoutStore(s => s.maximizedId === instanceId);
   const surface = useRef<HTMLDivElement>(null);
@@ -44,8 +48,9 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
       if (disposed) return;
       frame = view.requestAnimationFrame(() => void tick());
       if (busy || !surface.current) return;
-      setClickToFocus(browserNeedsFocus(surface.current));
-      const bounds = measureBrowserSurface(surface.current);
+      const preference = useBrowserViewStore.getState().preferences[site];
+      setClickToFocus(browserNeedsFocus(surface.current, preference));
+      const bounds = measureBrowserSurface(surface.current, preference);
       const key = JSON.stringify(bounds);
       busy = true;
       try {
@@ -90,9 +95,11 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
     <div className="terminal-toolbar browser-toolbar">
       <PluginIcon icon={instance?.icon??'Globe'} size={15} className="browser-brand" />
       <span className="browser-title">{title}<PanelShortcutBadge panelId={instanceId} /></span>
-      <button title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
-      <button title="Forward" aria-label="Forward" disabled={!ready} onClick={() => action('forward')}><ArrowRight size={14} /></button>
-      <button title={`${title} home`} aria-label={`${title} home`} disabled={!ready} onClick={() => action('home')}><Home size={14} /></button>
+      <BrowserViewSettings site={site} title={appTitle} surface={surface} />
+      <PanelLockButton panelId={instanceId} />
+      <button className="browser-navigation" title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
+      <button className="browser-navigation" title="Forward" aria-label="Forward" disabled={!ready} onClick={() => action('forward')}><ArrowRight size={14} /></button>
+      <button className="browser-navigation" title={`${title} home`} aria-label={`${title} home`} disabled={!ready} onClick={() => action('home')}><Home size={14} /></button>
       <button title={`Reload ${title}`} aria-label={`Reload ${title}`} disabled={!ready} onClick={() => action('reload')}><RefreshCw size={14} /></button>
       <MovePanelButton panelId={instanceId} />
       <button title={maximized ? 'Restore panel size' : 'Maximize panel'} aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}

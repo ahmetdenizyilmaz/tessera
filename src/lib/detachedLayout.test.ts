@@ -6,6 +6,7 @@ import { usePluginStore } from '../store/pluginStore';
 import { useInstanceStore } from '../store/instanceStore';
 import { serializeWorkspace, deserializeWorkspace } from './workspaceSerializer';
 import { registerBuiltins } from './builtinPlugins';
+import { usePanelLockStore } from '../store/panelLockStore';
 
 const disposers: (() => void)[] = [];
 beforeEach(() => {
@@ -14,6 +15,23 @@ beforeEach(() => {
   usePluginStore.setState({ instances: new Map() });
   useInstanceStore.setState({ instances: new Map() });
   registerBuiltins();
+  usePanelLockStore.setState({ lockedIds: new Set() });
+});
+it('keeps locked slots and manually resized dividers when another window selects a detached panel', () => {
+  const { group, layout } = makeGroup(5);
+  const order = layout.getState().layoutConfig!.panelOrder;
+  const config = { ...layout.getState().layoutConfig!, mainWidthPercent: 52 };
+  const rects = computeRects(config, order[0], { x: .5, y: .5 }, [10, 20, 30, 40]);
+  layout.getState().setRawPanelRects(rects);
+  layout.getState().finishResize('x', [order[0]], order.slice(1));
+  const locked = order[2]; usePanelLockStore.getState().setLocked(locked, true);
+  useGroupStore.getState().setGroupActiveChild(group, order[4]);
+  expect(layout.getState().panelRects.get(locked)).toEqual(rects.get(locked));
+  expect(layout.getState().panelRects.get(order[4])).toEqual(rects.get(order[0]));
+  const reopened = createDetachedLayout(group);
+  reopened.getState().setFocused(order[1]);
+  expect(reopened.getState().panelRects.get(locked)).toEqual(rects.get(locked));
+  expect(reopened.getState().panelRects.get(order[1])?.w).toBe(52);
 });
 afterEach(() => { disposers.splice(0).forEach(stop => stop()); });
 function makeGroup(count: number) {

@@ -4,6 +4,7 @@ import { usePluginStore } from '../../store/pluginStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
+import { PanelLockButton } from '../layout/PanelLockButton';
 import { createBridge, type PluginBridge } from './PluginSDKBridge';
 import { PLUGIN_SDK_SOURCE } from '../../lib/pluginSDK';
 import { BrowserPanel } from '../browser/BrowserPanel';
@@ -169,6 +170,7 @@ function IframePluginPanel({ instanceId }: PluginPanelProps) {
             <PanelShortcutBadge panelId={instanceId} />
           </span>
           <MovePanelButton panelId={instanceId} />
+          <PanelLockButton panelId={instanceId} />
           <button
             onClick={handleClose}
             style={{
@@ -279,6 +281,7 @@ function IframePluginPanel({ instanceId }: PluginPanelProps) {
 
         {/* Custom title buttons from manifest */}
         <MovePanelButton panelId={instanceId} />
+        <PanelLockButton panelId={instanceId} />
         {titleButtons.map((btn) => (
           <button
             key={btn.id}

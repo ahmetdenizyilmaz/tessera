@@ -7,6 +7,7 @@ import { usePluginStore } from '../store/pluginStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSessionStore } from '../store/sessionStore';
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
+import { usePanelLockStore } from '../store/panelLockStore';
 import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
 import { closeWindowViewsForExit } from '../lib/workspaceWindows';
 import { restoreOnce, saveNow, scheduleSave } from '../lib/workspaceSerializer';
@@ -100,6 +101,7 @@ export function useAutoSave() {
       useLayoutStore.subscribe(scheduleSave),
       useGroupStore.subscribe(scheduleSave),
       usePluginStore.subscribe(scheduleSave),
+      usePanelLockStore.subscribe(scheduleSave),
       useWorkspaceWindowStore.subscribe(scheduleSave),
       usePanelShortcutStore.subscribe((state, previous) => {
         if (state.bindings !== previous.bindings) scheduleSave();

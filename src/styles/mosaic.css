@@ -50,6 +50,10 @@ html[data-tab-dragging] iframe {
 .mosaic-tile-dragging .terminal-toolbar {
   cursor: default;
 }
+.terminal-toolbar .panel-lock-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 0; border-radius: 5px; padding: 4px; color: var(--text-muted); background: transparent; cursor: pointer; }
+.terminal-toolbar .panel-lock-button:hover { color: var(--text-primary); background: var(--bg-hover); }
+.terminal-toolbar .panel-lock-button.is-locked { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.terminal-toolbar .panel-lock-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Transparent overlay on unfocused panels — blocks xterm selection */
 .unfocused-overlay {

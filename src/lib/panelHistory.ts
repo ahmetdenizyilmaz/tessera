@@ -14,6 +14,7 @@ import { canPlacePanel, panelDestination } from './panelPlacement';
 import { readLevelGeometry, samePanels } from './layoutHistory';
 import { focusShortcutPanel } from './panelShortcuts';
 import { notify } from './toast';
+import { usePanelLockStore } from '../store/panelLockStore';
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const flatten = (panel: RememberedPanel): RememberedPanel[] => [panel, ...(panel.children ?? []).flatMap(flatten)];
@@ -36,6 +37,7 @@ export function captureClosedPanel(id: string): ClosedPanel | null {
     if (!type || (!instance && !plugin && !group && type !== 'widget' && type !== 'computer' && !remote)) return null;
     return {
       id: panelId, type,
+      locked: usePanelLockStore.getState().lockedIds.has(panelId),
       name: instance?.name ?? plugin?.title ?? group?.name ?? remote?.panel.name ??
         (type === 'computer' ? 'Computer' : layout.widgetKinds[panelId] ?? 'Panel'),
       instance, plugin, widgetKind: layout.widgetKinds[panelId],
@@ -141,6 +143,7 @@ export function restoreClosedPanel(saved: ClosedPanel, wizardId?: string): boole
     }
     // Detached workspace roots are hidden containers, not tabs in Main.
     if (!(windowRoot && panel.id === saved.panel.id)) ensurePanelAtLevel(panel.id, parent, panel.type);
+    usePanelLockStore.getState().setLocked(panel.id, !!panel.locked);
     const children = (panel.children ?? []).filter(child => restore(child, panel.id)).map(child => child.id);
     if (panel.group && samePanels(children, panel.group.childIds)) updateLevelLayout(panel.id, {
       tabOrder: panel.group.childIds, layoutConfig: panel.group.layoutConfig,

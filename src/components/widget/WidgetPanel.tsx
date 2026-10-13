@@ -11,6 +11,7 @@ import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import NewSessionWizard from '../wizard/NewSessionWizard';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
+import { PanelLockButton } from '../layout/PanelLockButton';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
   projects: { icon: <FolderOpen size={14} />, label: 'Projects' },
@@ -104,6 +105,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
           <PanelShortcutBadge panelId={instanceId} />
         </span>
         <MovePanelButton panelId={instanceId} />
+        <PanelLockButton panelId={instanceId} />
         <button
           onClick={(e) => {
             e.stopPropagation();

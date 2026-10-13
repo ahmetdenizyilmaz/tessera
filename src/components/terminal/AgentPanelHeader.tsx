@@ -5,6 +5,7 @@ import { ProviderIcon } from "../icons/ProviderIcons";
 import { GitFork, X } from "lucide-react";
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
+import { PanelLockButton } from '../layout/PanelLockButton';
 import { usePanelWindow, usePanelLayout } from '../windows/PanelWindowContext';
 
 /** Shared panel chrome. Provider-specific controls stay inside the same menu. */
@@ -175,6 +176,7 @@ export function AgentPanelHeader({
           <span className="status-label">{status}</span>
         </span>
         <div className="toolbar-actions">
+          <PanelLockButton panelId={instanceId} />
           <MovePanelButton panelId={instanceId} />
           {controls && (
             <div style={{ position: "relative" }}>

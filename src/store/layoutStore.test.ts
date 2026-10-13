@@ -57,7 +57,14 @@ describe('stacked layout divider', () => {
 
   it('keeps sidebar heights independent of the main width', () => {
     dragMainDivider(50);
-    useLayoutStore.setState({ sidebarSlotFractions: [10, 20, 30, 40] });
+    const rects = new Map(layout().panelRects);
+    let y = 0;
+    layout().layoutConfig!.panelOrder.slice(1).forEach((id, i) => {
+      const h = [10, 20, 30, 40][i];
+      rects.set(id, { ...rects.get(id)!, y, h }); y += h;
+    });
+    layout().setRawPanelRects(rects);
+    layout().finishResize('y', ['b'], ['c']);
     layout().setFocused('b');
     expect(layout().panelRects.get('b')?.w).toBe(50);
     expect(layout().layoutConfig!.panelOrder.slice(1).map(id => layout().panelRects.get(id)?.h))

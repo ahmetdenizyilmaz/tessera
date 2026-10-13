@@ -19,6 +19,7 @@ export interface RememberedPanel {
   children?: RememberedPanel[];
   llmMessages?: LlmChatMessage[];
   remoteDeviceId?: string;
+  locked?: boolean;
 }
 
 export interface ClosedPanel {

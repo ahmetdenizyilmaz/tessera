@@ -15,6 +15,7 @@ import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../
 import { useWorkspaceHistoryStore } from '../store/workspaceHistoryStore';
 import { useRecentPanelStore } from '../store/recentPanelStore';
 import type { PluginManifest } from '../types/plugin';
+import { usePanelLockStore } from '../store/panelLockStore';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export interface WorkspaceSnapshotV3 {
   groups: Record<string, SerializedGroup>;
   plugins: SavedPlugin[];
   panelShortcuts?: PanelShortcutBindings;
+  lockedPanelIds?: string[];
   windows?: DetachedWorkspace[];
 }
 
@@ -97,6 +99,7 @@ interface NormalizedSnapshot {
   groups: Record<string, SerializedGroup>;
   plugins: SavedPlugin[];
   panelShortcuts?: PanelShortcutBindings;
+  lockedPanelIds?: string[];
   windows?: DetachedWorkspace[];
 }
 
@@ -136,6 +139,7 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
     windows: useWorkspaceWindowStore.getState().windows,
     savedAt: Date.now(),
     panelShortcuts: Object.fromEntries(Object.entries(usePanelShortcutStore.getState().bindings).filter(([, id]) => openPanels.has(id))),
+    lockedPanelIds: [...usePanelLockStore.getState().lockedIds].filter(id => openPanels.has(id)),
     instances: Array.from(instances.values()).map((inst) => ({
       id: inst.id,
       name: inst.name,
@@ -260,6 +264,7 @@ function normalizeSnapshot(raw: unknown): NormalizedSnapshot | null {
       groups: snap.groups ?? {},
       plugins: snap.plugins ?? [],
       panelShortcuts: normalizePanelShortcuts(snap.panelShortcuts),
+      lockedPanelIds: Array.isArray(snap.lockedPanelIds) ? snap.lockedPanelIds.filter(id => typeof id === 'string') : [],
       windows: snap.windows ?? [],
     };
   }
@@ -544,6 +549,7 @@ export function deserializeWorkspace(raw: unknown): void {
   useLlmChatStore.getState().remapConversations(idMap, liveIds);
   useOfficeGameStore.getState().remapPanels(idMap);
   const openPanels = new Set([...useLayoutStore.getState().tabOrder, ...[...newGroups.values()].flatMap(group => group.childIds)]);
+  usePanelLockStore.setState({ lockedIds: new Set((snapshot.lockedPanelIds ?? []).map(remapId).filter(id => openPanels.has(id))) });
   usePanelShortcutStore.getState().restore(Object.fromEntries(
     Object.entries(snapshot.panelShortcuts ?? {}).map(([number, id]) => [number, remapId(id)])
       .filter(([, id]) => openPanels.has(id)),

@@ -11,6 +11,7 @@ import { useLlmChatStore } from '../store/llmChatStore';
 import { useWorkspaceHistoryStore as history } from '../store/workspaceHistoryStore';
 import { RECENT_PANELS_KEY, useRecentPanelStore as recents } from '../store/recentPanelStore';
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
+import { usePanelLockStore } from '../store/panelLockStore';
 import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
 import { useLanStore } from '../store/lanStore';
 import { createDetachedLayout, connectDetachedLayout } from './detachedLayout';
@@ -69,6 +70,7 @@ beforeEach(() => {
   useLlmChatStore.setState({ conversations: {} });
   useWorkspaceWindowStore.setState({ windows: [] });
   usePanelShortcutStore.setState({ bindings: {} });
+  usePanelLockStore.setState({ lockedIds: new Set() });
   useLanStore.setState({ status: null, hiddenPanelIds: [], hiddenPeerIds: [] });
   history.setState({ past: [], future: [], busy: false });
   recents.setState({ entries: [] });
@@ -107,6 +109,18 @@ it('keeps API chat messages and captures new messages before redo closes it agai
   useLlmChatStore.getState().addUserMessage(id, 'Follow-up');
   await history.getState().redo(); await history.getState().undo();
   expect(useLlmChatStore.getState().getConversation(id).messages.at(-1)?.content).toBe('Follow-up');
+});
+
+it('keeps the position lock through closing, undo, and redo without locking other panels', async () => {
+  const other = agent(), id = agent('codex');
+  usePanelLockStore.getState().setLocked(id, true);
+  await closePanel(id);
+  expect(usePanelLockStore.getState().lockedIds.has(id)).toBe(false);
+  await history.getState().undo();
+  expect(usePanelLockStore.getState().lockedIds).toEqual(new Set([id]));
+  expect(getPanelLocations().has(other)).toBe(true);
+  await history.getState().redo();
+  expect(usePanelLockStore.getState().lockedIds.size).toBe(0);
 });
 
 it('closes and restores a nested group as one operation, without duplicating a child reopened separately', async () => {
@@ -237,6 +251,22 @@ it('undoes detached resizing independently from Main', async () => {
     expect(getPanelLocations().get(main)).toBe(null);
     await history.getState().redo(); expect(layout.getState().stealFraction.x).toBe(.65);
   } finally { disconnect(); }
+});
+it('undoes and redoes exact resized slots after focus rotation without changing panel locks', async () => {
+  const ids = [agent(), agent(), agent(), agent(), agent()];
+  useLayoutStore.getState().setFocused(ids[0]);
+  usePanelLockStore.getState().setLocked(ids[2], true);
+  const commit = beginPanelResize(useLayoutStore);
+  const state = useLayoutStore.getState();
+  const config = { ...state.layoutConfig!, mainWidthPercent: 52 };
+  state.setRawPanelRects(computeRects(config, ids[0], state.stealFraction));
+  state.finishResize('x', [ids[0]], ids.slice(1)); commit();
+  useLayoutStore.getState().setFocused(ids[1]);
+  await history.getState().undo();
+  expect(useLayoutStore.getState().panelRects.get(ids[1])?.w).toBe(80);
+  await history.getState().redo();
+  expect(useLayoutStore.getState().panelRects.get(ids[1])?.w).toBe(52);
+  expect(usePanelLockStore.getState().lockedIds).toEqual(new Set([ids[2]]));
 });
 
 it('undoes an ancestor resize while inside a group, without changing navigation', async () => {

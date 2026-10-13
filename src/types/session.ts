@@ -50,6 +50,9 @@ export interface LayoutConfig {
   /** Main/sidebar divider for 5+ panels, independent of which panel is focused.
    *  Stored with each layout (including groups); absent in older workspaces. */
   mainWidthPercent?: number;
+  /** Exact manually resized physical slots, aligned with panelOrder. Focus
+   * rotation assigns different panels to these slots without moving dividers. */
+  slotRects?: PanelRect[];
 }
 
 export type SnapZone =
