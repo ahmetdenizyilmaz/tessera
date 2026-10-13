@@ -17,7 +17,8 @@ import { CodexItemView } from '../codex/CodexItemView';
 import { OpenCodeMessageView } from '../opencode/OpenCodeMessageView';
 import { AntigravityItemView } from '../antigravity/AntigravityItemView';
 import { CharacterPortrait, WearablePicker } from './OfficeTeam';
-import { OfficeComposer, OfficeExchanges, OfficeHuddle, OfficeResources } from './OfficeTalk';
+import { OfficeComposer, OfficeExchanges, OfficeHuddle } from './OfficeTalk';
+import { OfficeResources } from './OfficeResources';
 import { PathCwdContext } from '../../lib/openPath';
 import type { ClaudeInstance } from '../../types/instance';
 import type { CodexItem, CodexThread } from '../../types/codex';
@@ -130,6 +131,7 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
     <header className="office-chat-heading">
       <CharacterPortrait id={profile?.appearanceId ?? id} color={`#${getProviderColor(provider).toString(16).padStart(6, '0')}`} wearables={profile?.wearables} provider={provider} />
       <div><span className="office-eyebrow">AGENT CONVERSATION</span><h3>{instance.name}</h3><p>{providerName} · {instance.config.llmConfig?.model ?? instance.config.model}</p></div>
+      <OfficeResources cwd={cwd} items={isLlm ? llm?.messages ?? [] : provider === 'codex' ? codexItems : provider === 'antigravity' ? antigravitySession?.items ?? [] : provider === 'opencode' ? openCodeSession?.messages ?? [] : claudeMessages.length ? claudeMessages : historicClaude} />
       <button aria-label="Close agent chat" title="Close chat (Esc)" onClick={onClose}><X size={18} /></button>
     </header>
     <details className="office-chat-profile">
@@ -140,7 +142,6 @@ export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInst
       <OfficeHuddle instance={instance} />
       <OfficeExchanges id={id} />
     </details>
-    <OfficeResources cwd={cwd} items={isLlm ? llm?.messages ?? [] : provider === 'codex' ? codexItems : provider === 'antigravity' ? antigravitySession?.items ?? [] : provider === 'opencode' ? openCodeSession?.messages ?? [] : claudeMessages.length ? claudeMessages : historicClaude} />
     {error && <p className="office-chat-error" role="alert">{error}</p>}
     <PathCwdContext.Provider value={cwd}><div ref={body} className="office-chat-messages" role="region" aria-label="Agent conversation" tabIndex={0} onScroll={() => {
       const el = body.current!; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64; setFollowing(follow.current);

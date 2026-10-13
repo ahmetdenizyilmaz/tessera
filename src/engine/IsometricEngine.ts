@@ -6,6 +6,7 @@ import { itemForFurniture, officeItem } from '../lib/officeCatalog';
 import { furnitureCells, furnitureFootprint } from '../lib/officeSpace';
 import type { WorkerPose } from './WorkerAnimator';
 import { orderOfficeDepth, type OfficeDepth } from './officeDepth';
+import { OfficeCamera, type CameraPose } from './OfficeCamera';
 
 const ROOM_NAMES: Record<string, string> = { reception: 'WELCOME', open_floor: 'THE STUDIO', manager_office: 'YOUR OFFICE', meeting_room: 'PLANNING', server_room: 'BUILD LAB', break_room: 'COFFEE LOUNGE', archive: 'LIBRARY', computer_lab: 'RESEARCH', maintenance: 'SUPPORT' };
 export class IsometricEngine {
@@ -34,9 +35,13 @@ export class IsometricEngine {
   private placementControls?: { holding:()=>boolean; rotate:(direction:number)=>void; storageAt:(x:number,y:number)=>boolean; storageHover:(hovered:boolean)=>void; store:()=>void };
   private ready = false;
   private disposed = false;
-  private cameraX = 0;
-  private cameraY = 0;
-  private zoomLevel = 1;
+  private camera = new OfficeCamera();
+  private get cameraX() { return this.camera.current.x; }
+  private get cameraY() { return this.camera.current.y; }
+  private get zoomLevel() { return this.camera.current.zoom; }
+  private cameraFitted = true;
+  private focusedWorker: string | null = null;
+  private overview: { pose: CameraPose; width: number; height: number; fitted: boolean } | null = null;
   private layout: OfficeLayout | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private cleanup: (() => void) | null = null;
@@ -59,7 +64,17 @@ export class IsometricEngine {
     this.entities.sortableChildren = true;
     this.exterior.eventMode='none';this.ghostArt.eventMode='none';this.furnitureHover.eventMode='none';
     this.labels.eventMode = 'none'; this.grid.eventMode = 'none'; this.ghost.eventMode = 'none'; this.links.eventMode = 'none'; this.bubbles.eventMode = 'none';
-    this.resizeObserver = new ResizeObserver(() => { if (parent.clientWidth && parent.clientHeight) { this.app.renderer.resize(parent.clientWidth, parent.clientHeight); this.centerCamera(); } });
+    this.app.ticker.add(() => { this.camera.step(); this.updateCamera(); });
+    this.resizeObserver = new ResizeObserver(() => {
+      if (!parent.clientWidth || !parent.clientHeight) return;
+      const { width, height } = this.app.screen;
+      if (width === parent.clientWidth && height === parent.clientHeight) return;
+      this.app.renderer.resize(parent.clientWidth, parent.clientHeight);
+      this.camera.resize((parent.clientWidth - width) / 2, (parent.clientHeight - height) / 2);
+      if (this.focusedWorker) this.frameWorker(this.focusedWorker);
+      else if (this.cameraFitted) this.centerCamera();
+      this.updateCamera();
+    });
     this.resizeObserver.observe(parent);
     this.setupInteraction(parent);
   }
@@ -241,16 +256,42 @@ export class IsometricEngine {
       this.links.circle(x, y, 4).fill({ color: 0xf7f4e8 }).stroke({ color: link.color, width: 2 });
     }
   }
-  centerCamera() {
+  private animateCamera() { return !window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  centerCamera(animate = true) {
     if (!this.ready || !this.layout) return;
     const { width, height } = this.layout;
     const spanX = (width + height) * 32, spanY = (width + height) * 16;
-    this.zoomLevel = Math.max(.25, Math.min(1.25, (this.app.screen.width - 90) / spanX, (this.app.screen.height - 100) / spanY));
-    this.cameraX = this.app.screen.width / 2 - (width - height) * 16 * this.zoomLevel;
-    this.cameraY = (this.app.screen.height - spanY * this.zoomLevel) / 2 + 18;
+    const zoom = Math.max(.25, Math.min(1.25, (this.app.screen.width - 90) / spanX, (this.app.screen.height - 100) / spanY));
+    this.cameraFitted = true; this.focusedWorker = null;
+    this.camera.moveTo({ zoom, x: this.app.screen.width / 2 - (width - height) * 16 * zoom,
+      y: (this.app.screen.height - spanY * zoom) / 2 + 18 }, animate && this.animateCamera());
     this.updateCamera();
   }
-  zoomBy(delta: number) { this.zoomLevel = Math.max(.25, Math.min(2.5, this.zoomLevel + delta)); this.updateCamera(); }
+  focusWorker(id: string | null) {
+    if (!this.ready) return;
+    if (id) {
+      if (!this.workerGraphics.has(id)) return;
+      if (!this.overview) this.overview = { pose: { ...this.camera.target }, width: this.app.screen.width, height: this.app.screen.height, fitted: this.cameraFitted };
+      this.focusedWorker = id; this.cameraFitted = false;
+      this.frameWorker(id);
+    } else if (this.overview) {
+      const previous = this.overview; this.overview = null; this.focusedWorker = null;
+      this.cameraFitted = previous.fitted;
+      if (previous.fitted) this.centerCamera();
+      else this.camera.moveTo({ ...previous.pose, x: previous.pose.x + (this.app.screen.width - previous.width) / 2,
+        y: previous.pose.y + (this.app.screen.height - previous.height) / 2 }, this.animateCamera());
+    }
+  }
+  private frameWorker(id: string) {
+    const worker = this.workerGraphics.get(id); if (!worker) return;
+    const zoom = Math.min(2.5, Math.max(1.6, (this.overview?.pose.zoom ?? this.zoomLevel) * 1.8));
+    this.camera.moveTo({ zoom, x: this.app.screen.width / 2 - worker.body.x * zoom,
+      y: this.app.screen.height * .48 - (worker.body.y - 24) * zoom }, this.animateCamera());
+  }
+  zoomBy(delta: number, anchor = { x: this.app.screen.width / 2, y: this.app.screen.height / 2 }) {
+    this.cameraFitted = false; this.focusedWorker = null;
+    this.camera.zoomBy(delta, anchor, this.animateCamera()); this.updateCamera();
+  }
   private updateCamera() { this.world.position.set(this.cameraX, this.cameraY); this.world.scale.set(this.zoomLevel); }
   onTileClick(handler?: (gx: number, gy: number) => void) { this.onTileClickHandler = handler; }
   onWorkerClick(handler: (id: string) => void) { this.onWorkerClickHandler = handler; }
@@ -291,7 +332,10 @@ export class IsometricEngine {
     const move = (e: PointerEvent) => {
       if(dragging && e.pointerId!==pointerId)return;
       if (dragging && Math.hypot(e.clientX - downX, e.clientY - downY) >= 5) moved = true;
-      if (dragging && panning) { this.cameraX += e.clientX - lastX; this.cameraY += e.clientY - lastY; this.updateCamera(); }
+      if (dragging && panning && moved) {
+        this.cameraFitted = false; this.focusedWorker = null;
+        this.camera.pan(e.clientX - lastX, e.clientY - lastY); this.updateCamera();
+      }
       lastX = e.clientX; lastY = e.clientY;
       const over=overCanvas(e), holding=!!this.placementControls?.holding();
       this.placementControls?.storageHover(holding && this.placementControls.storageAt(e.clientX,e.clientY));
@@ -319,7 +363,7 @@ export class IsometricEngine {
     const wheel = (e: WheelEvent) => {
       e.preventDefault();if(!e.deltaY)return;
       if(this.placementControls?.holding()) {const now=performance.now();if(now-lastRotate>100){lastRotate=now;this.placementControls.rotate(e.deltaY>0?1:-1);}}
-      else this.zoomBy(e.deltaY > 0 ? -.08 : .08);
+      else { const rect = parent.getBoundingClientRect(); this.zoomBy(e.deltaY > 0 ? -.08 : .08, { x: e.clientX - rect.left, y: e.clientY - rect.top }); }
     };
     const doubleClick=(e:MouseEvent)=>{
       if(this.edit) return;

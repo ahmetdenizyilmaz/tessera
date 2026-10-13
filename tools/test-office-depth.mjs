@@ -21,7 +21,7 @@ try {
     window.depthCase = (rotation, side, type = 'couch') => {
       const furniture = { id: 'item', type, rotation, position: { gridX: 2, gridY: 2 } };
       const layout = { width: 6, height: 6, furniture: [furniture], rooms: [], floorTiles: {}, wallTiles: {} };
-      engine.drawFloor(layout); engine.drawFurniture([furniture]); engine.centerCamera();
+      engine.drawFloor(layout); engine.drawFurniture([furniture]); engine.centerCamera(false);
       const { w, h } = furnitureFootprint(furniture);
       const [x, y] = { front: [2.15, 2 + h + .35], right: [2 + w + .35, 2.15], back: [2.15, 1.65], left: [1.65, 2.15] }[side] ?? [2.5, 2.5];
       const seat = side === 'seat' ? { furnitureId: 'item', index: 0, position: rotatePoint(furniture, .5, .55), rotation } : undefined;

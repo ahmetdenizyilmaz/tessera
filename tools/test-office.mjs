@@ -13,6 +13,7 @@ await page.route('**/office-test*', route => route.fulfill({ contentType: 'text/
 <script type="module" src="/tools/office-fixture.jsx"></script>` }));
 const url = `${process.argv[2] || 'http://127.0.0.1:1420'}/office-test`;
 async function clickTile(x, y) {
+  await expect.poll(() => page.evaluate(() => window.officeEngine.camera.moving)).toBe(false);
   const point = await page.evaluate(({ x, y }) => {
     const rect = document.querySelector('.office-canvas').getBoundingClientRect(), layout = window.office.getState().layout;
     const sx = (layout.width + layout.height) * 32, sy = sx / 2;
@@ -26,6 +27,7 @@ async function clickWorker(id) {
   // The real character hit area, projected with the fitted camera after resize.
   await expect.poll(() => page.evaluate(id => { const w = window.office.getState().workers[id]; return w.position.x === w.targetPosition.gridX && w.position.y === w.targetPosition.gridY; }, id), { timeout: 20000 }).toBe(true);
   await page.getByRole('button', { name: 'Fit office', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.officeEngine.camera.moving)).toBe(false);
   const point = await page.evaluate(id => {
     const rect = document.querySelector('.office-canvas').getBoundingClientRect(), { layout, workers } = window.office.getState();
     const { x, y } = workers[id].position;
@@ -73,7 +75,7 @@ try {
   await expect(page.locator('.office-chat')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.office-chat')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.officeCalls.filter(c => !['office_prices', 'resolve_path_smart', 'activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot', 'antigravity_snapshot'].includes(c.command)))).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.officeCalls.filter(c => !['plugin:fs|exists', 'office_prices', 'resolve_path_smart', 'activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot', 'antigravity_snapshot'].includes(c.command)))).toEqual([]);
   console.log('PASS live named characters, providers, task stations, completed-turn rewards, and StrictMode initialization');
   console.log('PASS real character clicks, live Codex/Claude transcripts, collapsed roster, switching, floor/Escape dismissal, and panning without dismissal or provider side effects');
 
@@ -140,7 +142,9 @@ try {
 
   // Office chat: composer, resources, agent talk, and a second wearable slot.
   await page.locator('[data-office-agent="architect"]').click();
-  const resources = page.locator('.office-resources');
+  await expect(page.getByRole('dialog', { name: 'Files and links' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Conversation resources', exact: true }).click();
+  const resources = page.getByRole('dialog', { name: 'Files and links' });
   await expect(resources).toContainText('plan.md');
   await expect(resources).toContainText('retry.ts');
   await expect(resources).toContainText('example.com/spec');
@@ -301,7 +305,7 @@ try {
   await page.evaluate(() => { window.instances.setState(s => { const instances = new Map(s.instances); instances.delete('architect'); return { instances }; }); });
   await expect(page.locator('.office-chat')).toHaveCount(0);
   await expect(page.locator('.office-team--collapsed')).toHaveCount(0);
-  expect(await page.evaluate(() => window.officeCalls.filter(c => !['office_prices', 'resolve_path_smart', 'activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot', 'antigravity_snapshot', 'panel_send_text', 'open_path_smart'].includes(c.command)))).toEqual([]);
+  expect(await page.evaluate(() => window.officeCalls.filter(c => !['plugin:fs|exists', 'office_prices', 'resolve_path_smart', 'activity_list', 'session_load_history', 'codex_read_thread', 'opencode_snapshot', 'antigravity_snapshot', 'panel_send_text', 'open_path_smart'].includes(c.command)))).toEqual([]);
   await page.locator('[data-office-agent="tester"]').click();
   await page.getByRole('button', { name: 'Open full chat' }).click();
   await expect(page.getByRole('button', { name: 'Return to office' })).toBeVisible();

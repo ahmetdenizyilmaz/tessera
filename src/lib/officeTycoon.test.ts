@@ -15,6 +15,23 @@ const record=(overrides:Partial<ActivityRecord>={}):ActivityRecord=>({id:'respon
 beforeEach(()=>office.setState({layout:room(),workers:{},profiles:{},panelAliases:{},currency:0,totalEarned:0,completedTasks:0,inventory:{},purchasedItems:[],rewards:[],claimed:{},startedAt:50,ledger:{},companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,legacyEarned:0,prices:{},pendingRecords:[],editMode:false,movingId:null,selectedItem:null,editAction:'place',rotation:0,repeatPurchase:false}));
 
 describe('usage economy',()=>{
+  it('starts fresh once, backs up only office state and never clears panel persistence',()=>{
+    const workspace = '{"panels":["active-chat","active-terminal"]}';
+    localStorage.setItem('tessera-autosave', workspace);
+    office.getState().addWorker('a',{gridX:0,gridY:0});
+    office.setState({currency:5000,inventory:{headphones:3},purchasedItems:['headphones'],permanent:1.5,location:'seaside',expansions:2,lifetimeCoins:6000,companyBase:1000,spinoffs:3});
+    office.getState().equip('a','headphones');
+    const before=localStorage.getItem('tessera-office');
+    office.getState().resetFresh('test-fresh-office');
+    const state=office.getState();
+    expect(state).toMatchObject({currency:0,totalEarned:0,companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,legacyEarned:0,inventory:{},profiles:{},purchasedItems:[],ledger:{},pendingRecords:[],lastResetId:'test-fresh-office'});
+    expect(state.layout.furniture.filter(f=>f.workstationFor)).toHaveLength(1);
+    expect(state.layout.furniture.every(f=>f.id.startsWith('starter-')||f.id.startsWith('auto-desk-'))).toBe(true);
+    expect(localStorage.getItem('tessera-autosave')).toBe(workspace);
+    expect(localStorage.getItem('tessera-office-before-reset')).toBe(before);
+    state.settleUsage(record());expect(office.getState().currency).toBe(0);
+    office.setState({currency:12});state.resetFresh('test-fresh-office');expect(office.getState().currency).toBe(12);
+  });
   it('does not turn supplied workstations into paid environment bonuses when panels close',()=>{
     office.getState().ensureCapacity(['a']);
     const baseline=incomeMultiplier(office.getState(),'a','codex','test');

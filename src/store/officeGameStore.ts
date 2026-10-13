@@ -28,6 +28,8 @@ export interface OfficeGameState {
   expand: () => void;
   relocate: (location: OfficeLocation) => void;
   spinoff: () => boolean;
+  resetFresh: (requestId: string) => void;
+  lastResetId: string | null;
   beginMove: (id: string) => void;
   buyAndPlace: (id: string) => boolean;
   storeHeldItem: () => boolean;
@@ -71,7 +73,7 @@ export interface OfficeGameState {
 export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) => ({
   companyBase: 0, modelBase: {}, permanent: 1, location: 'studio', expansions: 0, spinoffs: 0, lifetimeCoins: 0, legacyEarned: 0, ledger: {}, prices: {}, companyOpen: false,
   layout: getDefaultLayout(), workers: {}, profiles: {}, panelAliases: {}, currency: 0, totalEarned: 0, completedTasks: 0,
-  inventory: {}, purchasedItems: [], rewards: [], claimed: {}, startedAt: Date.now(), pendingRecords: [], syncError: null,
+  inventory: {}, purchasedItems: [], rewards: [], claimed: {}, startedAt: Date.now(), pendingRecords: [], syncError: null, lastResetId: null,
   editMode: false, shopOpen: false, selectedItem: null, rotation: 0, editAction: 'place', movingId: null, repeatPurchase: false, notice: null,
   settleUsage: record => {
     const s = get();
@@ -120,6 +122,20 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
       location:'studio',expansions:0,inventory:{},purchasedItems:[],profiles:{},workers:{},rewards:[],claimed:{},ledger:{},pendingRecords:[],startedAt:at,
       layout:ensureWorkstations(getDefaultLayout(),Object.keys(s.workers)),editMode:false,shopOpen:false,companyOpen:false,selectedItem:null,movingId:null,repeatPurchase:false,notice:'Your new company starts here.'});
     return true;
+  },
+  resetFresh: requestId => {
+    const s = get();
+    if (!requestId || s.lastResetId === requestId) return;
+    // Only this game's storage is backed up and reset. Agent instances, panel
+    // layouts, conversation stores and analytics are never modified here.
+    const saved = localStorage.getItem('tessera-office');
+    if (saved) localStorage.setItem('tessera-office-before-reset', saved);
+    set({ companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,legacyEarned:0,
+      currency:0,totalEarned:0,completedTasks:0,inventory:{},purchasedItems:[],profiles:{},workers:{},panelAliases:{},
+      rewards:[],claimed:{},ledger:{},pendingRecords:[],startedAt:Date.now(),lastResetId:requestId,
+      layout:ensureWorkstations(getDefaultLayout(),Object.keys(s.workers)),
+      editMode:false,shopOpen:false,companyOpen:false,selectedItem:null,movingId:null,repeatPurchase:false,
+      rotation:0,editAction:'place',syncError:null,notice:'A fresh studio. Your panels and conversations are unchanged.' });
   },
   beginMove: id => {const f=get().layout.furniture.find(f=>f.id===id);if(f) set({editMode:true,shopOpen:false,companyOpen:false,selectedItem:null,repeatPurchase:false,editAction:'move',movingId:id,rotation:f.rotation,notice:'Click or drag to place · Wheel / R to rotate · Escape to cancel'});},
   buyAndPlace: id => {
@@ -254,7 +270,7 @@ export const useOfficeGameStore = create<OfficeGameState>()(persist((set, get) =
   onRehydrateStorage: () => state => { state?.tickActivity(Date.now(),true); },
   partialize: s => ({ companyBase:s.companyBase, modelBase:s.modelBase, permanent:s.permanent, location:s.location, expansions:s.expansions, spinoffs:s.spinoffs, lifetimeCoins:s.lifetimeCoins, legacyEarned:s.legacyEarned, ledger:s.ledger, layout: s.layout, currency: s.currency, totalEarned: s.totalEarned, completedTasks: s.completedTasks,
     inventory: s.inventory, purchasedItems: s.purchasedItems, profiles: s.profiles, panelAliases: s.panelAliases, rewards: s.rewards, claimed: s.claimed,
-    startedAt: s.startedAt, pendingRecords: s.pendingRecords }),
+    startedAt: s.startedAt, pendingRecords: s.pendingRecords, lastResetId:s.lastResetId }),
 }));
 
 /** Exported for migration fixtures. Back up before the first destructive scale conversion. */

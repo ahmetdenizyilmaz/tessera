@@ -15,6 +15,7 @@ import { useLayoutStore } from '../src/store/layoutStore';
 import { useOfficeTalkStore } from '../src/lib/officeTalk';
 import { Toasts } from '../src/lib/toast';
 import { Application, Graphics } from 'pixi.js';
+import { IsometricEngine } from '../src/engine/IsometricEngine';
 import { drawSpeechBubble } from '../src/engine/officeArt';
 import { drawOfficeSvg } from '../src/engine/officeSvg';
 import providerBadges from '../src/content/office-provider-icons.json';
@@ -25,6 +26,8 @@ import '../src/styles/antigravity.css';
 const native = !!window.__TAURI_INTERNALS__;
 if (!native) mockWindows('main');
 window.office = useOfficeGameStore;
+const initOfficeEngine = IsometricEngine.prototype.init;
+IsometricEngine.prototype.init = function (parent) { window.officeEngine = this; return initOfficeEngine.call(this, parent); };
 window.previewThoughtBubbles = async () => {
   const app = new Application();
   await app.init({ width: 480, height: 155, background: 0x263b41, antialias: true, resolution: 2 });
@@ -64,7 +67,7 @@ const handler = async (command, args) => {
     return structuredClone(messages);
   }
   if (command === 'panel_send_text') return { delivered: true, panel: args.id };
-  if (command === 'resolve_path_smart') return args.path.includes('missing') ? null : {path:args.path,isDir:! /\.\w+$/.test(args.path),base:'cwd'};
+  if (command === 'resolve_path_smart') return args.path.includes('missing') || ['null','TRAINING COMPLETE','s settings to match the run'].includes(args.path) ? null : {path:args.path,isDir:! /\.\w+$/.test(args.path),base:'cwd'};
   if (command === 'open_path_smart') return args.path.includes('missing') ? null : { path: args.path, isDir: !/\.\w+$/.test(args.path), base: 'cwd' };
   if (command === 'codex_read_thread') return { thread: { id: args.threadId, turns: [{ id: 'saved', items: [{ id: 'saved-answer', type: 'agentMessage', text: 'Saved Codex thread restored in office.' }] }] } };
   if (command === 'activity_list') {

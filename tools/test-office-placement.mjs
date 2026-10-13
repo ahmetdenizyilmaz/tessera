@@ -11,6 +11,7 @@ try {
   console.log('PASS all four provider SVGs remain inside the shirt coordinate range');
   await page.evaluate(()=>{window.office.setState({currency:20000});window.office.getState().expand();window.office.setState({currency:70});});
   await page.getByRole('button',{name:'Fit office',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>window.officeEngine.camera.moving)).toBe(false);
   await page.getByRole('button',{name:'Shop',exact:true}).click();await page.getByRole('button',{name:'Plants',exact:true}).click();
   expect(await page.locator('[data-shop-item]').count()).toBe(3);
   await page.getByRole('button',{name:'Buy Desk-side plant',exact:true}).click();

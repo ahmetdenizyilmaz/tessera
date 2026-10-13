@@ -75,7 +75,7 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
       if (disposed) return;
       const initial = useOfficeGameStore.getState();
       engine.drawFloor(initial.layout); engine.drawWalls(initial.layout); engine.drawFurniture(initial.layout.furniture,initial.profiles);engine.drawExterior(initial.layout,initial.location);
-      engine.showGrid(initial.layout, initial.editMode); engine.centerCamera(); setReady(true);
+      engine.showGrid(initial.layout, initial.editMode); engine.centerCamera(false); setReady(true);
       let lastTime = performance.now();
       let lastLayout = initial.layout, lastWander=0;
       const targets = new Map<string, string>();
@@ -127,6 +127,7 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
   }, [layout, editMode, ready, profiles, location]);
   useEffect(()=>{engineRef.current?.refreshPlacement();},[rotation,movingId,selectedItem,layout,editMode]);
   useEffect(()=>{engineRef.current?.highlightWorker(hover??selected);},[hover,selected]);
+  useEffect(()=>{if (ready) engineRef.current?.focusWorker(selected);},[ready,selected]);
   useEffect(() => { if (shopOpen || editMode || !selectedInstance) closeChat(); }, [shopOpen, editMode, selectedInstance?.id, closeChat]);
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

@@ -1,11 +1,9 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { open as openExternal } from '@tauri-apps/plugin-shell';
-import { ArrowUpRight, Folder, FileText, Link2, MessagesSquare, Send } from 'lucide-react';
+import { ArrowUpRight, MessagesSquare, Send } from 'lucide-react';
 import { useOfficeGameStore } from '../../store/officeGameStore';
 import { useInstanceStore } from '../../store/instanceStore';
 import { useOfficeTalkStore } from '../../lib/officeTalk';
-import { extractPaths, openPath } from '../../lib/openPath';
 import type { ClaudeInstance } from '../../types/instance';
 
 /** Type to the agent from the office. Routed by Rust like a panel message
@@ -35,37 +33,6 @@ export function OfficeComposer({ instance, onOpen }: { instance: ClaudeInstance;
       <button aria-label="Open full chat" title="Open full chat" onClick={() => onOpen(instance.id)}><ArrowUpRight size={15} /></button>
     </div>
   </footer>;
-}
-
-/** Every string nested in the transcript items, newest items last. */
-function collectStrings(value: unknown, out: string[], depth = 0) {
-  if (depth > 6 || value == null) return;
-  if (typeof value === 'string') { if (value.length < 20000) out.push(value); return; }
-  if (Array.isArray(value)) { for (const v of value) collectStrings(v, out, depth + 1); return; }
-  if (typeof value === 'object') for (const v of Object.values(value as Record<string, unknown>)) collectStrings(v, out, depth + 1);
-}
-const URL_RE = /https?:\/\/[^\s"'<>)`\]]+/g;
-
-/** Files, folders and links the conversation mentioned; click opens them. Paths
- * resolve against the panel folder, the Desktop, home and each drive. */
-export function OfficeResources({ items, cwd }: { items: unknown[]; cwd: string }) {
-  const resources = useMemo(() => {
-    const strings: string[] = [];
-    collectStrings(items.slice(-60), strings);
-    const text = strings.join('\n');
-    const urls = [...new Set([...text.matchAll(URL_RE)].map(m => m[0].replace(/[.,;:]+$/, '')))];
-    const paths = extractPaths(text);
-    return { paths: paths.slice(-40).reverse(), urls: urls.slice(-20).reverse() };
-  }, [items]);
-  if (!resources.paths.length && !resources.urls.length) return null;
-  const name = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
-  return <div className="office-resources" aria-label="Resources mentioned in this conversation">
-    <span className="office-eyebrow">RESOURCES</span>
-    <div className="office-resource-list">
-      {resources.paths.map(p => <button key={p} title={`Open ${p}`} onClick={() => void openPath(p, cwd)}>{/\.\w{1,6}$/.test(p) ? <FileText size={12} /> : <Folder size={12} />}<span>{name(p)}</span></button>)}
-      {resources.urls.map(u => <button key={u} title={u} onClick={() => void openExternal(u).catch(() => {})}><Link2 size={12} /><span>{u.replace(/^https?:\/\//, '').slice(0, 40)}</span></button>)}
-    </div>
-  </div>;
 }
 
 /** Ask this agent to talk a topic through with another agent over the panel

@@ -7,6 +7,7 @@ import { useOpenCodeStore } from '../store/opencodeStore';
 import { useAntigravityStore } from '../store/antigravityStore';
 import { useLlmChatStore } from '../store/llmChatStore';
 import { useOfficeGameStore } from '../store/officeGameStore';
+import { applyPendingOfficeReset } from '../lib/officeReset';
 import { useLayoutStore } from '../store/layoutStore';
 import { interactionTile, workerDestination } from '../lib/officeSpace';
 import { antigravitySignal, claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, type WorkSignal } from '../lib/officeActivity';
@@ -20,7 +21,7 @@ export function ingestOfficeRecords(records: ActivityRecord[]) {
 /** App-wide: characters and rewards keep updating while panels are visible. */
 export function useWorkerActivity(): void {
   useEffect(() => {
-    let disposed = false;
+    let disposed = false, initialized = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let lastFullScan = 0;
@@ -31,7 +32,7 @@ export function useWorkerActivity(): void {
 
     function sync() {
       timer = undefined;
-      if (disposed) return;
+      if (disposed || !initialized) return;
       const panelTypes = useLayoutStore.getState().panelTypes;
       const instances = new Map([...useInstanceStore.getState().instances].filter(([id]) => !['computer', 'widget', 'plugin', 'group', 'remote'].includes(panelTypes[id])));
       useOfficeGameStore.getState().ensureCapacity([...instances.keys()]);
@@ -82,7 +83,7 @@ export function useWorkerActivity(): void {
           store.updateWorker(id, state.activity, state.task, state.detail, target);
       }
     }
-    function schedule() { if (!timer && !disposed) timer = setTimeout(sync, 60); }
+    function schedule() { if (!timer && !disposed && initialized) timer = setTimeout(sync, 60); }
     async function poll() {
       if (disposed) return;
       try {
@@ -136,9 +137,14 @@ export function useWorkerActivity(): void {
     }
     const unsubscribe = [useInstanceStore.subscribe(schedule), useLayoutStore.subscribe((s, old) => { if (s.panelTypes !== old.panelTypes) schedule(); }), useChatStore.subscribe(schedule), useCodexStore.subscribe(schedule), useOpenCodeStore.subscribe(schedule), useAntigravityStore.subscribe(schedule), useLlmChatStore.subscribe(schedule),
       useOfficeGameStore.subscribe((s, old) => { if (s.layout !== old.layout) schedule(); })];
-    sync();
     const activityTimer = setInterval(() => useOfficeGameStore.getState().tickActivity(), 30000);
-    void poll();
+    void applyPendingOfficeReset().catch(error => {
+      if (!disposed) useOfficeGameStore.setState({notice:`Could not apply Office reset: ${String(error)}`});
+    }).then(() => {
+      if (disposed) return;
+      initialized = true; since = useOfficeGameStore.getState().startedAt;
+      sync(); void poll();
+    });
     return () => { disposed = true; clearTimeout(timer); clearTimeout(pollTimer); clearInterval(activityTimer); unsubscribe.forEach(unsub => unsub()); };
   }, []);
 }
