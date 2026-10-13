@@ -1,6 +1,8 @@
 /** Path-shaped references only. Existence and relative-path bases are checked
  * by the native resolver before a detected reference becomes a link. */
-export const PATH_TOKENS = /"[^"\r\n]+"|'[^'\r\n]+'|`[^`\r\n]+`|[^\s"'`<>|()[\]{}]+/gu;
+// Apostrophes inside words (They're, I've) aren't quotation marks. Pairing
+// them can swallow an entire sentence, including a valid relative path.
+export const PATH_TOKENS = /"[^"\r\n]+"|(?<![\p{L}\p{N}_])'[^'\r\n]+'(?![\p{L}\p{N}_])|`[^`\r\n]+`|[^\s"'`<>|()[\]{}]+/gu;
 
 export interface PathReference { path: string; start: number; end: number }
 

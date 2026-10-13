@@ -35,7 +35,10 @@ try {
     const link = page.locator('[data-panel-id="codex-ui"] .xterm-rows').getByText(text, { exact: true });
     await expect(link).toBeVisible();
     // xterm's screen handles mouse events; its text spans are pointer-events:none.
-    const box = await link.boundingBox();
+    // xterm can replace the row between the visibility check and measurement
+    // while fonts settle or its link decorations repaint.
+    let box;
+    await expect.poll(async () => { box = await link.boundingBox(); return !!box; }).toBe(true);
     const x = box.x + box.width / 2, y = box.y + box.height / 2;
     await page.mouse.move(x, y);
     if (path) await expect(page.locator('[data-panel-id="codex-ui"] .xterm')).toHaveAttribute('title', /(?:Open folder|Show file in folder):/);
@@ -73,6 +76,37 @@ try {
     await expect.poll(async () => (await pathOpens()).length).toBe(count + 1);
     expect((await pathOpens()).at(-1).args).toEqual({ path, cwd: 'C:\\scratch' });
   }
+
+  const relativeFolder = 'x2test\\fw_2.2.4x_2.2.5x_wakeups\\';
+  const relativeSentence = `They're in ${relativeFolder} and I've opened the folder.`;
+  const report = `I've made the 2-month wake-up charts for all 158 field devices on 2.2.4x and 2.2.5x, one PNG per site. ${relativeSentence} All times are Turkey time (UTC+3).`;
+  const resolvedFolder = 'C:\\scratch\\x2test\\fw_2.2.4x_2.2.5x_wakeups';
+  await page.evaluate(({ path, target }) => {
+    window.pathFixtures[`C:\\scratch|${path}`] = { path: target, isDir: true, base: 'project' };
+  }, { path: relativeFolder, target: resolvedFolder });
+  for (const text of [report, relativeSentence]) {
+    await page.mouse.move(0, 0);
+    await write(`\x1b[2J\x1b[H${text}`);
+    const cell = await page.evaluate(() => {
+      const term = window.terminals.get('codex-ui');
+      for (let row = 0; row < term.rows; row++) {
+        const col = term.buffer.active.getLine(term.buffer.active.baseY + row)?.translateToString(false).indexOf('x2test');
+        if (col >= 0) return { row, col, cols: term.cols, rows: term.rows };
+      }
+    });
+    expect(cell).toBeTruthy();
+    const screen = await page.locator('[data-panel-id="codex-ui"] .xterm-screen').boundingBox();
+    const x = screen.x + (cell.col + 2.5) * screen.width / cell.cols;
+    const y = screen.y + (cell.row + .5) * screen.height / cell.rows;
+    await page.mouse.move(x, y);
+    await expect(page.locator('[data-panel-id="codex-ui"] .xterm')).toHaveAttribute('title', `Open folder: ${resolvedFolder}`);
+    const count = (await pathOpens()).length;
+    await page.mouse.click(x, y);
+    await expect.poll(async () => (await pathOpens()).length).toBe(count + 1);
+    expect((await pathOpens()).at(-1).args).toEqual({ path: relativeFolder, cwd: 'C:\\scratch' });
+  }
+  console.log('PASS Windows relative folder in full report and contraction-containing terminal line');
+
   await write('\x1b[2J\x1b[Hmissing/folder');
   await page.mouse.move(0, 0);
   const count = (await pathOpens()).length;
@@ -123,4 +157,20 @@ try {
   await expect.poll(async () => (await pathOpens()).at(-1).args).toEqual({ path: 'src/assets', cwd: 'D:\\second' });
   await expect(page.getByTestId('path-chat-2').getByRole('link')).toHaveCount(0);
   console.log('PASS chat prose, inline code and Markdown folder links resolve in their own panels; remote paths do not open local lookalikes');
+
+  await page.evaluate(({ report, sentence }) => window.showPathMarkdown([
+    { cwd: 'C:\\scratch', content: report },
+    { cwd: 'C:\\scratch', content: sentence },
+  ]), { report, sentence: relativeSentence });
+  for (let i = 0; i < 2; i++) {
+    const chat = page.getByTestId(`path-chat-${i}`);
+    await expect(chat.getByRole('link')).toHaveCount(1);
+    const link = chat.getByRole('link', { name: relativeFolder, exact: true });
+    await expect(link).toHaveAttribute('title', `Open folder: ${resolvedFolder}`);
+    const count = (await pathOpens()).length;
+    await link.click();
+    await expect.poll(async () => (await pathOpens()).length).toBe(count + 1);
+    expect((await pathOpens()).at(-1).args).toEqual({ path: relativeFolder, cwd: 'C:\\scratch' });
+  }
+  console.log('PASS full report and contraction-containing sentence expose only the existing relative folder as a clickable chat link');
 } finally { await browser.close(); }

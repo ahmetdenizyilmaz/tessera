@@ -35,6 +35,20 @@ describe('path detection in chats', () => {
     expect(extractPaths('`.` `..` README.md#L4')).toEqual(['.', '..', 'README.md#L4']);
     for (const s of ['javascript:alert(1)', 'data:text/plain,hello', 'ssh://host/tmp', 'C:\\bad\nname']) expect(looksLikePath(s, true)).toBe(false);
   });
+  it('finds Windows relative folders in prose containing contractions', () => {
+    const path = 'x2test\\fw_2.2.4x_2.2.5x_wakeups\\';
+    for (const text of [
+      `I've made the 2-month wake-up charts for all 158 field devices on 2.2.4x and 2.2.5x, one PNG per site. They're in ${path} and I've opened the folder. All times are Turkey time (UTC+3).`,
+      `They're in ${path} and I've opened the folder.`,
+      `It's saved in ${path} so don't recreate it.`,
+      `They're in '${path}' and I've opened the folder.`,
+    ]) {
+      const references = findPathReferences(text);
+      expect(references.map(ref => ref.path), text).toEqual([path]);
+      expect(text.slice(references[0].start, references[0].end)).toBe(path);
+    }
+    expect(extractPaths("I've saved 'output images/final' and 'outputs'.")).toEqual(['output images/final', 'outputs']);
+  });
 });
 
 describe('path links in Markdown', () => {

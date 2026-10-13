@@ -1,7 +1,8 @@
 //! Open a file or folder that an agent mentioned in a chat.
 //!
-//! Agents write paths three ways: absolute, relative to the panel's working
-//! folder, or shortened to something under the Desktop or the home folder.
+//! Agents write paths as absolute references, relative to the panel's working
+//! folder, prefixed with a project folder name, or shortened to something
+//! under the Desktop or the home folder.
 //! Rather than guess which, try each base in a fixed order and open the first
 //! candidate that exists. Folders open in the file manager; files are revealed
 //! (selected) in their folder, so a click never launches an arbitrary program.
@@ -15,7 +16,7 @@ use serde::Serialize;
 pub struct OpenedPath {
     pub path: String,
     pub is_dir: bool,
-    /// Which base resolved it: "absolute" | "cwd" | "desktop" | "home" | "drive".
+    /// Which base resolved it: "absolute" | "cwd" | "project" | "desktop" | "home" | "drive".
     pub base: String,
 }
 
@@ -61,8 +62,25 @@ pub fn candidates(raw: &str, cwd: Option<&Path>, home: Option<&Path>, drives: &[
         for drive in drives { push("drive", drive.join(rel)); }
         return out;
     }
-    // Relative: agents shorten to the panel folder, then to the Desktop, then home.
-    if let Some(cwd) = cwd { push("cwd", cwd.join(&s)); }
+    // Try literal cwd-relative paths first. Agents also include the project
+    // name, e.g. "x2test/reports" while cwd is already ".../x2test/src".
+    // Match that prefix to a named ancestor instead of duplicating it. This
+    // only checks explicit candidates; it never searches unrelated folders.
+    if let Some(cwd) = cwd {
+        push("cwd", cwd.join(&s));
+        if let Some(std::path::Component::Normal(prefix)) = path.components().next() {
+            for ancestor in cwd.ancestors() {
+                let Some(name) = ancestor.file_name() else { continue };
+                #[cfg(windows)]
+                let matches = name.to_string_lossy().eq_ignore_ascii_case(&prefix.to_string_lossy());
+                #[cfg(not(windows))]
+                let matches = name == prefix;
+                if matches {
+                    if let Some(parent) = ancestor.parent() { push("project", parent.join(&s)); }
+                }
+            }
+        }
+    }
     if let Some(home) = home {
         push("desktop", home.join("Desktop").join(&s));
         // "Desktop/claude_folder/x" and "claude_folder/x" are both common.
@@ -191,5 +209,47 @@ mod tests {
         let parent = resolve("../inner", Some(&dir.join("My Files"))).unwrap();
         assert!(parent.is_dir);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn resolves_project_prefixed_paths_from_the_project_or_a_nested_working_folder() {
+        let dir = std::env::temp_dir().join(format!("tessera-project-path-{}", uuid::Uuid::new_v4()));
+        let project = dir.join("x2test");
+        let output = project.join("fw_2.2.4x_2.2.5x_wakeups");
+        let nested = project.join("src").join("tools");
+        std::fs::create_dir_all(&output).unwrap();
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(output.join("site.png"), "test").unwrap();
+        for cwd in [&project, &nested] {
+            let hit = resolve("x2test/fw_2.2.4x_2.2.5x_wakeups/", Some(cwd)).expect("project-prefixed folder");
+            assert_eq!(PathBuf::from(hit.path), output);
+            assert!(hit.is_dir);
+            assert_eq!(hit.base, "project");
+            let file = resolve("x2test/fw_2.2.4x_2.2.5x_wakeups/site.png", Some(cwd)).unwrap();
+            assert_eq!(PathBuf::from(file.path), output.join("site.png"));
+            assert!(!file.is_dir);
+        }
+        #[cfg(windows)]
+        for raw in [r"x2test\fw_2.2.4x_2.2.5x_wakeups\", r"X2TEST\fw_2.2.4x_2.2.5x_wakeups\"] {
+            let hit = resolve(raw, Some(&project)).expect("Windows project-prefixed folder");
+            assert_eq!(std::fs::canonicalize(hit.path).unwrap(), std::fs::canonicalize(&output).unwrap());
+        }
+        assert!(resolve("x2test/definitely-not-here", Some(&nested)).is_none());
+        // A real path directly inside the panel folder still takes priority.
+        let local = nested.join("x2test").join("fw_2.2.4x_2.2.5x_wakeups");
+        std::fs::create_dir_all(&local).unwrap();
+        let hit = resolve("x2test/fw_2.2.4x_2.2.5x_wakeups/", Some(&nested)).unwrap();
+        assert_eq!(PathBuf::from(hit.path), local);
+        assert_eq!(hit.base, "cwd");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn does_not_reinterpret_explicit_relative_or_unrelated_paths_as_project_references() {
+        let cwd = PathBuf::from("/workspace/project/src");
+        for raw in ["./project/out", "../project/out", "unrelated/out", "/project/out", "~/project/out"] {
+            assert!(!candidates(raw, Some(&cwd), Some(Path::new("/home/user")), &[])
+                .iter().any(|(base, _)| base == "project"), "{raw}");
+        }
     }
 }

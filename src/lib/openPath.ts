@@ -1,8 +1,8 @@
 /**
  * Clickable file and folder paths in agent chats.
  *
- * Agents write the same folder three ways: absolute, relative to the panel's
- * working folder, or shortened to something under the Desktop or home. Rust
+ * Agents write folders as absolute paths, relative to the panel's working
+ * folder, with a project-name prefix, or shortened under the Desktop or home. Rust
  * (`open_path_smart`) tries each base and opens the first that exists; this
  * module decides what *looks* like a path and routes clicks there.
  */
