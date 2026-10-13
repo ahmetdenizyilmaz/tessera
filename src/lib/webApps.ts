@@ -23,7 +23,10 @@ export function loadWebApps():PluginManifest[] {
   try {
     const entries:unknown=JSON.parse(localStorage.getItem(WEB_APPS_KEY)??'[]');
     if(!Array.isArray(entries))return [];
-    return entries.flatMap(entry=>{try{return [webAppManifest({name:entry.defaultTitle,url:entry.homeUrl,icon:entry.icon},entry.name)];}catch{return [];}});
+    return entries.flatMap(entry=>{
+      if(!entry || typeof entry.name!=='string')return [];
+      try{return [webAppManifest({name:entry.defaultTitle,url:entry.homeUrl,icon:entry.icon},entry.name)];}catch{return [];}
+    });
   } catch {return [];}
 }
 export function saveWebApps(registry:Map<string,PluginManifest>) {

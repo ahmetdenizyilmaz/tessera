@@ -28,3 +28,23 @@ it('restores an exported app definition without replacing existing ones and skip
   expect(loadWebApps()).toEqual([definition]);
   expect(()=>webAppManifest({name:' ',url:'https://example.test',icon:'Globe'})).toThrow();
 });
+it('keeps rapidly created panels independent even when the clock has not advanced',()=>{
+  const name=usePluginStore.getState().addWebApp({name:'Player',url:'https://example.test',icon:'Music'});
+  const clock=vi.spyOn(Date,'now').mockReturnValue(12345);
+  try {
+    const first=usePluginStore.getState().createInstance(name);
+    const second=usePluginStore.getState().createInstance(name);
+    expect(second).not.toBe(first);
+    usePluginStore.getState().destroyInstance(first);
+    expect(usePluginStore.getState().instances.has(second)).toBe(true);
+  } finally {clock.mockRestore();}
+});
+it('does not invent a new browser profile when a saved definition is missing its identity',()=>{
+  const valid=webAppManifest({name:'Player',url:'https://example.test',icon:'Music'});
+  const {name:_,...missingId}=valid;
+  localStorage.setItem(WEB_APPS_KEY,JSON.stringify([missingId,valid]));
+  expect(loadWebApps()).toEqual([valid]);
+  expect(loadWebApps()).toEqual([valid]);
+  expect(()=>usePluginStore.getState().restoreWebApp(missingId as typeof valid)).toThrow();
+  expect(usePluginStore.getState().registry.size).toBe(0);
+});

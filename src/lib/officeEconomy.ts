@@ -55,7 +55,7 @@ export function officeBonuses(layout: OfficeLayout, provider: string) {
   let server = 0;
   for (const f of layout.furniture) {
     // Starter equipment is supplied for capacity, never a free paid bonus.
-    if (f.workstationFor || f.id.startsWith('starter-')) continue;
+    if (f.workstationFor || f.id.startsWith('starter-') || f.id.startsWith('auto-desk-')) continue;
     const b = itemForFurniture(f)?.bonus;
     if (b?.scope === 'environment') families[b.family ?? f.type] = Math.max(families[b.family ?? f.type] ?? 0, b.amount);
     if (b?.scope === 'provider' && b.provider === provider) server = Math.max(server, b.amount);

@@ -17,7 +17,7 @@ import '../src/styles/mosaic.css';
 
 mockWindows('main');
 window.webCalls=[];
-mockIPC((command,args)=>{window.webCalls.push({command,args});if(command==='browser_panel_status')return {url:'https://example.test/player'};return null;}, { shouldMockEvents: true });
+mockIPC((command,args)=>{window.webCalls.push({command,args});if(command==='browser_panel_status'){if(window.failNextBrowserStatus){window.failNextBrowserStatus=false;throw new Error('Temporary browser status failure');}return {url:'https://example.test/player'};}return null;}, { shouldMockEvents: true });
 registerBuiltins();
 window.plugins=usePluginStore;
 window.newSession=openNewSessionWizard;

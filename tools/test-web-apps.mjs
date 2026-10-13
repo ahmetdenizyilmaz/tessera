@@ -31,5 +31,20 @@ try {
   await expect(page.getByRole('button',{name:'Upload icon image'}).locator('img')).toHaveCount(1);
   await page.getByRole('button',{name:'Add and open'}).click();await expect(page.locator('.browser-toolbar img')).toHaveCount(1);
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('tessera-web-apps')).find(m=>m.defaultTitle==='Picture app').icon)).toMatch(/^data:image\/png;base64,/);
+  await page.evaluate(()=>{window.failNextBrowserStatus=true;});
+  await expect(page.locator('.browser-error')).toContainText('Temporary browser status failure');
+  await expect(page.locator('.browser-error')).toHaveCount(0,{timeout:5000});
+  console.log('PASS browser panel clears a temporary status error after a successful retry');
+  await page.setViewportSize({width:600,height:850});
+  await page.evaluate(()=>{
+    for(let i=0;i<12;i++)window.plugins.getState().addWebApp({name:'W'.repeat(55)+i,url:'https://example.test',icon:'Globe'});
+    window.newSession();
+  });
+  await page.getByRole('button',{name:'Add web app',exact:true}).click();
+  expect(await page.locator('.nsw-more').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+  expect(await page.locator('.nsw-web-app').evaluate(el=>el.getBoundingClientRect().right<=innerWidth)).toBe(true);
+  await expect(page.locator('.nsw-more .nsw-plugin').last()).toHaveAttribute('title','W'.repeat(55)+'11');
+  await page.screenshot({path:'../tessera-office-validation/web-app-narrow.png'});
+  console.log('PASS long app names remain accessible without overflowing a narrow new-session panel');
   expect(errors).toEqual([]);console.log('PASS specific shortcut icons, URL validation, custom web app creation/open/close/reopen, profile identity, persisted catalog, and image upload');
 }catch(e){await page.screenshot({path:'../tessera-office-validation/web-app-failure.png'});throw e;}finally{await browser.close();}

@@ -15,6 +15,12 @@ const record=(overrides:Partial<ActivityRecord>={}):ActivityRecord=>({id:'respon
 beforeEach(()=>office.setState({layout:room(),workers:{},profiles:{},panelAliases:{},currency:0,totalEarned:0,completedTasks:0,inventory:{},purchasedItems:[],rewards:[],claimed:{},startedAt:50,ledger:{},companyBase:0,modelBase:{},permanent:1,location:'studio',expansions:0,spinoffs:0,lifetimeCoins:0,legacyEarned:0,prices:{},pendingRecords:[],editMode:false,movingId:null,selectedItem:null,editAction:'place',rotation:0,repeatPurchase:false}));
 
 describe('usage economy',()=>{
+  it('does not turn supplied workstations into paid environment bonuses when panels close',()=>{
+    office.getState().ensureCapacity(['a']);
+    const baseline=incomeMultiplier(office.getState(),'a','codex','test');
+    office.getState().ensureCapacity([]);
+    expect(incomeMultiplier(office.getState(),'a','codex','test')).toBe(baseline);
+  });
   it('settles running tokens once, then only the delayed increment at the original multiplier',()=>{
     office.getState().settleUsage(record());
     expect(office.getState().currency).toBeCloseTo(6);

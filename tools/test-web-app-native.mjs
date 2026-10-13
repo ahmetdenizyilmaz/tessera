@@ -44,4 +44,14 @@ try {
   expect(requests.find(r=>r.path.endsWith('/restarted')).cookie).toContain(cookie);
   await main.evaluate(()=>window.webTest.close());
   console.log('PASS native HttpOnly cookie survives closing/recreating a panel and a full native app restart with the stable app profile');
+  const home=`${base}/configured?mode=compact#/library`;
+  await main.evaluate(home=>window.webTest.create('configured-panel',home),home);
+  await expect.poll(()=>requests.filter(r=>r.path.endsWith('/configured?mode=compact')).length,{timeout:15000}).toBe(1);
+  const status=await main.evaluate(()=>window.webTest.status('configured-panel'));
+  expect(status.url).toBe(home);
+  await main.evaluate(()=>window.webTest.close('configured-panel'));
+  await main.evaluate(({home,url})=>window.webTest.create('restored-configured-panel',home,url),{home,url:status.url});
+  await expect.poll(()=>requests.filter(r=>r.path.endsWith('/configured?mode=compact')).length,{timeout:15000}).toBe(2);
+  await main.evaluate(()=>window.webTest.close('restored-configured-panel'));
+  console.log('PASS native saved custom home retains query parameters and hash routing on panel restore');
 }finally{await finish();server.close();}

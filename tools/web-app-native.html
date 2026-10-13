@@ -2,7 +2,8 @@
 <script type="module">
 import {invoke} from '@tauri-apps/api/core';
 window.webTest={
-  create:(id='cookie-panel',homeUrl='http://127.0.0.1:1420/tools/web-app-cookie.html')=>invoke('browser_panel_create',{id,site:'web-app-cookie-validation',homeUrl,url:null}),
+  create:(id='cookie-panel',homeUrl='http://127.0.0.1:1420/tools/web-app-cookie.html',url=null)=>invoke('browser_panel_create',{id,site:'web-app-cookie-validation',homeUrl,url}),
+  status:(id)=>invoke('browser_panel_status',{id}),
   close:(id='cookie-panel')=>invoke('browser_panel_close',{id}),
   exit:()=>invoke('validation_exit'),
 };

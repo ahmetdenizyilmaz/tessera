@@ -69,6 +69,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     return manifest.name;
   },
   restoreWebApp: saved => {
+    if(typeof saved.name!=='string')throw new Error('A saved web app must have a stable identity.');
     if(get().registry.has(saved.name))return;
     const manifest=webAppManifest({name:saved.defaultTitle,url:saved.homeUrl??'',icon:saved.icon},saved.name);
     const registry=new Map(get().registry);registry.set(manifest.name,manifest);
@@ -109,7 +110,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       return '';
     }
 
-    const id = `plugin-${pluginName}-${Date.now()}`;
+    const id = `plugin-${crypto.randomUUID()}`;
     const instance: PluginInstance = {
       id,
       pluginName,

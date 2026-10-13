@@ -639,8 +639,8 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
           <FolderIcon size={12} style={{ marginRight: 4 }} /> Group
         </button>
         {Array.from(pluginRegistry.keys()).map((name) => (
-          <button key={name} className="btn btn-secondary btn-sm" onClick={() => replaceWizard(instanceId, (destination, replacingId) => createPluginPanel(name, destination, replacingId))}>
-            <PluginIcon icon={pluginRegistry.get(name)?.icon} size={15} /> {pluginRegistry.get(name)?.defaultTitle ?? name}
+          <button key={name} className="btn btn-secondary btn-sm nsw-plugin" title={pluginRegistry.get(name)?.defaultTitle ?? name} onClick={() => replaceWizard(instanceId, (destination, replacingId) => createPluginPanel(name, destination, replacingId))}>
+            <PluginIcon icon={pluginRegistry.get(name)?.icon} size={15} /><span>{pluginRegistry.get(name)?.defaultTitle ?? name}</span>
           </button>
         ))}
         <button className="btn btn-secondary btn-sm" title="Add a web app" aria-label="Add web app" onClick={()=>setAddingWebApp(v=>!v)}><Plus size={16}/></button>

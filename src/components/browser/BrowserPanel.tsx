@@ -20,8 +20,10 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
   const surface = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const [syncError, setSyncError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [clickToFocus, setClickToFocus] = useState(false);
+  const shownError = error || syncError;
 
   useEffect(() => {
     let disposed = false;
@@ -37,6 +39,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
     let disposed = false, frame = 0, busy = false, lastBounds = '', nextStatus = 0;
     setReady(false);
     setError('');
+    setSyncError('');
     const tick = async () => {
       if (disposed) return;
       frame = view.requestAnimationFrame(() => void tick());
@@ -53,10 +56,13 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
         if (Date.now() >= nextStatus) {
           nextStatus = Date.now() + 1500;
           const status = await browserCommand<{ url: string }>(instanceId, 'browser_panel_status');
-          if (!disposed) usePluginStore.getState().setBrowserUrl(instanceId, status.url);
+          if (!disposed) {
+            usePluginStore.getState().setBrowserUrl(instanceId, status.url);
+            setSyncError('');
+          }
         }
       } catch (e) {
-        if (!disposed) setError(String(e));
+        if (!disposed) setSyncError(String(e));
       } finally { busy = false; }
     };
     browserCommand(instanceId, 'browser_panel_create', {
@@ -94,10 +100,10 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
       <button title="Open in default browser" aria-label="Open in default browser" disabled={!ready} onClick={() => action('external')}><ExternalLink size={14} /></button>
       <button title={`Close ${title} panel`} aria-label={`Close ${title} panel`} onClick={close}><X size={14} /></button>
     </div>
-    {error && <div className="browser-error" role="alert">{error}<button onClick={() => setAttempt(n => n + 1)}>Retry</button></div>}
+    {shownError && <div className="browser-error" role="alert">{shownError}<button onClick={() => setAttempt(n => n + 1)}>Retry</button></div>}
     <div ref={surface} className="browser-surface" data-browser-surface={instanceId}>
       <div className="browser-placeholder"><PluginIcon icon={instance?.icon??'Globe'} size={32} /><strong>{title}</strong>
-        <span>{error ? 'The browser could not be opened.' : clickToFocus ? 'Click to focus and interact' : ready ? 'Your session stays open while you use Tessera.' : `Opening ${title}…`}</span>
+        <span>{shownError ? 'The browser could not be opened.' : clickToFocus ? 'Click to focus and interact' : ready ? 'Your session stays open while you use Tessera.' : `Opening ${title}…`}</span>
       </div>
     </div>
   </div>;

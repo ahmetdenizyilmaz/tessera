@@ -42,6 +42,9 @@ fn allowed(url: &tauri::Url) -> bool {
 }
 
 fn saved_url(url: &tauri::Url, policy: &SitePolicy) -> String {
+    // The user-chosen home is already saved in the app definition. Keep its
+    // query/hash route instead of replacing it with the site's root on restart.
+    if policy.custom && url == &policy.home { return policy.home.to_string(); }
     // Never put login redirects, tokens, or account settings into workspace exports.
     if !policy.allows(url) || ["/login", "/signin", "/signup", "/auth", "/oauth", "/account"].iter().any(|p| url.path().starts_with(p)) {
         return policy.home.to_string();
@@ -225,5 +228,13 @@ mod tests {
         assert_eq!(saved_url(&"https://player.example.test/music?token=secret#fragment".parse().unwrap(), &policy),"https://player.example.test/music");
         assert!(SitePolicy::new("web-app-../../outside",Some("https://example.test/")).is_err());
         assert!(SitePolicy::new("web-app-safe",Some("file:///C:/secret")).is_err());
+    }
+    #[test]
+    fn configured_web_app_home_keeps_its_query_and_hash_route_on_restore() {
+        let policy=SitePolicy::new("web-app-player",Some("https://player.example.test/?mode=compact#/library")).unwrap();
+        assert_eq!(saved_url(&policy.home, &policy),policy.home.to_string());
+        // Unconfigured redirects must still not save their temporary credentials.
+        assert_eq!(saved_url(&"https://login.example.test/oauth?token=secret".parse().unwrap(), &policy),policy.home.to_string());
+        assert_eq!(saved_url(&"https://player.example.test/music?token=secret#fragment".parse().unwrap(), &policy),"https://player.example.test/music");
     }
 }
