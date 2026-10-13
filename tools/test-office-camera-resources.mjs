@@ -16,6 +16,11 @@ try {
   await expect(page.locator('[data-office-agent]')).toHaveCount(5);
   await expect.poll(()=>page.evaluate(()=>Object.values(window.office.getState().workers).every(w=>w.position.x===w.targetPosition.gridX&&w.position.y===w.targetPosition.gridY)),{timeout:20000}).toBe(true);
   await settled();const before=await camera();
+  await page.evaluate(()=>{
+    window.cameraJumps=[];
+    const camera=window.officeEngine.camera,resize=camera.resize.bind(camera);
+    camera.resize=(dx,dy)=>{window.cameraJumps.push({dx,dy});resize(dx,dy);};
+  });
   const hit=await page.evaluate(()=>{
     const e=window.officeEngine,r=document.querySelector('.office-canvas').getBoundingClientRect();
     const p=e.workerGraphics.get('architect').body.toGlobal({x:0,y:-24});return{x:r.x+p.x,y:r.y+p.y};
@@ -30,6 +35,7 @@ try {
   const zoomOut=await samples();await settled();
   expect(new Set(zoomOut.map(z=>z.toFixed(4))).size).toBeGreaterThan(3);
   expect((await camera()).zoom).toBeCloseTo(before.zoom);
+  expect(await page.evaluate(()=>window.cameraJumps)).toEqual([]);
   console.log('PASS real character click smoothly zooms in; chat dismissal smoothly restores overview');
 
   await page.locator('[data-office-agent="architect"]').click();await settled();

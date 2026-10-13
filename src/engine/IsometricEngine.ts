@@ -70,9 +70,11 @@ export class IsometricEngine {
       const { width, height } = this.app.screen;
       if (width === parent.clientWidth && height === parent.clientHeight) return;
       this.app.renderer.resize(parent.clientWidth, parent.clientHeight);
-      this.camera.resize((parent.clientWidth - width) / 2, (parent.clientHeight - height) / 2);
+      const dx = (parent.clientWidth - width) / 2, dy = (parent.clientHeight - height) / 2;
       if (this.focusedWorker) this.frameWorker(this.focusedWorker);
       else if (this.cameraFitted) this.centerCamera();
+      else if (this.camera.moving) this.camera.moveTo({ ...this.camera.target, x: this.camera.target.x + dx, y: this.camera.target.y + dy }, this.animateCamera());
+      else this.camera.resize(dx, dy);
       this.updateCamera();
     });
     this.resizeObserver.observe(parent);

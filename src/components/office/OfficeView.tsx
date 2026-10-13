@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { Minus, Plus, Scan, Users } from 'lucide-react';
 import { IsometricEngine } from '../../engine/IsometricEngine';
 import { OfficeWander } from '../../engine/OfficeWander';
@@ -75,6 +75,8 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
       if (disposed) return;
       const initial = useOfficeGameStore.getState();
       engine.drawFloor(initial.layout); engine.drawWalls(initial.layout); engine.drawFurniture(initial.layout.furniture,initial.profiles);engine.drawExterior(initial.layout,initial.location);
+      engine.syncWorkers(Object.keys(initial.workers));
+      engine.updateWorkerPositions(new Map(Object.entries(initial.workers).map(([id, worker]) => [id, { ...worker.position, direction: worker.direction, isWalking: false, seat: worker.seat }])));
       engine.showGrid(initial.layout, initial.editMode); engine.centerCamera(false); setReady(true);
       let lastTime = performance.now();
       let lastLayout = initial.layout, lastWander=0;
@@ -127,7 +129,7 @@ export function OfficeView({ onBack }: { onBack: () => void }) {
   }, [layout, editMode, ready, profiles, location]);
   useEffect(()=>{engineRef.current?.refreshPlacement();},[rotation,movingId,selectedItem,layout,editMode]);
   useEffect(()=>{engineRef.current?.highlightWorker(hover??selected);},[hover,selected]);
-  useEffect(()=>{if (ready) engineRef.current?.focusWorker(selected);},[ready,selected]);
+  useLayoutEffect(()=>{if (ready) engineRef.current?.focusWorker(selected);},[ready,selected]);
   useEffect(() => { if (shopOpen || editMode || !selectedInstance) closeChat(); }, [shopOpen, editMode, selectedInstance?.id, closeChat]);
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
