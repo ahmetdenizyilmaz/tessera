@@ -17,8 +17,8 @@ async function dragMain(delta, end = 'up') {
   if (end === 'escape') await page.keyboard.press('Escape');
   if (end === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   if (end === 'lost') {
-    expect(await page.locator('.mosaic-container').evaluate(el => el.hasPointerCapture(1))).toBe(true);
-    await page.locator('.mosaic-container').evaluate(el => el.releasePointerCapture(1));
+    expect(await page.locator('.mosaic-gutter').evaluate(el => el.hasPointerCapture(1))).toBe(true);
+    await page.locator('.mosaic-gutter').evaluate(el => el.releasePointerCapture(1));
     await page.mouse.move(x + workspace.width * delta / 100 + 1, y);
   }
   await page.mouse.up(); await settle();
@@ -66,6 +66,8 @@ try {
   const rects = await page.evaluate(() => window.layout.getState().tabOrder.map(id => window.layout.getState().panelRects.get(id)));
   expect(rects[0].w).toBeCloseTo(40, 0); expect(rects[2].w).toBe(50);
   await expect(page.locator('.mosaic-gutter-dragging')).toHaveCount(0);
+  await page.locator('.mosaic-gutter-x').first().dblclick(); await settle();
+  expect(await page.evaluate(() => window.layout.getState().panelRects.get(window.layout.getState().focusedId).w)).toBe(75);
   expect(errors).toEqual([]);
-  console.log('PASS twelve-panel resizing, Escape, window blur, lost capture, subsequent gestures, and crossing aligned dividers');
+  console.log('PASS twelve-panel resizing, Escape, window blur, lost capture, subsequent gestures, crossing aligned dividers, and double-click reset');
 } finally { await browser.close(); }

@@ -232,6 +232,8 @@ export function MosaicLayout() {
     // Nothing to resize against while one panel fills the area.
     if (draggingId || isAnimating || maximizedId) return [];
     if (gutterDragging && resizeRef.current) {
+      // Keep the captured gutter mounted with the same membership/key even
+      // while other edges align with it, until the gesture is released.
       const { gutter } = resizeRef.current;
       const before = displayRects.get(gutter.panelsBefore[0]);
       return before ? [{ ...gutter, position: gutter.axis === 'x' ? before.x + before.w : before.y + before.h }] : [];
@@ -244,10 +246,11 @@ export function MosaicLayout() {
     if (e.button !== 0 || resizeRef.current || !containerRef.current) return;
     e.stopPropagation();
     e.preventDefault();
-    // Gutters merge/split as edges align. Capture on the stable container so
-    // replacing a gutter cannot lose mouse-up or strand the resize gesture.
-    containerRef.current.setPointerCapture(e.pointerId);
-    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+    // Capture on the retained handle, so click/double-click still target the
+    // divider itself. Capturing on its parent swallows double-click reset.
+    const captureTarget = e.currentTarget as HTMLElement;
+    captureTarget.setPointerCapture(e.pointerId);
+    captureTarget.focus({ preventScroll: true });
     const currentRects = useLayoutStore.getState().panelRects;
     resizeRef.current = {
       gutter,
@@ -255,7 +258,7 @@ export function MosaicLayout() {
       startRects: new Map(currentRects),
       commit: beginPanelResize(useLayoutStore),
       pointerId: e.pointerId,
-      captureTarget: containerRef.current,
+      captureTarget,
       previousCursor: document.body.style.cursor,
       previousUserSelect: document.body.style.userSelect,
     };
