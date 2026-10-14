@@ -12,6 +12,7 @@ export interface PluginManifest {
   homeUrl?: string;
   customWebApp?: boolean;
   htmlPlugin?: boolean;
+  bundled?: boolean;
   permissions?: HtmlPluginPermissions;
   enabled?: boolean;
   favicon?: string;                 // cached PNG; an empty web panel icon means automatic

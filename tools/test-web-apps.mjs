@@ -1,3 +1,4 @@
+import {appLibrary,showAppLibrary,openLibraryApp,libraryApp} from './app-library-helpers.mjs';
 import { chromium, expect } from '@playwright/test';
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const page=await browser.newPage({viewport:{width:1400,height:1000}});
@@ -6,9 +7,11 @@ const errors=[];page.on('pageerror',e=>{if(!e.message.includes('WebSocket closed
 await page.route('**/web-app-test',route=>route.fulfill({contentType:'text/html',body:`<div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script><script type="module" src="/tools/new-session-focus-fixture.jsx"></script>`}));
 try {
   await page.goto(`${base}/web-app-test`);await page.waitForFunction(()=>!!window.newSession);await page.evaluate(()=>window.newSession());
-  const more=page.locator('.nsw-more');await expect(more.getByRole('button',{name:'Timer',exact:true}).locator('svg.lucide-timer')).toHaveCount(1);
-  await expect(more.getByRole('button',{name:'Notepad',exact:true}).locator('svg.lucide-file-text')).toHaveCount(1);
-  await expect(more.getByRole('button',{name:'Lichess',exact:true}).locator('svg path')).toHaveCount(2);
+  await showAppLibrary(page);
+  await expect(libraryApp(page,'Timer').locator('svg.lucide-timer')).toHaveCount(1);
+  await expect(libraryApp(page,'Notes').locator('svg.lucide-notebook-pen')).toHaveCount(1);
+  await expect(libraryApp(page,'Lichess').locator('.addon-info>svg path')).toHaveCount(2);
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Add web app',exact:true}).click();const form=page.getByRole('form',{name:'Add web app'});
   await form.getByLabel('Name',{exact:true}).fill('My player');await form.getByLabel('Web address').fill('file:///C:/secret');
   await form.getByRole('button',{name:'Add and open'}).click();await expect(form.getByRole('alert')).toBeVisible();
@@ -20,11 +23,11 @@ try {
   expect(config.homeUrl).toBe('https://example.test/player');expect(config.site).toMatch(/^web-app-/);
   await expect(page.locator('.browser-toolbar svg.lucide-music')).toHaveCount(1);
   await page.getByRole('button',{name:'Close My player panel'}).click();await page.evaluate(()=>window.newSession());
-  await page.locator('.nsw-more').getByRole('button',{name:'My player',exact:true}).click();
+  await openLibraryApp(page,'My player');
   await expect(page.getByRole('button',{name:'My player home'})).toBeEnabled();
   expect(await page.evaluate(()=>window.webCalls.filter(c=>c.command==='browser_panel_create').at(-1).args.site)).toBe(config.site);
   await page.reload();await page.waitForFunction(()=>!!window.newSession);await page.evaluate(()=>window.newSession());
-  await expect(page.locator('.nsw-more').getByRole('button',{name:'My player',exact:true})).toBeVisible();
+  await showAppLibrary(page);await expect(libraryApp(page,'My player')).toBeVisible();await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Add web app',exact:true}).click();
   await page.getByLabel('Name',{exact:true}).fill('Picture app');await page.getByLabel('Web address').fill('example.test');
   await page.getByLabel('Icon image',{exact:true}).setInputFiles({name:'circle.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="#60a5fa"/></svg>')});
@@ -43,7 +46,7 @@ try {
   await page.getByRole('button',{name:'Add web app',exact:true}).click();
   expect(await page.locator('.nsw-more').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
   expect(await page.locator('.nsw-web-app').evaluate(el=>el.getBoundingClientRect().right<=innerWidth)).toBe(true);
-  await expect(page.locator('.nsw-more .nsw-plugin').last()).toHaveAttribute('title','W'.repeat(55)+'11');
+  await showAppLibrary(page);await expect(appLibrary(page).getByRole('button',{name:'Open '+'W'.repeat(55)+'11',exact:true})).toBeVisible();
   await page.screenshot({path:'../tessera-office-validation/web-app-narrow.png'});
   console.log('PASS long app names remain accessible without overflowing a narrow new-session panel');
   expect(errors).toEqual([]);console.log('PASS specific shortcut icons, URL validation, custom web app creation/open/close/reopen, profile identity, persisted catalog, and image upload');

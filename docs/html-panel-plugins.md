@@ -5,17 +5,17 @@ notes, games, dashboards, and small utilities. Most apps need no permissions.
 
 ## Install and use
 
-Open **Plugins → Import HTML app…** (also in File and Manage add-ons).
+Open **Apps → Import HTML app…** (also in File and App library).
 Choose a self-contained `.html` file, a folder, or a ZIP containing `manifest.json`.
 Review the app and any optional permissions, then choose **Install and open**.
-Calculator, Quick Notes, and Memory Break are included on the import screen as
-examples. Their source is in [`examples/html-apps`](../examples/html-apps).
+Notes, Timer, Clock, Calculator, and Memory Break are included automatically.
+They use the same HTML-app system as imported apps. Their source is in [`examples/html-apps`](../examples/html-apps).
 
-Installed apps appear in **Plugins**, **New session → More**, and detached-window
+Installed apps appear in **Apps → App library**, **New session → More → App library**, and detached-window
 menus. They use the same resize, grouping, lock, focus, and detach rules as other
 panels. Small panels use click-to-focus; their header settings can change this.
 
-**Manage add-ons → Permissions** changes access immediately for every instance
+**App library → Permissions** changes access immediately for every instance
 of that app. No optional permissions are checked by default, including updates.
 Removing an app closes its panels and removes its shortcuts. Restoring it keeps
 its saved data. Updating an app closes its old panels before opening the new
@@ -23,7 +23,16 @@ version; the package ID and data remain the same.
 
 Website players such as Lichess and Instagram remain a separate option. They
 load a live website with persistent cookies; they do not receive this SDK.
-Legacy built-in Notepad/Timer plugins continue to work as before.
+The old iframe plugin runtime has been removed. Existing Notepad and Timer
+panels reopen as the new HTML apps with their panel IDs, positions, and locks
+preserved. Notes imports every valid old per-panel notebook (including closed
+panels) and keeps the original localStorage. All Notes panels share the new
+notebook. Each note is stored separately so editing one note cannot overwrite
+another panel's different note. Trash is recoverable. An existing Quick Notes
+scratchpad is also retained. Timer and Clock keep their state per panel; a
+countdown uses an absolute deadline across app restarts.
+
+For a public downloadable catalog, see [GitHub app catalogs](github-app-catalog.md).
 
 ## Package format
 
@@ -70,6 +79,7 @@ const info = await Tessera.ready;
 const note = await Tessera.storage.get('draft', '');
 await Tessera.storage.set('draft', 'Remember this after restarting');
 await Tessera.storage.remove('obsolete');
+const notes = await Tessera.storage.entries('note:'); // Own keys/values with this prefix
 
 await Tessera.ui.setTitle('Notes — project ideas');
 await Tessera.ui.setBadge(3); // null clears the badge

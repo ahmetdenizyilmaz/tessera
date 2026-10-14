@@ -1,3 +1,4 @@
+import { canonicalAppName } from './bundledApps';
 import { captureGroupSnapshot, ensurePanelAtLevel, getPanelLocations, removePanelsFromWorkspace,
   updateLevelLayout, useGroupStore } from '../store/groupStore';
 import { useLayoutStore, notifyPanelLimit } from '../store/layoutStore';
@@ -104,9 +105,9 @@ export function restoreClosedPanel(saved: ClosedPanel, wizardId?: string): boole
   }
   if (!windowRoot && !canPlacePanel(destination, wizardId)) { notifyPanelLimit(); return false; }
   const all = flatten(saved.panel);
-  const removed = all.find(p => p.plugin && usePluginStore.getState().removedPlugins.has(p.plugin.pluginName));
-  if (removed) { notify(`Restore ${removed.name} in Manage add-ons before reopening it.`); return false; }
-  const unavailable = all.find(p => p.plugin && !usePluginStore.getState().registry.has(p.plugin.pluginName));
+  const removed = all.find(p => p.plugin && usePluginStore.getState().removedPlugins.has(canonicalAppName(p.plugin.pluginName)));
+  if (removed) { notify(`Restore ${removed.name} in the App library before reopening it.`); return false; }
+  const unavailable = all.find(p => p.plugin && !usePluginStore.getState().registry.has(canonicalAppName(p.plugin.pluginName)));
   if (unavailable) { notify(`Install ${unavailable.plugin!.pluginName} to reopen ${unavailable.name}.`); return false; }
   const missingRemote = all.find(p => p.remoteDeviceId && !useLanStore.getState().status?.peers.some(peer =>
     peer.deviceId === p.remoteDeviceId && (p.type !== 'remote' || peer.panels.some(info => info.id === splitRemotePanelId(p.id)?.panelId))));
@@ -130,7 +131,7 @@ export function restoreClosedPanel(saved: ClosedPanel, wizardId?: string): boole
     }
     if (panel.plugin) {
       const plugin = clone(panel.plugin);
-      usePluginStore.setState(state => ({ instances: new Map(state.instances).set(plugin.id, { ...plugin, iframeReady: false }) }));
+      usePluginStore.setState(state => ({ instances: new Map(state.instances).set(plugin.id, { ...plugin, pluginName: canonicalAppName(plugin.pluginName), iframeReady: false }) }));
     }
     const messages = panel.llmMessages;
     if (messages) useLlmChatStore.setState(state => ({ conversations: { ...state.conversations,

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { canonicalAppName } from '../lib/bundledApps';
 import { invoke } from '@tauri-apps/api/core';
 import type { PluginManifest, PluginInstance } from '../types/plugin';
 import { loadWebApps, saveWebApps, webAppManifest, webAppIcon, validWebAppIcon, restoreBrowserIcon, saveBrowserIcon, type WebAppInput } from '../lib/webApps';
@@ -73,6 +74,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   instances: EMPTY_INSTANCES,
   removedPlugins: loadRemovedPlugins(),
   setPluginRemoved: (name, removed) => {
+    name = canonicalAppName(name);
     if (!get().registry.has(name)) return;
     const removedPlugins = new Set(get().removedPlugins);
     if (removed) removedPlugins.add(name); else removedPlugins.delete(name);
@@ -144,15 +146,24 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       const results = await invoke<Array<{ name: string; manifest: PluginManifest }>>('scan_plugins');
       // Preserve built-in plugins, then add scanned external plugins
       const next = new Map<string, PluginManifest>();
-      get().registry.forEach((m, name) => { if (m.builtin || m.customWebApp) next.set(name, m); });
+      get().registry.forEach((m, name) => { if ((m.builtin && !m.htmlPlugin) || m.customWebApp) next.set(name, m); });
       for (const entry of results) {
         if(!next.has(entry.name))next.set(entry.name, restoreBrowserIcon(entry.manifest));
+      }
+      // Carry old removal choices over exactly once. Keep old keys until the
+      // native write succeeds, so interrupted migration can safely retry.
+      for (const old of ['notepad', 'timer']) if (get().removedPlugins.has(old)) {
+        const name=canonicalAppName(old);
+        await invoke('html_plugin_set_enabled',{plugin:name,enabled:false});
+        const entry=results.find(e=>e.name===name);if(entry)entry.manifest.enabled=false;
+        const manifest=next.get(name);if(manifest)next.set(name,{...manifest,enabled:false});
       }
       saveHtmlApps(next);
       const removedPlugins = new Set(get().removedPlugins);
       for (const { name, manifest } of results) if (manifest.htmlPlugin) {
         if (manifest.enabled === false) removedPlugins.add(name); else removedPlugins.delete(name);
       }
+      removedPlugins.delete('notepad'); removedPlugins.delete('timer');
       saveRemovedPlugins(removedPlugins);
       set({ registry: next, removedPlugins });
     } catch {
@@ -162,7 +173,8 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
 
   createInstance: (pluginName: string) => {
-    if (get().removedPlugins.has(pluginName)) return '';
+    pluginName = canonicalAppName(pluginName);
+    if ([pluginName, ...(pluginName === 'html-tessera.quick-notes' ? ['notepad'] : pluginName === 'html-tessera.timer' ? ['timer'] : [])].some(name => get().removedPlugins.has(name))) return '';
     const manifest = get().registry.get(pluginName);
     if (!manifest) {
       console.warn(`[pluginStore] Cannot create instance: plugin "${pluginName}" not found in registry`);
@@ -192,7 +204,8 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
 
   restoreInstance: (pluginName: string, id: string, title?: string) => {
-    if (get().removedPlugins.has(pluginName)) return false;
+    pluginName = canonicalAppName(pluginName);
+    if ([pluginName, ...(pluginName === 'html-tessera.quick-notes' ? ['notepad'] : pluginName === 'html-tessera.timer' ? ['timer'] : [])].some(name => get().removedPlugins.has(name))) return false;
     const manifest = get().registry.get(pluginName);
     if (!manifest) {
       console.warn(`[pluginStore] Cannot restore instance: plugin "${pluginName}" not found in registry`);

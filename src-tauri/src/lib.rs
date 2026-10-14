@@ -149,6 +149,8 @@ pub fn run() {
             html_plugins::serve(ctx.app_handle().clone(), ctx.webview_label().to_string(), request, responder);
         })
         .invoke_handler(main_view_commands(tauri::generate_handler![
+            html_plugins::bundled::html_plugin_migrate_notes,
+            html_plugins::catalog::html_catalog_list,html_plugins::catalog::html_catalog_preview,
             html_plugins::scan_plugins,
             html_plugins::html_plugin_inspect,
             html_plugins::html_plugin_sample,

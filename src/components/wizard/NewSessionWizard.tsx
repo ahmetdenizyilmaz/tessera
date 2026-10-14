@@ -4,9 +4,7 @@ import { AntigravitySetup } from '../antigravity/AntigravitySetup';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { KeyRound, BadgeCheck, Folder as FolderIcon, Plus, ChevronDown, ChevronUp, Monitor, GitFork, Settings2 } from 'lucide-react';
-import { PluginIcon } from '../icons/PluginIcon';
-import { webAppIcon } from '../../lib/webApps';
+import { KeyRound, BadgeCheck, Folder as FolderIcon, Plus, ChevronDown, ChevronUp, Monitor, GitFork, Grid2X2 } from 'lucide-react';
 import { AddWebApp } from './AddWebApp';
 import { AddonManager } from '../plugins/AddonManager';
 import { useWizardStore, type WizardRoute } from '../../store/wizardStore';
@@ -14,7 +12,6 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { removePanelsFromWorkspace } from '../../store/groupStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
-import { usePluginStore } from '../../store/pluginStore';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
 import { AuthBadgePreview } from '../icons/AuthBadgePreview';
@@ -63,8 +60,6 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
   const s = useWizardStore();
   const settings = useSettingsStore((st) => st.settings);
   const projects = useProjectStore((st) => st.projects);
-  const pluginRegistry = usePluginStore((st) => st.registry);
-  const removedPlugins = usePluginStore(st => st.removedPlugins);
 
   const [models, setModels] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -642,16 +637,11 @@ export default function NewSessionWizard({ instanceId }: NewSessionWizardProps) 
         <button className="btn btn-secondary btn-sm" onClick={() => replaceWizard(instanceId, createGroupPanel)}>
           <FolderIcon size={12} style={{ marginRight: 4 }} /> Group
         </button>
-        {Array.from(pluginRegistry.keys()).filter(name => !removedPlugins.has(name)).map((name) => (
-          <button key={name} className="btn btn-secondary btn-sm nsw-plugin" title={pluginRegistry.get(name)?.defaultTitle ?? name} onClick={() => replaceWizard(instanceId, (destination, replacingId) => createPluginPanel(name, destination, replacingId))}>
-            <PluginIcon icon={pluginRegistry.has(name) ? webAppIcon(pluginRegistry.get(name)!) : undefined} size={15} /><span>{pluginRegistry.get(name)?.defaultTitle ?? name}</span>
-          </button>
-        ))}
+        <button className="btn btn-secondary btn-sm" title="Browse apps and web players" onClick={() => setManagingAddons(true)}><Grid2X2 size={16}/>App library</button>
         <button className="btn btn-secondary btn-sm" title="Add a web app" aria-label="Add web app" onClick={()=>setAddingWebApp(v=>!v)}><Plus size={16}/></button>
-        <button className="btn btn-secondary btn-sm" title="Manage add-ons" aria-label="Manage add-ons" onClick={() => setManagingAddons(true)}><Settings2 size={16}/></button>
       </div>
       {addingWebApp && <AddWebApp onCancel={()=>setAddingWebApp(false)} onAdded={name=>replaceWizard(instanceId,(destination,replacingId)=>createPluginPanel(name,destination,replacingId))}/>}
-      {managingAddons && <AddonManager onClose={() => setManagingAddons(false)}/>}
+      {managingAddons && <AddonManager onClose={() => setManagingAddons(false)} onOpen={name=>replaceWizard(instanceId,(destination,replacingId)=>createPluginPanel(name,destination,replacingId))}/>}
       {!s.fork && <RecentPanels wizardId={instanceId} />}
     </div>
   );

@@ -40,11 +40,11 @@ async function open(name){const id=await page.evaluate(name=>{window.htmlTest.cr
 async function ready(id){await expect.poll(async()=>{try{return await probe(id,'!!window.Tessera && !!document.body');}catch{return false;}},{timeout:25000}).toBe(true);return probe(id,'Tessera.ready');}
 const close=id=>page.evaluate(id=>window.htmlTest.closePanel(id,false),id);
 async function sample(name){const p=await invoke('html_plugin_sample',{sample:name});const m=await invoke('html_plugin_install',{ticket:p.ticket,grants:{network:[],panels:[],targets:[]}});await page.evaluate(m=>window.htmlTest.plugins.getState().registerHtmlApp(m),m);return m.name;}
-const manager=()=>page.getByRole('dialog',{name:'Manage add-ons',exact:true});
-async function openManager(){await page.getByRole('button',{name:'Plugins',exact:true}).click();await page.getByRole('button',{name:'Manage add-ons…',exact:true}).click();await expect(manager()).toBeVisible();}
+const manager=()=>page.getByRole('dialog',{name:'App library',exact:true});
+async function openManager(){await page.getByRole('button',{name:'Apps',exact:true}).click();await page.getByRole('button',{name:'App library…',exact:true}).click();await expect(manager()).toBeVisible();}
 try{
   await launch();
-  await page.getByRole('button',{name:'Plugins',exact:true}).click();
+  await page.getByRole('button',{name:'Apps',exact:true}).click();
   await page.getByRole('button',{name:'Import HTML app…',exact:true}).click();
   await manager().getByRole('button',{name:'Calculator',exact:true}).click();
   await expect(manager()).toContainText('No network or conversation access requested');
@@ -72,7 +72,14 @@ try{
   expect(await probe(calculator,"(()=>{const w=window.open('https://example.com');return w===null})()")).toBe(true);
   console.log('PASS real import/review/open UI, calculator, default-deny panel/network/host commands, CSP, navigation/popups');
 
-  const notesName=await sample('notes'),notes=await open(notesName),noteText=`Native saved note ${Date.now()} ✓`;
+  const legacyKey='plugin-notepad-validation-'+Date.now();
+  const legacy=[{id:'old-note',title:'Original notebook',content:'Kept from the old iframe',updatedAt:1}];
+  await page.evaluate(({legacyKey,legacy})=>localStorage.setItem(legacyKey,JSON.stringify(legacy)),{legacyKey,legacy});
+  const notesName=await sample('notes'),notes=await open('notepad'),noteText=`Native saved note ${Date.now()} ✓`;
+  await expect.poll(()=>probe(notes,"!document.querySelector('#new').disabled")).toBe(true);
+  expect((await probe(notes,"Tessera.storage.entries('note:').then(items=>Object.values(items).filter(n=>n.content==='Kept from the old iframe').length)"))).toBeGreaterThan(0);
+  expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),legacyKey)).toEqual(legacy);
+  await probe(notes,"(()=>{document.querySelector('#new').click();return true})()");
   await expect.poll(()=>probe(notes,"!document.querySelector('#note').disabled")).toBe(true);
   await probe(notes,`(()=>{const n=document.querySelector('#note');n.value=${JSON.stringify(noteText)};n.dispatchEvent(new Event('input'));return true})()`);
   await expect.poll(()=>probe(notes,"document.querySelector('#status').textContent")).toBe('Saved');
@@ -90,6 +97,28 @@ try{
   await expect.poll(async()=>(await invoke('validation_info',{id:notesAgain})).parent,{timeout:15000}).toBe('main');
   expect(await page.evaluate(id=>window.htmlTest.locks.getState().lockedIds.has(id),notesAgain)).toBe(true);
   console.log('PASS notes persist across close/reopen, per-app storage isolation/quota, native detach/reparent retains state and lock');
+
+  const timerName=await sample('timer'),timer=await open('timer');
+  await expect.poll(()=>probe(timer,"!document.querySelector('#start').disabled")).toBe(true);
+  await probe(timer,"(()=>{document.querySelector('#minutes').value=0;document.querySelector('#seconds').value=2;document.querySelector('#set').click();document.querySelector('#start').click();return true})()");
+  await expect.poll(()=>probe(timer,"document.body.classList.contains('done')"),{timeout:6000}).toBe(true);
+  expect(await probe(timer,"document.querySelector('#display').textContent")).toBe('00:00');
+  await probe(timer,"(()=>{document.querySelector('#stopwatch').click();document.querySelector('#start').click();return true})()");
+  await expect.poll(()=>probe(timer,"document.querySelector('#display').textContent"),{timeout:5000}).not.toBe('00:00');
+  await probe(timer,"(()=>{document.querySelector('#lap').click();document.querySelector('#start').click();return true})()");
+  const elapsed=await probe(timer,"Tessera.storage.get('timer',null,'panel').then(s=>s.elapsed)");
+  expect(elapsed).toBeGreaterThan(0);
+  expect(await probe(timer,"document.querySelectorAll('#laps li').length")).toBe(1);
+  // Running countdown persists a deadline, not an interval count.
+  await probe(timer,"(()=>{document.querySelector('#countdown').click();document.querySelector('#minutes').value=2;document.querySelector('#seconds').value=0;document.querySelector('#set').click();document.querySelector('#start').click();return true})()");
+  await expect.poll(()=>probe(timer,"Tessera.storage.get('timer',null,'panel').then(s=>s.running)")).toBe(true);
+  const timerDeadline=await probe(timer,"Tessera.storage.get('timer',null,'panel').then(s=>s.deadline)");
+  const clockName=await sample('clock'),clock=await open(clockName);
+  await expect.poll(()=>probe(clock,"!document.querySelector('#format').disabled")).toBe(true);
+  await probe(clock,"(()=>{document.querySelector('#zone').value='Asia/Tokyo';document.querySelector('#add').requestSubmit();document.querySelector('#format').click();return true})()");
+  await expect.poll(()=>probe(clock,"Tessera.storage.get('clocks',null,'panel').then(s=>s.zones)")).toContain('Asia/Tokyo');
+  expect(await probe(clock,"document.querySelector('#format').textContent")).toBe('12 hour');
+  console.log('PASS old Notepad migration with originals retained, Timer countdown/pause/stopwatch/laps, and configurable world clocks');
 
   const preview=await invoke('html_plugin_inspect',{path:folder});
   const app=await invoke('html_plugin_install',{ticket:preview.ticket,grants:{network:[],panels:[],targets:[]}});
@@ -132,18 +161,19 @@ try{
   await probe(comm,'window.stopMessages()');
   console.log('PASS optional network grant, scoped MCP inbox, bidirectional SDK/bus messaging, prohibited reads/sends, exact restore mapping and immediate revocation');
 
-  await openManager();await manager().getByRole('button',{name:'Remove Quick Notes',exact:true}).click();
-  await manager().getByRole('button',{name:'Confirm removal of Quick Notes',exact:true}).click();
+  await openManager();await manager().getByRole('button',{name:'Remove Notes',exact:true}).click();
+  await manager().getByRole('button',{name:'Confirm removal of Notes',exact:true}).click();
   await expect.poll(()=>page.evaluate(name=>[...window.htmlTest.plugins.getState().instances.values()].filter(p=>p.pluginName===name).length,notesName)).toBe(0);
-  await manager().locator('summary').click();await manager().getByRole('button',{name:'Restore Quick Notes',exact:true}).click();
+  await manager().locator('summary').click();await manager().getByRole('button',{name:'Restore Notes',exact:true}).click();
   await manager().getByRole('button',{name:'Close add-on manager'}).click();
   const restored=await open(notesName);await expect.poll(()=>probe(restored,"document.querySelector('#note').value")).toBe(noteText);
   const gameName=await sample('memory'),game=await open(gameName);
   expect(await probe(game,"document.querySelectorAll('.card').length")).toBe(16);
   expect(await probe(game,"(async()=>{const pairs=new Map();cards.forEach((s,i)=>pairs.set(s,[...(pairs.get(s)||[]),i]));for(const [a,b] of pairs.values()){await flip(a);await flip(b)}return matched.size})()")).toBe(16);
   expect(await probe(game,"Tessera.storage.get('best')")).toBe(8);
-  const names={notes:notesName,calculator:calculatorInfo.pluginName,game:gameName};
+  const names={timer:timerName,clock:clockName,notes:notesName,calculator:calculatorInfo.pluginName,game:gameName};
   const saved=await page.evaluate(()=>window.htmlTest.serializeWorkspace());
+  saved.plugins.find(p=>p.id===timer).pluginName='timer'; // Legacy saved workspace alias.
   await page.screenshot({path:join(folder,'apps.png')});
   console.log('PASS remove/restore retains data, bundled memory game completion and score persistence');
   await finish();await launch();
@@ -153,6 +183,11 @@ try{
   await ready(restartedNotes);await expect.poll(()=>probe(restartedNotes,"document.querySelector('#note').value")).toBe(noteText);
   const restartedGame=restoredIds.find(p=>p.name===names.game).id;
   await ready(restartedGame);expect(await probe(restartedGame,"Tessera.storage.get('best')")).toBe(8);
+  const restartedTimer=restoredIds.find(p=>p.name===names.timer).id;
+  expect(restartedTimer).toBe(timer);await ready(restartedTimer);
+  expect(await probe(restartedTimer,"Tessera.storage.get('timer',null,'panel').then(s=>s.deadline)")).toBe(timerDeadline);
+  const restartedClock=restoredIds.find(p=>p.name===names.clock).id;await ready(restartedClock);
+  expect(await probe(restartedClock,"Tessera.storage.get('clocks',null,'panel').then(s=>s.zones)")).toContain('Asia/Tokyo');
   expect((await invoke('html_plugin_permissions',{plugin:app.name,grants:null})).targets).toEqual([]);
   expect(errors.filter(e=>!e.includes('WebSocket closed'))).toEqual([]);
   console.log('PASS full native app restart restores app panels, notes, scores, and revoked permissions');

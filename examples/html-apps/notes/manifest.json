@@ -1,8 +1,8 @@
 {
   "id": "tessera.quick-notes",
-  "name": "Quick Notes",
-  "version": "1.0.0",
-  "description": "A private scratchpad saved on this computer. No conversation or internet access.",
+  "name": "Notes",
+  "version": "2.0.0",
+  "description": "A quiet notebook with search, automatic saving, and a recoverable trash. Your old Notepad notes are kept.",
   "entry": "index.html",
   "icon": "NotebookPen"
 }

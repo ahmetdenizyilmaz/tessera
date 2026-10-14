@@ -3,6 +3,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {loadHtmlApps} from './htmlPlugins';
 import {usePluginStore} from '../store/pluginStore';
 import type {PluginManifest} from '../types/plugin';
+import {registerBuiltins} from './builtinPlugins';
 vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn()}));
 const app:PluginManifest={name:'html-test.notes',defaultTitle:'Notes',description:'Local notes',entry:'index.html',version:'1',icon:'NotebookPen',htmlPlugin:true,browserSite:'html-test.notes',permissions:{network:[],panels:[]},enabled:true};
 let storage:Map<string,string>;
@@ -37,4 +38,27 @@ it('retains the existing catalog if discovery fails',async()=>{
   vi.mocked(invoke).mockRejectedValue(new Error('Temporarily unavailable'));
   await usePluginStore.getState().scanPlugins();
   expect(usePluginStore.getState().registry.get(app.name)).toBe(app);
+});
+it('replaces old launch IDs with HTML apps while keeping restored panel IDs and titles',()=>{
+  registerBuiltins();
+  expect(usePluginStore.getState().registry.has('timer')).toBe(false);
+  expect(usePluginStore.getState().registry.has('notepad')).toBe(false);
+  expect(usePluginStore.getState().restoreInstance('notepad','original-id','Project notes')).toBe(true);
+  expect(usePluginStore.getState().instances.get('original-id')).toMatchObject({pluginName:'html-tessera.quick-notes',title:'Project notes'});
+  const timer=usePluginStore.getState().createInstance('timer');
+  expect(usePluginStore.getState().instances.get(timer)?.pluginName).toBe('html-tessera.timer');
+  for(const name of ['html-tessera.quick-notes','html-tessera.timer','html-tessera.clock']) {
+    expect(usePluginStore.getState().registry.get(name)).toMatchObject({htmlPlugin:true,browserSite:name});
+  }
+});
+it('migrates old removals to native disabled apps and does not resurrect them',async()=>{
+  registerBuiltins();
+  usePluginStore.setState({removedPlugins:new Set(['timer'])});
+  expect(usePluginStore.getState().createInstance('timer')).toBe('');
+  const manifest=usePluginStore.getState().registry.get('html-tessera.timer')!;
+  vi.mocked(invoke).mockImplementation(async command=>command==='scan_plugins'?[{name:manifest.name,manifest:{...manifest}}]:null);
+  await usePluginStore.getState().scanPlugins();
+  expect(invoke).toHaveBeenCalledWith('html_plugin_set_enabled',{plugin:manifest.name,enabled:false});
+  expect([...usePluginStore.getState().removedPlugins]).toEqual([manifest.name]);
+  expect(usePluginStore.getState().restoreInstance('timer','old-timer')).toBe(false);
 });

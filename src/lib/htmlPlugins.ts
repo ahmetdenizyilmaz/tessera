@@ -21,3 +21,22 @@ export function saveHtmlApps(registry: Map<string, PluginManifest>): void {
 export async function setHtmlAppEnabled(plugin: string, enabled: boolean): Promise<void> {
   await invoke('html_plugin_set_enabled', { plugin, enabled });
 }
+
+let migratingNotes: Promise<void> | undefined;
+/** The old same-origin iframe saved per-panel notebooks in host localStorage. */
+export function migrateLegacyNotes(): Promise<void> {
+  return migratingNotes ??= (async () => {
+    const notebooks: Record<string, unknown> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('plugin-notepad-')) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const notes: unknown = JSON.parse(raw);
+        if (Array.isArray(notes) && notes.every(n => n && typeof n.title === 'string' && typeof n.content === 'string')) notebooks[key] = notes;
+      } catch { console.warn('An unreadable legacy notebook was kept:', key); }
+    }
+    await invoke('html_plugin_migrate_notes', { notebooks });
+  })().catch(error => { migratingNotes = undefined; throw error; });
+}

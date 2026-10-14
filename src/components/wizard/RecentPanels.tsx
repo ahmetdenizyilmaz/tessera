@@ -34,7 +34,7 @@ export function RecentPanels({ wizardId }: { wizardId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
   const listId = useId();
-  const hasRemovedPlugin = (panel: RememberedPanel): boolean => !!panel.plugin && removedPlugins.has(panel.plugin.pluginName)
+  const hasRemovedPlugin = (panel: RememberedPanel): boolean => !!panel.plugin && removedPlugins.has(canonicalAppName(panel.plugin.pluginName))
     || !!panel.children?.some(hasRemovedPlugin);
   const closedEntries = entries.filter(entry => !findRememberedPanel(entry.saved.panel) && !hasRemovedPlugin(entry.saved.panel));
   const filtered = closedEntries.filter(entry => `${entry.saved.panel.name} ${detail(entry.saved.panel)}`.toLowerCase().includes(query.trim().toLowerCase()));
@@ -69,3 +69,4 @@ export function RecentPanels({ wizardId }: { wizardId: string }) {
     </div>}
   </section>;
 }
+import { canonicalAppName } from '../../lib/bundledApps';

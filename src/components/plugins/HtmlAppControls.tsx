@@ -5,7 +5,6 @@ import { FileCode2, FolderOpen, ArrowLeft, ShieldCheck } from 'lucide-react';
 import type { HtmlPluginGrants, HtmlPluginPermissions, PanelPermission, PluginManifest } from '../../types/plugin';
 import { usePluginStore } from '../../store/pluginStore';
 import { closePanel } from '../../lib/panelCleanup';
-import { createPluginPanel } from '../../lib/newSessionActions';
 
 const EMPTY_GRANTS: HtmlPluginGrants = { network: [], panels: [], targets: [] };
 const labels: Record<PanelPermission, string> = {
@@ -13,7 +12,8 @@ const labels: Record<PanelPermission, string> = {
   send: 'Send messages to selected agents', receive: 'Receive messages from selected agents',
 };
 interface Target { id: string; name: string; provider?: string }
-interface Preview {
+export interface HtmlAppPreview {
+  source?: string;
   ticket: string; pluginName: string; fileCount: number; bytes: number; replaces: string | null;
   manifest: { name: string; version: string; description: string; permissions: HtmlPluginPermissions };
 }
@@ -48,8 +48,8 @@ export function HtmlPermissionFields({ requested, value, onChange, disabled }: {
   </div>;
 }
 
-export function HtmlAppImport({ onDone, onCancel, onBusy }: { onDone: () => void; onCancel: () => void; onBusy: (busy:boolean) => void }) {
-  const [preview,setPreview] = useState<Preview | null>(null), [grants,setGrants] = useState<HtmlPluginGrants>(EMPTY_GRANTS);
+export function HtmlAppImport({ onDone, onCancel, onBusy, initialPreview }: { onDone: (name:string) => void; onCancel: () => void; onBusy: (busy:boolean) => void; initialPreview?: HtmlAppPreview }) {
+  const [preview,setPreview] = useState<HtmlAppPreview | null>(initialPreview ?? null), [grants,setGrants] = useState<HtmlPluginGrants>(EMPTY_GRANTS);
   const [busy,setBusy] = useState(false), [error,setError] = useState('');
   const setWorking = (value:boolean) => {setBusy(value);onBusy(value);};
   const choose = async (folder:boolean) => {
@@ -57,13 +57,13 @@ export function HtmlAppImport({ onDone, onCancel, onBusy }: { onDone: () => void
     try {
       const path = await open({directory:folder,multiple:false,title:folder?'Choose HTML app folder':'Choose HTML app or ZIP',...(!folder?{filters:[{name:'HTML apps',extensions:['html','htm','zip']}]}:{})});
       if (typeof path !== 'string') return;
-      const next = await invoke<Preview>('html_plugin_inspect',{path});
+      const next = await invoke<HtmlAppPreview>('html_plugin_inspect',{path});
       setPreview(next);setGrants(EMPTY_GRANTS);
     } catch (e) { setError(String(e)); } finally { setWorking(false); }
   };
   const sample = async (name:string) => {
     setError('');setWorking(true);
-    try {setPreview(await invoke<Preview>('html_plugin_sample',{sample:name}));setGrants(EMPTY_GRANTS);}
+    try {setPreview(await invoke<HtmlAppPreview>('html_plugin_sample',{sample:name}));setGrants(EMPTY_GRANTS);}
     catch(e){setError(String(e));}finally{setWorking(false);}
   };
   const install = async () => {
@@ -74,17 +74,16 @@ export function HtmlAppImport({ onDone, onCancel, onBusy }: { onDone: () => void
       for (const instance of existing) await closePanel(instance.id, false);
       const manifest = await invoke<PluginManifest>('html_plugin_install',{ticket:preview.ticket,grants});
       usePluginStore.getState().registerHtmlApp(manifest);
-      createPluginPanel(manifest.name);
-      onDone();
+      onDone(manifest.name);
     } catch (e) { setError(String(e)); } finally { setWorking(false); }
   };
   return <section className="html-app-import">
-    <button type="button" className="html-app-back" disabled={busy} onClick={onCancel}><ArrowLeft size={15}/>All add-ons</button>
-    <h3>Import a local HTML app</h3><p className="addon-hint">Games, calculators, notes, and other small apps. Choose a self-contained HTML file, or a folder/ZIP with manifest.json and its assets.</p>
+    <button type="button" className="html-app-back" disabled={busy} onClick={onCancel}><ArrowLeft size={15}/>Back to library</button>
+    {!initialPreview && <><h3>Import a local HTML app</h3><p className="addon-hint">Games, calculators, notes, and other small apps. Choose a self-contained HTML file, or a folder/ZIP with manifest.json and its assets.</p>
     <div className="html-app-actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void choose(false)}><FileCode2 size={16}/>Choose HTML / ZIP</button>
       <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void choose(true)}><FolderOpen size={16}/>Choose folder</button></div>
-    <p className="addon-hint">Or try an example:</p><div className="html-app-actions">{[['calculator','Calculator'],['notes','Quick Notes'],['memory','Memory Break']].map(([name,label])=><button type="button" className="btn btn-secondary btn-sm" key={name} disabled={busy} onClick={()=>void sample(name)}>{label}</button>)}</div>
-    {preview && <div className="html-app-preview"><h3>{preview.manifest.name}<small>v{preview.manifest.version}</small></h3><p>{preview.manifest.description}</p>
+    <p className="addon-hint">Or try an example:</p><div className="html-app-actions">{[['calculator','Calculator'],['notes','Notes'],['timer','Timer'],['clock','Clock'],['memory','Memory Break']].map(([name,label])=><button type="button" className="btn btn-secondary btn-sm" key={name} disabled={busy} onClick={()=>void sample(name)}>{label}</button>)}</div></>}
+    {preview && <div className="html-app-preview"><h3>{preview.manifest.name}<small>v{preview.manifest.version}</small></h3><p>{preview.manifest.description}</p>{preview.source && <p className="addon-hint">Source: {preview.source}</p>}
       <p className="addon-hint">{preview.fileCount} files · {(preview.bytes / 1024).toFixed(0)} KB{preview.replaces ? ` · Replaces v${preview.replaces}` : ''}</p>
       {preview.replaces && <p className="html-app-notice">Updating closes this app’s open panels. Its saved data is kept. Review permissions for this version below.</p>}
       <HtmlPermissionFields requested={preview.manifest.permissions} value={grants} onChange={setGrants} disabled={busy}/>
@@ -101,7 +100,7 @@ export function HtmlAppPermissions({manifest,onClose,onBusy}:{manifest:PluginMan
     void invoke<HtmlPluginGrants>('html_plugin_permissions',{plugin:manifest.name,grants:null}).then(g=>{if(!disposed)setGrants(g);}).catch(e=>{if(!disposed)setError(String(e));});
     return()=>{disposed=true;};
   },[manifest.name]);
-  return <section className="html-app-import"><button type="button" className="html-app-back" disabled={busy} onClick={onClose}><ArrowLeft size={15}/>All add-ons</button>
+  return <section className="html-app-import"><button type="button" className="html-app-back" disabled={busy} onClick={onClose}><ArrowLeft size={15}/>Back to library</button>
     <h3>{manifest.defaultTitle} permissions</h3>
     {grants && <><HtmlPermissionFields requested={manifest.permissions ?? {network:[],panels:[]}} value={grants} onChange={setGrants} disabled={busy}/>
       <div className="html-app-actions"><button type="button" className="btn btn-primary" disabled={busy} onClick={async()=>{

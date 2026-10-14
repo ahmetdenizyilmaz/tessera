@@ -5,10 +5,10 @@ const page = await context.newPage();
 const base = process.argv[2] ?? 'http://127.0.0.1:1420', errors = [];
 context.on('page', child => child.on('pageerror', error => { if (!error.message.includes('WebSocket closed')) errors.push(error.message); }));
 page.on('pageerror', error => { if (!error.message.includes('WebSocket closed')) errors.push(error.message); });
-const manager = () => page.getByRole('dialog', { name: 'Manage add-ons', exact: true });
+const manager = () => page.getByRole('dialog', { name: 'App library', exact: true });
 const openManager = async () => {
   await page.evaluate(() => window.creation.openNewSessionWizard());
-  await page.getByRole('button', { name: 'Manage add-ons', exact: true }).click();
+  await page.getByRole('button', { name: 'App library', exact: true }).click();
   await expect(manager()).toBeVisible();
 };
 try {
@@ -44,9 +44,9 @@ try {
   await expect(page.locator('.nsw-more').getByRole('button', { name: 'Test player', exact: true })).toHaveCount(0);
   await page.screenshot({ path: '../tessera-office-validation/addon-manager.png' });
   await manager().getByRole('button', { name: 'Close add-on manager' }).click();
-  await page.getByRole('button', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Apps', exact: true }).click();
   await expect(page.locator('.menu-dropdown').getByRole('button', { name: 'Test player', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Manage add-ons…', exact: true }).click();
+  await page.getByRole('button', { name: 'App library…', exact: true }).click();
   await expect(manager()).toBeVisible(); await page.keyboard.press('Escape');
   console.log('PASS removal confirmation/cancel, all copies closed across main/group/detached window, native cleanup, unrelated panels preserved, and launch menus updated');
 
@@ -58,7 +58,7 @@ try {
   await manager().locator('summary').click();
   await manager().getByRole('button', { name: 'Restore Test player', exact: true }).click();
   await manager().getByRole('button', { name: 'Close add-on manager' }).click();
-  await page.locator('.nsw-more').getByRole('button', { name: 'Test player', exact: true }).click();
+  await openManager(); await manager().getByRole('button', { name: 'Open Test player', exact: true }).click();
   expect(await page.evaluate(name => window.plugins.getState().registry.get(name).browserSite, appName)).toBe(appName);
   expect(await page.evaluate(name => window.calls.findLast(call => call.command === 'browser_panel_create' && call.args.site === name)?.args.homeUrl, appName)).toBe('https://player.test/');
   console.log('PASS removal survives restart and old-workspace restore; restoring the add-on keeps its native cookie profile');
@@ -66,9 +66,9 @@ try {
   await openManager();
   await manager().getByRole('button', { name: 'Remove Timer', exact: true }).click();
   await manager().getByRole('button', { name: 'Confirm removal of Timer', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => [...window.plugins.getState().instances.values()].some(p => p.pluginName === 'timer'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => [...window.plugins.getState().instances.values()].some(p => p.pluginName === 'html-tessera.timer'))).toBe(false);
   await manager().getByRole('button', { name: 'Close add-on manager' }).click();
-  await page.getByRole('button', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Apps', exact: true }).click();
   await expect(page.locator('.menu-dropdown').getByRole('button', { name: 'Timer', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.reload();

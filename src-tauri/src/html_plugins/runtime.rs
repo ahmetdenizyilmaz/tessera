@@ -55,6 +55,12 @@ fn storage_call(app: &tauri::AppHandle, installed: &Installed, panel: &str, meth
         serde_json::from_slice(&std::fs::read(&path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?
     } else { BTreeMap::new() };
     let scope = match params["scope"].as_str() { None | Some("app") => "app".to_string(), Some("panel") => format!("panel:{panel}"), _ => return Err("Storage scope must be app or panel".into()) };
+    if method == "storage.entries" {
+        let prefix=params["prefix"].as_str().unwrap_or("");
+        if prefix.len()>128 || prefix.chars().any(char::is_control) {return Err("Invalid storage prefix".into());}
+        let scope=format!("{scope}/");
+        return Ok(json!(store.iter().filter_map(|(key,value)|key.strip_prefix(&scope).filter(|k|k.starts_with(prefix)).map(|k|(k.to_string(),value.clone()))).collect::<BTreeMap<_,_>>()));
+    }
     let key = params["key"].as_str().unwrap_or("");
     if key.is_empty() || key.len() > 128 || key.chars().any(char::is_control) { return Err("Storage key must contain 1 to 128 characters".into()); }
     let key = format!("{scope}/{key}");
@@ -74,7 +80,7 @@ pub async fn html_plugin_call(caller: Webview, app: tauri::AppHandle, method: St
     let (panel,installed) = authorize(&caller, &app, &method)?;
     match method.as_str() {
         "ready" => Ok(json!({"instanceId":panel,"pluginName":name(&installed.manifest),"name":installed.manifest.name,"version":installed.manifest.version,"permissions":installed.grants})),
-        "storage.get" | "storage.set" | "storage.remove" => storage_call(&app, &installed, &panel, &method, params),
+        "storage.get" | "storage.set" | "storage.remove" | "storage.entries" => storage_call(&app, &installed, &panel, &method, params),
         "ui.title" => {
             let title = params["title"].as_str().ok_or("Title is required")?;
             if title.trim().is_empty() || title.len() > 120 || title.chars().any(char::is_control) { return Err("Invalid panel title".into()); }

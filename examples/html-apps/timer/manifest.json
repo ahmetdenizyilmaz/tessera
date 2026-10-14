@@ -1,0 +1,1 @@
+{"id":"tessera.timer","name":"Timer","version":"2.0.0","description":"A focus countdown and stopwatch with laps. Each panel remembers its timer, even after a restart.","entry":"index.html","icon":"Timer"}

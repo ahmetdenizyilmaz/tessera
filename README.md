@@ -62,13 +62,16 @@ agents, credentials, model discovery, permissions, and session storage.
 ## Features
 
 - **Local HTML panel apps** — import a single HTML file or a folder/ZIP from
-  **Plugins → Import HTML app…**. Calculator, Quick Notes, and Memory Break are
-  included as examples. Apps keep their own saved data; network access and
+  **Apps → Import HTML app…**. Notes, Timer, Clock, Calculator, and Memory Break are
+  included automatically. Apps keep their own saved data; network access and
   messaging with selected agent panels are optional permissions. See the
   [HTML app guide](docs/html-panel-plugins.md) for the manifest, SDK, and limits.
+- **App library** — search installed apps without crowding New Session. Connect
+  a public GitHub repository to browse and download community apps after a
+  permission review. See [catalog publishing](docs/github-app-catalog.md).
 - **Website panels** — Lichess is included. To add your own, open **New session → More → +**,
   enter a name and web address, then choose an icon or upload an image. The shortcut stays in
-  More for future sessions. Website panels follow the same grouping, resizing, detached-window,
+  the App library for future sessions. Website panels follow the same grouping, resizing, detached-window,
   and small-panel click-to-focus behavior as Lichess. Each saved app keeps its own browser
   profile, including cookies, when its panels close or Tessera restarts; a website can still
   expire its own login. Workspace exports include the app definition, not its login data.

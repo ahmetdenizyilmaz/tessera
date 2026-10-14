@@ -100,7 +100,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 
   const pluginItems: MenuEntry[] = [
     ...[...pluginRegistry.values()]
-      .filter(plugin => !removedPlugins.has(plugin.name))
+      .filter(plugin => !removedPlugins.has(plugin.name)).slice(0, 5)
       .map(plugin => ({
         id: `plugin:${plugin.name}`,
         label: plugin.defaultTitle,
@@ -110,7 +110,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
       })),
     { separator: true },
     { label: 'Import HTML app…', icon: 'FileText', action: () => { setImportingPlugin(true); setManagingAddons(true); } },
-    { label: 'Manage add-ons…', action: () => { setImportingPlugin(false); setManagingAddons(true); } },
+    { label: 'App library…', action: () => { setImportingPlugin(false); setManagingAddons(true); } },
   ];
 
   const helpItems: MenuEntry[] = [
@@ -122,7 +122,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
     { label: 'File', key: 'file', items: fileItems },
     { label: 'Edit', key: 'edit', items: editItems },
     { label: 'View', key: 'view', items: viewItems },
-    { label: 'Plugins', key: 'plugins', items: pluginItems },
+    { label: 'Apps', key: 'plugins', items: pluginItems },
     { label: 'Help', key: 'help', items: helpItems },
   ];
 

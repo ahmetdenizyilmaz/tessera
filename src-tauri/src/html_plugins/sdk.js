@@ -17,6 +17,7 @@
     version: 1,
     ready,
     storage: {
+      entries: (prefix = "", scope = "app") => call("storage.entries", { prefix, scope }),
       get: async (key, fallback = null, scope = 'app') => (await call('storage.get', { key, scope })) ?? fallback,
       set: (key, value, scope = 'app') => call('storage.set', { key, value, scope }),
       remove: (key, scope = 'app') => call('storage.remove', { key, scope }),

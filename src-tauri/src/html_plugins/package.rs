@@ -92,30 +92,36 @@ pub fn inspect(path: &Path) -> Result<Package, String> {
     if meta.is_dir() { read_folder(path, path, &mut files, &mut names, 0)?; }
     else if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
         if meta.len() > MAX_PACKAGE as u64 { return Err("ZIP file is too large".into()); }
-        let mut archive = zip::ZipArchive::new(std::fs::File::open(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        if archive.len() > MAX_FILES { return Err("ZIP contains too many entries".into()); }
-        for index in 0..archive.len() {
-            let file = archive.by_index(index).map_err(|e| e.to_string())?;
-            let name = file.name().to_string();
-            asset_path(name.trim_end_matches('/'))?;
-            if file.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) { return Err("ZIP symlinks are not supported".into()); }
-            if file.is_dir() { continue; }
-            insert(&mut files, &mut names, name, file)?;
-        }
-        // Accept the common ZIP containing one enclosing folder.
-        if !files.contains_key("manifest.json") {
-            let roots: Vec<_> = files.keys().filter(|n| n.ends_with("/manifest.json")).cloned().collect();
-            if roots.len() == 1 {
-                let prefix = roots[0].strip_suffix("manifest.json").unwrap();
-                if files.keys().all(|n| n.starts_with(prefix)) { files = files.into_iter().map(|(n, d)| (n[prefix.len()..].to_string(), d)).collect(); }
-            }
-        }
+        return inspect_zip(std::fs::File::open(path).map_err(|e|e.to_string())?);
     } else if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("html") || e.eq_ignore_ascii_case("htm")) {
         insert(&mut files, &mut names, "index.html".into(), std::fs::File::open(path).map_err(|e| e.to_string())?)?;
         let title = path.file_stem().and_then(|s| s.to_str()).unwrap_or("HTML app").chars().take(60).collect::<String>();
         let identity = format!("local.{}", &format!("{:x}", Sha256::digest(path.canonicalize().map_err(|e| e.to_string())?.to_string_lossy().as_bytes()))[..16]);
         files.insert("manifest.json".into(), serde_json::to_vec(&Manifest { id: identity, name: title, version: "1.0.0".into(), description: "Standalone HTML app".into(), entry: default_entry(), icon: default_icon(), permissions: Permissions::default() }).unwrap());
     } else { return Err("Choose a plugin folder, ZIP, or standalone HTML file".into()); }
+    validate(files)
+}
+
+pub fn inspect_zip(reader: impl Read + std::io::Seek) -> Result<Package,String> {
+    let mut files=BTreeMap::new();let mut names=HashSet::new();
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
+    if archive.len() > MAX_FILES { return Err("ZIP contains too many entries".into()); }
+    for index in 0..archive.len() {
+        let file = archive.by_index(index).map_err(|e| e.to_string())?;
+        let name = file.name().to_string();
+        asset_path(name.trim_end_matches('/'))?;
+        if file.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) { return Err("ZIP symlinks are not supported".into()); }
+        if file.is_dir() { continue; }
+        insert(&mut files, &mut names, name, file)?;
+    }
+    // Accept the common ZIP containing one enclosing folder.
+    if !files.contains_key("manifest.json") {
+        let roots: Vec<_> = files.keys().filter(|n| n.ends_with("/manifest.json")).cloned().collect();
+        if roots.len() == 1 {
+            let prefix = roots[0].strip_suffix("manifest.json").unwrap();
+            if files.keys().all(|n| n.starts_with(prefix)) { files = files.into_iter().map(|(n, d)| (n[prefix.len()..].to_string(), d)).collect(); }
+        }
+    }
     validate(files)
 }
 

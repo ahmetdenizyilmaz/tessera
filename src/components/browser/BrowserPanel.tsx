@@ -13,6 +13,8 @@ import { PANEL_MAXIMIZE_EVENT } from '../../lib/panelMaximize';
 import { BrowserViewSettings } from './BrowserViewSettings';
 import { useBrowserViewStore } from '../../store/browserViewStore';
 import { PanelLockButton } from '../layout/PanelLockButton';
+import { migrateLegacyNotes } from '../../lib/htmlPlugins';
+import { NOTES_APP } from '../../lib/bundledApps';
 
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: string }) {
   const useLayoutStore = usePanelLayout();
@@ -81,8 +83,11 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
         if (!disposed) setSyncError(String(e));
       } finally { busy = false; }
     };
-    browserCommand(instanceId, 'browser_panel_create', {
+    (site === NOTES_APP ? migrateLegacyNotes() : Promise.resolve()).then(() => {
+      if (disposed) return;
+      return browserCommand(instanceId, 'browser_panel_create', {
       site, homeUrl:homeUrl??null, url: usePluginStore.getState().instances.get(instanceId)?.browserUrl ?? null,
+      });
     }).then(() => {
       if (disposed) return;
       setReady(true);

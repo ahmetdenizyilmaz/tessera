@@ -1,3 +1,4 @@
+import {appLibrary,showAppLibrary,openLibraryApp,libraryApp} from './app-library-helpers.mjs';
 import { chromium, expect } from '@playwright/test';
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
@@ -48,8 +49,8 @@ try {
 
   await page.reload(); await page.waitForFunction(() => !!window.newSession); await installIconServer();
   await page.evaluate(() => window.newSession());
-  const shortcut = page.locator('.nsw-more').getByRole('button', { name: 'Auto player', exact: true });
-  await expect(shortcut.locator('img')).toHaveCount(1); await shortcut.click();
+  await showAppLibrary(page);const shortcut = libraryApp(page,'Auto player');
+  await expect(shortcut.locator('img')).toHaveCount(1); await appLibrary(page).getByRole('button',{name:'Open Auto player',exact:true}).click();
   await expect(page.locator('.browser-toolbar img')).toHaveCount(1);
   expect(await page.evaluate(() => window.iconCalls)).toEqual([]);
   expect(await page.evaluate(name => window.plugins.getState().registry.get(name).browserSite, app.name)).toBe(app.name);
@@ -72,7 +73,7 @@ try {
   await expect.poll(() => page.evaluate(() => !![...window.plugins.getState().registry.values()].find(m => m.defaultTitle === 'Fallback')?.favicon)).toBe(true);
   expect(await page.evaluate(() => window.iconCalls.some(c => c.url === 'https://fallback.test/favicon.ico'))).toBe(true);
   await page.evaluate(() => window.newSession());
-  await expect(page.locator('.nsw-more').getByRole('button', { name: 'No favicon', exact: true }).locator('svg.lucide-globe')).toHaveCount(1);
+  await showAppLibrary(page);await expect(libraryApp(page,'No favicon').locator('svg.lucide-globe')).toHaveCount(1);await page.keyboard.press('Escape');
 
   // Choosing a manual icon while the network request is pending must win.
   await page.evaluate(() => {
@@ -91,7 +92,7 @@ try {
 
   // Built-in web panels must expose the same settings without becoming custom
   // apps or changing their long-lived native profile (and saved logins).
-  await page.locator('.nsw-more').getByRole('button', { name: 'Lichess', exact: true }).click();
+  await openLibraryApp(page,'Lichess');
   const createsBeforeIcon = await page.evaluate(() => window.webCalls.filter(c => c.command === 'browser_panel_create').length);
   await page.getByRole('button', { name: 'Lichess view settings', exact: true }).click();
   await page.getByRole('button', { name: 'Use website icon', exact: true }).click();
@@ -108,8 +109,8 @@ try {
 
   await page.reload(); await page.waitForFunction(() => !!window.newSession); await installIconServer();
   await page.evaluate(() => window.newSession());
-  const lichessShortcut = page.locator('.nsw-more').getByRole('button', { name: 'Lichess', exact: true });
-  await expect(lichessShortcut.locator('img')).toHaveCount(1); await lichessShortcut.click();
+  await showAppLibrary(page);const lichessShortcut = libraryApp(page,'Lichess');
+  await expect(lichessShortcut.locator('img')).toHaveCount(1); await appLibrary(page).getByRole('button',{name:'Open Lichess',exact:true}).click();
   await page.getByRole('button', { name: 'Lichess view settings', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Refresh icon', exact: true })).toBeEnabled();
   expect(await page.evaluate(() => window.iconCalls)).toEqual([]);

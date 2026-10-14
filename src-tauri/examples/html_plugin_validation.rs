@@ -51,7 +51,9 @@ fn main() {
     window.title="Tessera HTML app validation (synthetic)".into();window.width=1100.;window.height=800.;window.visible=false;window.maximized=false;window.create=false;
     let handler=tessera_lib::main_view_commands(tauri::generate_handler![
         validation_exit,validation_secret,validation_eval,validation_info,validation_tool,validation_roster,
-        html_plugins::scan_plugins,html_plugins::html_plugin_inspect,html_plugins::html_plugin_sample,html_plugins::html_plugin_install,
+        html_plugins::bundled::html_plugin_migrate_notes,
+            html_plugins::catalog::html_catalog_list,html_plugins::catalog::html_catalog_preview,
+            html_plugins::scan_plugins,html_plugins::html_plugin_inspect,html_plugins::html_plugin_sample,html_plugins::html_plugin_install,
         html_plugins::html_plugin_permissions,html_plugins::html_plugin_set_enabled,html_plugins::html_plugin_remap_targets,html_plugins::html_plugin_targets,html_plugins::runtime::html_plugin_call,
         browser::browser_panel_create,browser::browser_panel_bounds,browser::browser_panel_action,browser::browser_panel_status,browser::browser_panel_close,
         workspace_windows::workspace_drop_target,workspace_windows::workspace_window_place,workspace_windows::workspace_window_destroy]);

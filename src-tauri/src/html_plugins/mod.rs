@@ -4,6 +4,8 @@
 pub mod package;
 pub mod network;
 pub mod runtime;
+pub mod bundled;
+pub mod catalog;
 pub use runtime::{receive, can_receive, panel_info};
 
 use std::{collections::{BTreeMap, HashMap, VecDeque}, path::{Path, PathBuf}, sync::Mutex, time::{Duration, Instant}};
@@ -29,7 +31,7 @@ impl Grants {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct Installed { pub manifest: Manifest, pub revision: String, pub digest: String, pub grants: Grants, pub enabled: bool }
+pub struct Installed { pub manifest: Manifest, pub revision: String, pub digest: String, pub grants: Grants, pub enabled: bool, #[serde(default)] pub bundled: bool }
 
 pub struct Preview { pub package: Package, pub created: Instant }
 pub struct Session {
@@ -42,6 +44,7 @@ pub struct Session {
 pub struct Inner {
     pub loaded: bool, pub installed: BTreeMap<String, Installed>, pub previews: HashMap<String, Preview>,
     pub sessions: HashMap<String, Session>,
+    pub catalogs: HashMap<String, catalog::Snapshot>,
 }
 #[derive(Default)]
 pub struct HtmlPlugins(pub Mutex<Inner>);
@@ -70,13 +73,14 @@ pub fn ensure_loaded(app: &tauri::AppHandle, inner: &mut Inner) -> Result<(), St
                 && app.grants.validate(&app.manifest).is_ok() && package::asset_path(&app.manifest.entry).is_ok() { inner.installed.insert(key, app); }
         }
     }
+    bundled::provision(app, inner)?;
     inner.loaded = true; Ok(())
 }
 
 pub fn frontend(installed: &Installed) -> Value {
     let m = &installed.manifest; let name = name(m);
     json!({ "name":name, "version":m.version, "description":m.description, "entry":m.entry, "icon":m.icon, "defaultTitle":m.name,
-        "htmlPlugin":true, "browserSite":name, "permissions":m.permissions, "enabled":installed.enabled })
+        "htmlPlugin":true, "bundled":installed.bundled, "browserSite":name, "permissions":m.permissions, "enabled":installed.enabled })
 }
 
 #[tauri::command]
@@ -105,13 +109,7 @@ fn preview_package(app: &tauri::AppHandle, state: &HtmlPlugins, package: Package
 #[tauri::command]
 pub async fn html_plugin_sample(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, HtmlPlugins>, sample: String) -> Result<Value, String> {
     main_only(&caller)?;
-    let (manifest, html): (&[u8], &[u8]) = match sample.as_str() {
-        "calculator" => (include_bytes!("../../../examples/html-apps/calculator/manifest.json"),include_bytes!("../../../examples/html-apps/calculator/index.html")),
-        "notes" => (include_bytes!("../../../examples/html-apps/notes/manifest.json"),include_bytes!("../../../examples/html-apps/notes/index.html")),
-        "memory" => (include_bytes!("../../../examples/html-apps/memory/manifest.json"),include_bytes!("../../../examples/html-apps/memory/index.html")),
-        _ => return Err("Unknown example app".into()),
-    };
-    let package = package::validate(BTreeMap::from([("manifest.json".into(),manifest.to_vec()),("index.html".into(),html.to_vec())]))?;
+    let package = bundled::sample(&sample)?;
     preview_package(&app,&state,package)
 }
 
@@ -125,19 +123,22 @@ pub async fn html_plugin_install(caller: Webview, app: tauri::AppHandle, state: 
     let plugin = name(&preview.package.manifest);
     if inner.sessions.values().any(|s| s.plugin == plugin) { return Err("Close this app's panels before updating it".into()); }
     if inner.installed.len() >= 128 && !inner.installed.contains_key(&plugin) { return Err("The local app limit is 128".into()); }
-    let revision = uuid::Uuid::new_v4().to_string();
-    let folder = root(&app)?.join("packages").join(&plugin).join(&revision);
-    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    for (name, bytes) in &preview.package.files {
-        let target = folder.join(package::asset_path(name)?);
-        std::fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::write(target, bytes).map_err(|e| e.to_string())?;
-    }
-    let installed = Installed { manifest: preview.package.manifest.clone(), digest: preview.package.digest.clone(), revision, grants, enabled: true };
+    let installed = write_package(&app, &preview.package, grants)?;
     let mut catalog = inner.installed.clone(); catalog.insert(plugin, installed.clone());
     atomic_json(&root(&app)?.join("installed.json"), &catalog)?;
     inner.installed = catalog; inner.previews.remove(&ticket);
     Ok(frontend(&installed))
+}
+
+fn write_package(app: &tauri::AppHandle, package: &Package, grants: Grants) -> Result<Installed,String> {
+    let revision=uuid::Uuid::new_v4().to_string();
+    let folder=root(app)?.join("packages").join(name(&package.manifest)).join(&revision);
+    for (name,bytes) in &package.files {
+        let target=folder.join(package::asset_path(name)?);
+        std::fs::create_dir_all(target.parent().unwrap()).map_err(|e|e.to_string())?;
+        std::fs::write(target,bytes).map_err(|e|e.to_string())?;
+    }
+    Ok(Installed {manifest:package.manifest.clone(),digest:package.digest.clone(),revision,grants,enabled:true,bundled:false})
 }
 
 #[tauri::command]
