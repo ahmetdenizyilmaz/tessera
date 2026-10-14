@@ -35,7 +35,7 @@ import { usePluginStore } from './store/pluginStore';
 import { useSettingsStore } from './store/settingsStore';
 import { registerBuiltins } from './lib/builtinPlugins';
 import { DetachedWindows } from './components/windows/DetachedWindows';
-import { openNewSessionWizard, createPluginPanel } from './lib/newSessionActions';
+import { openNewSessionWizard } from './lib/newSessionActions';
 import { focusShortcutPanel, installPanelShortcuts } from './lib/panelShortcuts';
 import { installRecentPanelTracking } from './lib/panelHistory';
 import { installWorkspaceHistoryShortcuts } from './lib/workspaceHistoryShortcuts';
@@ -105,10 +105,6 @@ export default function App() {
     if (currentGroupId) {
       useGroupStore.getState().addToGroup(currentGroupId, id);
     }
-  }, []);
-
-  const handleNewPlugin = useCallback((pluginName: string) => {
-    createPluginPanel(pluginName);
   }, []);
 
   // Scan for external plugins on app init (built-ins registered at module load)
@@ -259,9 +255,6 @@ export default function App() {
             }
           }}
           onClaudeMd={() => setShowClaudeMd(true)}
-          onNewNotepad={() => handleNewPlugin('notepad')}
-          onNewTimer={() => handleNewPlugin('timer')}
-          onNewLichess={() => handleNewPlugin('lichess')}
         />
 
         <div style={{ display: 'grid', flex: 1, minHeight: 0, minWidth: 0, gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' }}>

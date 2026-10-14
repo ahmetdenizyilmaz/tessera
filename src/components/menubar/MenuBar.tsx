@@ -3,6 +3,8 @@ import { useWorkspaceHistoryStore } from '../../store/workspaceHistoryStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { createPluginPanel } from '../../lib/newSessionActions';
 import { AddonManager } from '../plugins/AddonManager';
+import { PluginIcon } from '../icons/PluginIcon';
+import { webAppIcon } from '../../lib/webApps';
 
 interface MenuBarProps {
   onNewInstance: () => void;
@@ -19,13 +21,13 @@ interface MenuBarProps {
   onOfficeView?: () => void;
   onActivity?: () => void;
   onClaudeMd?: () => void;
-  onNewNotepad?: () => void;
-  onNewTimer?: () => void;
-  onNewLichess?: () => void;
 }
 
 interface MenuItem {
+  id?: string;
   label: string;
+  icon?: string;
+  description?: string;
   shortcut?: string;
   action: () => void;
   separator?: false;
@@ -53,9 +55,6 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onOfficeView,
   onActivity,
   onClaudeMd,
-  onNewNotepad,
-  onNewTimer,
-  onNewLichess,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [managingAddons, setManagingAddons] = useState(false);
@@ -99,10 +98,15 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   ];
 
   const pluginItems: MenuEntry[] = [
-    ...[...pluginRegistry.values()].filter(plugin => !removedPlugins.has(plugin.name)).map(plugin => ({ label: plugin.defaultTitle, action: () => {
-      const builtinAction = plugin.name === 'lichess' ? onNewLichess : plugin.name === 'notepad' ? onNewNotepad : plugin.name === 'timer' ? onNewTimer : undefined;
-      if (builtinAction) builtinAction(); else createPluginPanel(plugin.name);
-    } })),
+    ...[...pluginRegistry.values()]
+      .filter(plugin => !removedPlugins.has(plugin.name))
+      .map(plugin => ({
+        id: `plugin:${plugin.name}`,
+        label: plugin.defaultTitle,
+        icon: webAppIcon(plugin),
+        description: plugin.homeUrl || plugin.description,
+        action: () => createPluginPanel(plugin.name),
+      })),
     { separator: true },
     { label: 'Manage add-ons…', action: () => setManagingAddons(true) },
   ];
@@ -156,6 +160,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           <div key={menu.key} className="menu-bar-menu">
             <button
               className={`menu-bar-btn ${openMenu === menu.key ? 'menu-bar-btn--open' : ''}`}
+              aria-expanded={openMenu === menu.key}
               onClick={() => setOpenMenu(openMenu === menu.key ? null : menu.key)}
               onMouseEnter={() => {
                 if (openMenu) setOpenMenu(menu.key);
@@ -165,19 +170,24 @@ export const MenuBar: React.FC<MenuBarProps> = ({
             </button>
 
             {openMenu === menu.key && (
-              <div className="menu-dropdown">
+              <div className={`menu-dropdown${menu.key === 'plugins' ? ' menu-dropdown--plugins' : ''}`}>
                 {menu.items.map((entry, i) =>
                   'separator' in entry && entry.separator ? (
                     <div key={`sep-${i}`} className="menu-dropdown-sep" />
                   ) : (
                     <button
-                      key={(entry as MenuItem).label}
+                      key={(entry as MenuItem).id ?? (entry as MenuItem).label}
                       className="menu-dropdown-item"
+                      data-plugin-id={(entry as MenuItem).id?.startsWith('plugin:') ? (entry as MenuItem).id!.slice(7) : undefined}
+                      title={(entry as MenuItem).description}
                       disabled={(entry as MenuItem).disabled}
                       onClick={() => !(entry as MenuItem).disabled && handleItemClick((entry as MenuItem).action)}
                       style={(entry as MenuItem).disabled ? { opacity: 0.4, cursor: 'default' } : undefined}
                     >
-                      <span className="menu-dropdown-label">{(entry as MenuItem).label}</span>
+                      <span className="menu-dropdown-label">
+                        {(entry as MenuItem).icon !== undefined && <PluginIcon icon={(entry as MenuItem).icon} size={16}/>}
+                        <span>{(entry as MenuItem).label}</span>
+                      </span>
                       {(entry as MenuItem).shortcut && (
                         <span className="menu-dropdown-shortcut">
                           {(entry as MenuItem).shortcut}
