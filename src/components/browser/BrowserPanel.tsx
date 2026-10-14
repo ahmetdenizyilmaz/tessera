@@ -15,6 +15,9 @@ import { useBrowserViewStore } from '../../store/browserViewStore';
 import { PanelLockButton } from '../layout/PanelLockButton';
 import { migrateLegacyNotes } from '../../lib/htmlPlugins';
 import { NOTES_APP } from '../../lib/bundledApps';
+import { AddonManager } from '../plugins/AddonManager';
+import { useBackgroundImage, usePanelBackground } from '../appearance/PanelAppearance';
+import { backgroundForeground } from '../../lib/panelBackground';
 
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: string }) {
   const useLayoutStore = usePanelLayout();
@@ -30,7 +33,17 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
   const [syncError, setSyncError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [clickToFocus, setClickToFocus] = useState(false);
+  const [permissions, setPermissions] = useState(false);
   const shownError = error || syncError;
+  const background = usePanelBackground(instanceId), backgroundImage = useBackgroundImage(background);
+
+  useEffect(() => {
+    if (!htmlPlugin || !ready) return;
+    void browserCommand(instanceId, 'browser_panel_appearance', { appearance: {
+      enabled: background.mode !== 'theme', color: background.color, foreground: backgroundForeground(background),
+      image: background.mode === 'image' ? backgroundImage?.image ?? null : null, fit: background.fit, dim: background.dim,
+    }}).catch(e => console.warn('Could not update app background:', e));
+  }, [instanceId, htmlPlugin, ready, background, backgroundImage?.image]);
 
   useEffect(() => {
     let disposed = false;
@@ -43,10 +56,11 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
 
   useEffect(() => {
     if (!htmlPlugin) return;
-    const unlisten = listen<{ id: string; title?: string; badge?: number | null }>('html-plugin-ui', ({ payload }) => {
+    const unlisten = listen<{ id: string; title?: string; badge?: number | null; openPermissions?: boolean }>('html-plugin-ui', ({ payload }) => {
       if (payload.id !== instanceId) return;
       if (payload.title !== undefined) usePluginStore.getState().setInstanceTitle(instanceId, payload.title);
       if (payload.badge !== undefined) usePluginStore.getState().setInstanceBadge(instanceId, payload.badge);
+      if (payload.openPermissions) setPermissions(true);
     });
     return () => { void unlisten.then(fn => fn()); };
   }, [instanceId, htmlPlugin]);
@@ -108,10 +122,11 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
     void closePanel(instanceId);
   };
   return <div className="browser-panel">
+    {permissions && <AddonManager initialPermissions={instance?.pluginName ?? site} onClose={() => setPermissions(false)} />}
     <div className="terminal-toolbar browser-toolbar">
       <PluginIcon icon={instance?.icon??'Globe'} size={15} className="browser-brand" />
       <span className="browser-title">{title}<PanelShortcutBadge panelId={instanceId} /></span>
-      <BrowserViewSettings site={site} pluginName={instance?.pluginName ?? site} title={appTitle} surface={surface} />
+      <BrowserViewSettings panelId={instanceId} site={site} pluginName={instance?.pluginName ?? site} title={appTitle} surface={surface} />
       <PanelLockButton panelId={instanceId} />
       {!htmlPlugin && <><button className="browser-navigation" title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
       <button className="browser-navigation" title="Forward" aria-label="Forward" disabled={!ready} onClick={() => action('forward')}><ArrowRight size={14} /></button>

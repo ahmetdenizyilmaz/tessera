@@ -5538,6 +5538,7 @@ dependencies = [
  "vt100",
  "webview2-com",
  "whoami",
+ "windows 0.61.3",
  "xcap",
  "zip",
  "zstd",

@@ -1,4 +1,6 @@
-import type { ITheme } from '@xterm/xterm';
+import type { ITheme, Terminal } from '@xterm/xterm';
+import { getPanelBackground, useAppearanceStore } from '../store/appearanceStore';
+import { backgroundForeground } from './panelBackground';
 
 /** ANSI palette shared by local terminals and their LAN viewers. */
 export const terminalTheme: ITheme = {
@@ -12,3 +14,19 @@ export const terminalTheme: ITheme = {
   blue: '#4a9eff', brightBlue: '#74b9ff', magenta: '#cc5de8', brightMagenta: '#da77f2',
   cyan: '#20c997', brightCyan: '#38d9a9', white: '#e0e0e0', brightWhite: '#ffffff',
 };
+
+export function panelTerminalTheme(id: string): ITheme {
+  const background = getPanelBackground(id);
+  return background.mode === 'theme' ? terminalTheme : {
+    ...terminalTheme, background: '#00000000', foreground: backgroundForeground(background),
+  };
+}
+
+/** Updating the theme repaints the existing terminal without restarting its PTY. */
+export function watchTerminalBackground(terminal: Terminal, id: string): () => void {
+  return useAppearanceStore.subscribe((state, previous) => {
+    if ((state.panels[id] ?? state.global) === (previous.panels[id] ?? previous.global)) return;
+    terminal.options.theme = panelTerminalTheme(id);
+    terminal.refresh(0, Math.max(0, terminal.rows - 1));
+  });
+}

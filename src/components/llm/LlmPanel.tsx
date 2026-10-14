@@ -6,6 +6,7 @@ import { closePanel } from '../../lib/panelCleanup';
 import { usePanelWindow, usePanelLayout } from '../windows/PanelWindowContext';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
+import { PanelAppearanceButton } from '../appearance/BackgroundSettings';
 import { PanelLockButton } from '../layout/PanelLockButton';
 import { useLlmChatStore } from '../../store/llmChatStore';
 import { LLM_PROVIDERS } from '../../types/llmProviders';
@@ -262,6 +263,7 @@ export function LlmPanel({ instanceId }: LlmPanelProps) {
 
         <div className="toolbar-actions">
           <MovePanelButton panelId={instanceId} />
+          <PanelAppearanceButton panelId={instanceId} />
           <PanelLockButton panelId={instanceId} />
           <button
             className="toolbar-btn"

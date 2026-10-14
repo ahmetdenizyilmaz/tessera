@@ -2,6 +2,7 @@ import React from 'react';
 import { SystemResources } from './SystemResources';
 import { UsageSummary } from './UsageSummary';
 import { BUILD_LABEL, buildDateLabel } from '../../lib/buildInfo';
+import './statusbar.css';
 
 interface StatusBarProps {
   onNewInstance?: () => void;

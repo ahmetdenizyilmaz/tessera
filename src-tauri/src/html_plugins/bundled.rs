@@ -3,12 +3,13 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const SAMPLES: &[&str] = &["notes", "timer", "clock", "calculator", "memory"];
+pub const SAMPLES: &[&str] = &["notes", "timer", "clock", "calculator", "memory", "music"];
 pub fn sample(sample: &str) -> Result<Package, String> {
     macro_rules! files { ($name:literal) => { (include_bytes!(concat!("../../../examples/html-apps/",$name,"/manifest.json")).as_slice(), include_bytes!(concat!("../../../examples/html-apps/",$name,"/index.html")).as_slice()) }; }
     let (manifest, html) = match sample {
         "notes" => files!("notes"), "timer" => files!("timer"), "clock" => files!("clock"),
         "calculator" => files!("calculator"), "memory" => files!("memory"),
+        "music" => files!("music"),
         _ => return Err("Unknown example app".into()),
     };
     package::validate(BTreeMap::from([("manifest.json".into(),manifest.to_vec()),("index.html".into(),html.to_vec())]))

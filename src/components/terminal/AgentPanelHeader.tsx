@@ -5,6 +5,7 @@ import { ProviderIcon } from "../icons/ProviderIcons";
 import { GitFork, X } from "lucide-react";
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
+import { PanelAppearanceButton } from '../appearance/BackgroundSettings';
 import { PanelLockButton } from '../layout/PanelLockButton';
 import { usePanelWindow, usePanelLayout } from '../windows/PanelWindowContext';
 
@@ -176,6 +177,7 @@ export function AgentPanelHeader({
           <span className="status-label">{status}</span>
         </span>
         <div className="toolbar-actions">
+          <PanelAppearanceButton panelId={instanceId} />
           <PanelLockButton panelId={instanceId} />
           <MovePanelButton panelId={instanceId} />
           {controls && (

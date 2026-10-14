@@ -13,6 +13,8 @@ pub const MAX_FILES: usize = 512;
 pub struct Permissions {
     pub network: Vec<String>,
     pub panels: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -137,6 +139,8 @@ pub fn validate(files: BTreeMap<String, Vec<u8>>) -> Result<Package, String> {
     manifest.permissions.network = manifest.permissions.network.iter().map(|value| super::network::origin(value)).collect::<Result<Vec<_>,_>>()?;
     manifest.permissions.network.sort(); manifest.permissions.network.dedup();
     manifest.permissions.panels.sort(); manifest.permissions.panels.dedup();
+    if manifest.permissions.media.len() > 2 || manifest.permissions.media.iter().any(|p| !["read", "control"].contains(&p.as_str())) { return Err("Unknown media permission".into()); }
+    manifest.permissions.media.sort(); manifest.permissions.media.dedup();
     if manifest.permissions.panels.iter().any(|p| !["list", "read", "send", "receive"].contains(&p.as_str())) { return Err("Unknown panel permission".into()); }
     if let Some(icon) = files.get(&manifest.icon) {
         if icon.len() > 70_000 || !icon.starts_with(b"\x89PNG\r\n\x1a\n") { return Err("Plugin icons must be PNG images smaller than 70 KB".into()); }

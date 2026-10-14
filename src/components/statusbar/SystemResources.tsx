@@ -26,8 +26,8 @@ export const SystemResources: React.FC = () => {
     : `${memoryPercent.toFixed(0)}%`;
 
   return (
-    <>
-      <div className="resource-bar">
+    <div className="status-resources" aria-label="System resources">
+      <div className="resource-bar" title={`CPU usage: ${cpuPercent.toFixed(0)}%`}>
         <span className="resource-label">CPU</span>
         <div className="resource-track">
           <div
@@ -38,7 +38,7 @@ export const SystemResources: React.FC = () => {
         <span className="resource-value">{cpuPercent.toFixed(0)}%</span>
       </div>
 
-      <div className="resource-bar">
+      <div className="resource-bar" title={`Memory: ${ramLabel}`}>
         <span className="resource-label">RAM</span>
         <div className="resource-track">
           <div
@@ -46,8 +46,9 @@ export const SystemResources: React.FC = () => {
             style={{ width: `${Math.min(100, memoryPercent)}%` }}
           />
         </div>
-        <span className="resource-value">{ramLabel}</span>
+        <span className="resource-value">{memoryPercent.toFixed(0)}%</span>
+        {memoryTotalGb > 0 && <span className="resource-memory-detail">{formatGb(memoryUsedGb)} / {formatGb(memoryTotalGb)}</span>}
       </div>
-    </>
+    </div>
   );
 };

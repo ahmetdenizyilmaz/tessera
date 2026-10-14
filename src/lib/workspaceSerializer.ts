@@ -15,6 +15,8 @@ import type { LayoutConfig, PanelRect, SavedWorkspace, StealFraction } from '../
 import { useWorkspaceHistoryStore } from '../store/workspaceHistoryStore';
 import { useRecentPanelStore } from '../store/recentPanelStore';
 import type { PluginManifest } from '../types/plugin';
+import { useAppearanceStore } from '../store/appearanceStore';
+import type { PanelBackground } from './panelBackground';
 import { usePanelLockStore } from '../store/panelLockStore';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ export interface WorkspaceSnapshotV3 {
   plugins: SavedPlugin[];
   panelShortcuts?: PanelShortcutBindings;
   lockedPanelIds?: string[];
+  panelBackgrounds?: Record<string, PanelBackground>;
   windows?: DetachedWorkspace[];
 }
 
@@ -100,6 +103,7 @@ interface NormalizedSnapshot {
   plugins: SavedPlugin[];
   panelShortcuts?: PanelShortcutBindings;
   lockedPanelIds?: string[];
+  panelBackgrounds?: Record<string, PanelBackground>;
   windows?: DetachedWorkspace[];
 }
 
@@ -139,6 +143,7 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
     windows: useWorkspaceWindowStore.getState().windows,
     savedAt: Date.now(),
     panelShortcuts: Object.fromEntries(Object.entries(usePanelShortcutStore.getState().bindings).filter(([, id]) => openPanels.has(id))),
+    panelBackgrounds: Object.fromEntries(Object.entries(useAppearanceStore.getState().panels).filter(([id]) => openPanels.has(id))),
     lockedPanelIds: [...usePanelLockStore.getState().lockedIds].filter(id => openPanels.has(id)),
     instances: Array.from(instances.values()).map((inst) => ({
       id: inst.id,
@@ -266,6 +271,7 @@ function normalizeSnapshot(raw: unknown): NormalizedSnapshot | null {
       panelShortcuts: normalizePanelShortcuts(snap.panelShortcuts),
       lockedPanelIds: Array.isArray(snap.lockedPanelIds) ? snap.lockedPanelIds.filter(id => typeof id === 'string') : [],
       windows: snap.windows ?? [],
+      panelBackgrounds: snap.panelBackgrounds && typeof snap.panelBackgrounds === 'object' ? snap.panelBackgrounds : {},
     };
   }
 
@@ -548,6 +554,7 @@ export function deserializeWorkspace(raw: unknown): void {
   const liveIds = new Set(useInstanceStore.getState().instances.keys());
   useLlmChatStore.getState().remapConversations(idMap, liveIds);
   useOfficeGameStore.getState().remapPanels(idMap);
+  useAppearanceStore.getState().restorePanels(snapshot.panelBackgrounds ?? {}, idMap);
   // Only transfer an existing grant along the exact restored panel mapping.
   // New/unrelated panels never inherit another conversation's app permissions.
   if (idMap.size && [...usePluginStore.getState().registry.values()].some(app => app.htmlPlugin && app.permissions?.panels.length)) {

@@ -1,3 +1,4 @@
+import type { PanelBackground } from '../lib/panelBackground';
 import type { ClaudeInstance } from './instance';
 import type { PluginInstance } from './plugin';
 import type { GroupState } from '../store/groupStore';
@@ -20,6 +21,7 @@ export interface RememberedPanel {
   llmMessages?: LlmChatMessage[];
   remoteDeviceId?: string;
   locked?: boolean;
+  background?: PanelBackground;
 }
 
 export interface ClosedPanel {

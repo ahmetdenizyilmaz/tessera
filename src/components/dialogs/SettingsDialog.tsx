@@ -1,3 +1,4 @@
+import { BackgroundSettings } from '../appearance/BackgroundSettings';
 import React, { useState } from 'react';
 import { GeneralSettings } from '../settings/GeneralSettings';
 import { PermissionsSettings } from '../settings/PermissionsSettings';
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'antigravity', label: 'Antigravity', icon: '△' },
   { id: 'network', label: 'Local Network', icon: '⇄' },
   { id: 'general', label: 'General', icon: '⚙' },
+  { id: 'appearance', label: 'Appearance', icon: '◐' },
   { id: 'permissions', label: 'Permissions', icon: '🔒' },
   { id: 'environment', label: 'Environment', icon: '📦' },
   { id: 'advanced', label: 'Advanced', icon: '🔧' },
@@ -45,6 +47,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
       case 'antigravity': return <AntigravitySettings />;
       case 'network': return <NetworkSettings />;
       case 'general': return <GeneralSettings />;
+      case 'appearance': return <BackgroundSettings />;
       case 'permissions': return <PermissionsSettings />;
       case 'environment': return <EnvironmentSettings />;
       case 'advanced': return <AdvancedSettings />;

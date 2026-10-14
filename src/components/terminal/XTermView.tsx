@@ -17,7 +17,7 @@ import { createTerminalResize } from '../../lib/terminalResize';
 import { installTerminalPathLinks, localTerminalLinkHandler } from '../../lib/terminalPaths';
 import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
-import { terminalTheme } from '../../lib/terminalTheme';
+import { panelTerminalTheme, watchTerminalBackground } from '../../lib/terminalTheme';
 import { terminalPasteData } from '../../lib/terminalPaste';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -173,7 +173,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const terminal = new Terminal({
       ...platform,
       ...terminalSizes.get(instanceId),
-      theme: terminalTheme,
+      theme: panelTerminalTheme(instanceId),
       fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       cursorBlink: true,
@@ -194,6 +194,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    const unwatchBackground = watchTerminalBackground(terminal, instanceId);
     const pathLinks = installTerminalPathLinks(terminal, getCwd);
     const unshare = registerSharedTerminal(instanceId, terminal, serializeAddon);
     const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
@@ -522,6 +523,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       dataDisposable.dispose();
       unsubscribeCursor();
       pathLinks.dispose();
+      unwatchBackground();
       cursorGuard.dispose();
       scrollGuard.dispose();
       if (useInstanceStore.getState().instances.has(instanceId)) {

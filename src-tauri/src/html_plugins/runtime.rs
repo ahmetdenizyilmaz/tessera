@@ -80,6 +80,25 @@ pub async fn html_plugin_call(caller: Webview, app: tauri::AppHandle, method: St
     let (panel,installed) = authorize(&caller, &app, &method)?;
     match method.as_str() {
         "ready" => Ok(json!({"instanceId":panel,"pluginName":name(&installed.manifest),"name":installed.manifest.name,"version":installed.manifest.version,"permissions":installed.grants})),
+        "media.snapshot" | "media.control" => {
+            let permission = if method == "media.snapshot" { "read" } else { "control" };
+            if !installed.grants.media.iter().any(|p| p == permission) { return Err(format!("Media {permission} permission is not enabled. Open app permissions to allow it.")); }
+            let handle = app.clone(); let label = caller.label().to_owned();
+            let plugin = name(&installed.manifest); let revision = installed.revision.clone();
+            let check = move || {
+                let state = handle.state::<HtmlPlugins>(); let inner = state.0.lock().unwrap_or_else(|e|e.into_inner());
+                inner.sessions.get(&label).is_some_and(|s|s.plugin==plugin && s.revision==revision)
+                    && inner.installed.get(&plugin).is_some_and(|i|i.enabled && i.grants.media.iter().any(|p|p==permission))
+            };
+            let result = media::request(&method, params, Box::new(check)).await?;
+            let (_, latest) = authorize(&caller, &app, "result")?;
+            if !latest.grants.media.iter().any(|p|p==permission) { return Err("Media access was revoked".into()); }
+            Ok(result)
+        }
+        "ui.openPermissions" => {
+            let _ = app.emit_to("main", "html-plugin-ui", json!({"id":panel,"openPermissions":true}));
+            Ok(Value::Null)
+        }
         "storage.get" | "storage.set" | "storage.remove" | "storage.entries" => storage_call(&app, &installed, &panel, &method, params),
         "ui.title" => {
             let title = params["title"].as_str().ok_or("Title is required")?;

@@ -5,6 +5,13 @@ use std::{collections::HashMap, sync::Mutex};
 use serde_json::{json, Value};
 use tauri::{Manager, Webview};
 use tessera_lib::{browser, html_plugins, panelbus, workspace_windows};
+#[cfg(windows)] #[path="support/media_fixture.rs"] mod media_fixture;
+#[cfg(not(windows))]
+mod media_fixture {
+    #[derive(Default)] pub struct State;
+    #[tauri::command]
+    pub fn validation_media(_action:String)->Result<serde_json::Value,String> {Err("Windows media fixture only".into())}
+}
 
 #[derive(Default)]
 struct Reports(Mutex<HashMap<String, tokio::sync::oneshot::Sender<Value>>>);
@@ -50,16 +57,17 @@ fn main() {
     window.url=tauri::WebviewUrl::External("http://localhost:1420/tools/html-plugin-fixture.html".parse().unwrap());
     window.title="Tessera HTML app validation (synthetic)".into();window.width=1100.;window.height=800.;window.visible=false;window.maximized=false;window.create=false;
     let handler=tessera_lib::main_view_commands(tauri::generate_handler![
-        validation_exit,validation_secret,validation_eval,validation_info,validation_tool,validation_roster,
+        validation_exit,validation_secret,validation_eval,validation_info,validation_tool,validation_roster,media_fixture::validation_media,
         html_plugins::bundled::html_plugin_migrate_notes,
             html_plugins::catalog::html_catalog_list,html_plugins::catalog::html_catalog_preview,
             html_plugins::scan_plugins,html_plugins::html_plugin_inspect,html_plugins::html_plugin_sample,html_plugins::html_plugin_install,
         html_plugins::html_plugin_permissions,html_plugins::html_plugin_set_enabled,html_plugins::html_plugin_remap_targets,html_plugins::html_plugin_targets,html_plugins::runtime::html_plugin_call,
-        browser::browser_panel_create,browser::browser_panel_bounds,browser::browser_panel_action,browser::browser_panel_status,browser::browser_panel_close,
+        browser::browser_panel_appearance, browser::browser_panel_create,browser::browser_panel_bounds,browser::browser_panel_action,browser::browser_panel_status,browser::browser_panel_close,
         workspace_windows::workspace_drop_target,workspace_windows::workspace_window_place,workspace_windows::workspace_window_destroy]);
     let report: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![validation_report]);
     tauri::Builder::default().plugin(tauri_plugin_shell::init()).plugin(tauri_plugin_fs::init()).plugin(tauri_plugin_dialog::init())
         .manage(Reports::default()).manage(browser::BrowserPanels::default()).manage(html_plugins::HtmlPlugins::default())
+        .manage(media_fixture::State::default())
         .manage(panelbus::PanelBus::new(Some(1),String::new()))
         .register_asynchronous_uri_scheme_protocol("tessera-plugin",|ctx,req,res|html_plugins::serve(ctx.app_handle().clone(),ctx.webview_label().to_string(),req,res))
         .invoke_handler(move |invoke| {if invoke.message.command()=="validation_report" {report(invoke)} else {handler(invoke)}})

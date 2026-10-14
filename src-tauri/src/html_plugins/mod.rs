@@ -6,6 +6,7 @@ pub mod network;
 pub mod runtime;
 pub mod bundled;
 pub mod catalog;
+pub mod media;
 pub use runtime::{receive, can_receive, panel_info};
 
 use std::{collections::{BTreeMap, HashMap, VecDeque}, path::{Path, PathBuf}, sync::Mutex, time::{Duration, Instant}};
@@ -16,13 +17,18 @@ use package::{Manifest, Package};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default, rename_all="camelCase", deny_unknown_fields)]
-pub struct Grants { pub network: Vec<String>, pub panels: Vec<String>, pub targets: Vec<String> }
+pub struct Grants {
+    pub network: Vec<String>, pub panels: Vec<String>, pub targets: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<String>,
+}
 
 impl Grants {
     pub fn validate(&self, manifest: &Manifest) -> Result<(), String> {
         if self.network.len() > 16 || self.panels.len() > 4 || self.targets.len() > 100
             || self.network.iter().any(|o| !manifest.permissions.network.contains(o))
             || self.panels.iter().any(|p| !manifest.permissions.panels.contains(p))
+            || self.media.len() > 2 || self.media.iter().any(|p| !manifest.permissions.media.contains(p))
             || self.targets.iter().any(|t| t.is_empty() || t.len() > 160) { return Err("Grants must be a subset of the plugin's requested permissions".into()); }
         Ok(())
     }
@@ -279,7 +285,7 @@ mod tests {
     #[test] fn permission_grants_are_optional_and_scoped() {
         let manifest:Manifest=serde_json::from_value(json!({"id":"test.app","name":"Test","version":"1","permissions":{"panels":["list","send"],"network":["https://api.example.com"]}})).unwrap();
         assert!(Grants::default().validate(&manifest).is_ok());
-        let mut grants=Grants {panels:vec!["send".into()],targets:vec!["chosen".into()],network:vec![]};
+        let mut grants=Grants {panels:vec!["send".into()],targets:vec!["chosen".into()],network:vec![],media:vec![]};
         assert!(grants.validate(&manifest).is_ok());assert!(grants.allows("send","chosen"));assert!(!grants.allows("read","chosen"));assert!(!grants.allows("send","another"));
         grants.panels.push("read".into());assert!(grants.validate(&manifest).is_err());
         grants.panels.clear();grants.network.push("https://evil.example".into());assert!(grants.validate(&manifest).is_err());
@@ -290,6 +296,15 @@ mod tests {
         for url in ["https://evil.example/?notes=secret","https://tauri.localhost","http://tessera-plugin.localhost/html-other/revision/index.html","tessera-plugin://localhost/html-test.app/other/index.html","tessera-plugin://localhost/html-test.app/revision/../secret","file:///C:/secret","data:text/html,escape"] {assert!(!navigation_allowed(&url.parse().unwrap(),&home),"{url}");}
         assert!(package::asset_path(&decode_path("%2e%2e/secret").unwrap()).is_err());
         assert!(package::asset_path(&decode_path("C%3a/secret").unwrap()).is_err());
+    }
+    #[test] fn media_controls_require_declared_and_granted_permissions() {
+        let manifest:Manifest=serde_json::from_value(json!({"id":"test.music","name":"Music","version":"1","permissions":{"media":["read","control"]}})).unwrap();
+        assert!(Grants::default().validate(&manifest).is_ok());
+        let read=Grants{media:vec!["read".into()],..Grants::default()};assert!(read.validate(&manifest).is_ok());
+        let control=Grants{media:vec!["control".into()],..Grants::default()};assert!(control.validate(&manifest).is_ok());
+        let plain:Manifest=serde_json::from_value(json!({"id":"test.plain","name":"Plain","version":"1"})).unwrap();
+        assert!(control.validate(&plain).is_err());
+        assert!(Grants{media:vec!["shell".into()],..Grants::default()}.validate(&manifest).is_err());
     }
     #[test] fn durable_json_replaces_previous_data() {
         let root=std::env::temp_dir().join(format!("tessera-storage-test-{}",uuid::Uuid::new_v4()));let path=root.join("storage.json");

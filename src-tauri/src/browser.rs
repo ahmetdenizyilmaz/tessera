@@ -5,7 +5,7 @@ use tauri_plugin_shell::ShellExt;
 use std::collections::HashMap;
 
 #[derive(Default)]
-pub struct BrowserPanels(tokio::sync::Mutex<HashMap<String, SitePolicy>>);
+pub struct BrowserPanels(tokio::sync::Mutex<HashMap<String, SitePolicy>>, std::sync::Arc<std::sync::Mutex<HashMap<String,String>>>);
 
 #[derive(Clone)]
 struct SitePolicy { home: tauri::Url, custom: bool, html: bool }
@@ -109,10 +109,17 @@ pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state:
     let navigation_policy=policy.clone();
     let popup_policy=policy.clone();
     let html = policy.html;
+    let backgrounds=state.1.clone(); let background_label=label.clone();
     let builder = WebviewBuilder::new(&label, if html { WebviewUrl::CustomProtocol(url) } else { WebviewUrl::External(url) })
         .data_directory(profile)
         .focused(false)
         .disable_drag_drop_handler()
+        .on_page_load(move |view,payload| {
+            if payload.event()==tauri::webview::PageLoadEvent::Finished {
+                let script=backgrounds.lock().unwrap_or_else(|e|e.into_inner()).get(&background_label).cloned();
+                if let Some(script)=script {let _=view.eval(script);}
+            }
+        })
         .on_navigation(move |url|navigation_policy.allows(url))
         .on_new_window(move |url, _| {
             if html { return NewWindowResponse::Deny; }
@@ -212,13 +219,54 @@ pub async fn browser_panel_close(caller: Webview, app: tauri::AppHandle, state: 
     let mut profiles = state.0.lock().await;
     if let Some(view) = app.get_webview(&label(&id)?) { view.close().map_err(|e| e.to_string())?; }
     profiles.remove(&label(&id)?);
+    state.1.lock().unwrap_or_else(|e|e.into_inner()).remove(&label(&id)?);
     crate::html_plugins::closed(&app,&id);
     Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct BrowserAppearance { enabled:bool, color:String, foreground:String, image:Option<String>, fit:String, dim:f64 }
+impl BrowserAppearance {
+    fn script(&self) -> Result<String,String> {
+        let color=|s:&str|s.len()==7 && s.starts_with('#') && s.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit);
+        if !color(&self.color)||!color(&self.foreground)||!self.dim.is_finite()||!(0.0..=85.0).contains(&self.dim)
+            || !["cover","contain","stretch","center","tile"].contains(&self.fit.as_str()) {return Err("Invalid panel background".into());}
+        let mut background=String::from("none");
+        if let Some(image)=&self.image {
+            if image.len()>3*1024*1024 || !image.strip_prefix("data:image/jpeg;base64,").is_some_and(|s|s.bytes().all(|c|c.is_ascii_alphanumeric()||b"+/=".contains(&c))) {return Err("Invalid background image".into());}
+            background=format!("linear-gradient(rgba(0,0,0,{}),rgba(0,0,0,{})),url(\"{image}\")",self.dim/100.,self.dim/100.);
+        }
+        let size=match self.fit.as_str(){"stretch"=>"100% 100%","center"|"tile"=>"auto",s=>s};
+        let repeat=if self.fit=="tile"{"no-repeat,repeat"}else{"no-repeat"};
+        let css=if self.enabled {format!("html{{min-height:100%;background-color:{}!important;background-image:{background}!important;background-size:100% 100%,{size}!important;background-repeat:{repeat}!important;background-position:center!important;background-attachment:fixed!important}}body{{background:transparent!important;color:{}}}",self.color,self.foreground)} else {String::new()};
+        Ok(format!("(()=>{{let s=document.getElementById('__tessera_background');if(!s){{s=document.createElement('style');s.id='__tessera_background';document.head.append(s);}}s.textContent={};}})()",serde_json::json!(css)))
+    }
+}
+
+#[tauri::command]
+pub async fn browser_panel_appearance(caller:Webview,app:tauri::AppHandle,state:tauri::State<'_,BrowserPanels>,id:String,appearance:BrowserAppearance)->Result<(),String>{
+    authorize(&caller)?;let label=label(&id)?;
+    if !state.0.lock().await.get(&label).is_some_and(|p|p.html) {return Err("Website content keeps its own appearance".into());}
+    let script=appearance.script()?;
+    state.1.lock().unwrap_or_else(|e|e.into_inner()).insert(label.clone(),script.clone());
+    app.get_webview(&label).ok_or("App panel is not ready")?.eval(script).map_err(|e|e.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn app_background_rejects_external_images_and_css_injection() {
+        let mut appearance=BrowserAppearance { enabled:true,color:"#18212c".into(),foreground:"#ffffff".into(),image:None,fit:"cover".into(),dim:35. };
+        assert!(appearance.script().unwrap().contains("background-color:#18212c"));
+        for image in ["https://example.com/image.jpg","data:image/svg+xml,<svg/>","data:image/jpeg;base64,\");alert(1)//"] {
+            appearance.image=Some(image.into());assert!(appearance.script().is_err());
+        }
+        appearance.image=None;appearance.color="#000000;background:url(https://example.com)".into();assert!(appearance.script().is_err());
+        appearance.color="#000000".into();appearance.dim=f64::NAN;assert!(appearance.script().is_err());
+        appearance.dim=0.;appearance.enabled=false;assert!(appearance.script().unwrap().contains("s.textContent=\"\""));
+    }
     #[test]
     fn website_boundary_and_restore_addresses() {
         for url in ["https://lichess.org/", "https://lichess.org/abcdefgh/white"] { assert!(allowed(&url.parse().unwrap())); }

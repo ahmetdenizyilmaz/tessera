@@ -27,7 +27,7 @@ export interface PluginManifest {
 }
 
 export type PanelPermission = 'list' | 'read' | 'send' | 'receive';
-export interface HtmlPluginPermissions { network: string[]; panels: PanelPermission[] }
+export interface HtmlPluginPermissions { network: string[]; panels: PanelPermission[]; media?: ('read' | 'control')[] }
 export interface HtmlPluginGrants extends HtmlPluginPermissions { targets: string[] }
 
 export interface PluginTitleButton {

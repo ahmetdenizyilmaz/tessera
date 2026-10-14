@@ -1,3 +1,4 @@
+import { PanelAppearance } from '../appearance/PanelAppearance';
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   useLayoutStore as useMainLayoutStore,
@@ -581,6 +582,7 @@ export function MosaicLayout() {
                   : '100%',
               }}
             >
+            <PanelAppearance panelId={id}>
             {panelType === 'group'
               ? <GroupPreview groupId={id} />
               : panelType === 'widget'
@@ -595,6 +597,7 @@ export function MosaicLayout() {
               ? <RemotePanel instanceId={id} />
               : <TerminalPanel instanceId={id} />
             }
+            </PanelAppearance>
             </div>
             {/* Unfocused panel overlay: blocks xterm interactions until clicked */}
             {!isFocused && !isDrag && tabOrder.length > 1 && (

@@ -11,6 +11,7 @@ import CheckpointTimeline from '../checkpoints/CheckpointTimeline';
 import NewSessionWizard from '../wizard/NewSessionWizard';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
+import { PanelAppearanceButton } from '../appearance/BackgroundSettings';
 import { PanelLockButton } from '../layout/PanelLockButton';
 
 const WIDGET_INFO: Record<string, { icon: React.ReactNode; label: string }> = {
@@ -68,7 +69,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
   };
 
   return (
-    <div style={{
+    <div className="widget-panel" style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
@@ -105,6 +106,7 @@ export function WidgetPanel({ instanceId }: WidgetPanelProps) {
           <PanelShortcutBadge panelId={instanceId} />
         </span>
         <MovePanelButton panelId={instanceId} />
+        <PanelAppearanceButton panelId={instanceId} />
         <PanelLockButton panelId={instanceId} />
         <button
           onClick={(e) => {

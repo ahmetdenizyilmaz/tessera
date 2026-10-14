@@ -10,6 +10,8 @@ import { useGroupStore } from "../store/groupStore";
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import { usePluginStore } from '../store/pluginStore';
 import { usePanelLockStore } from '../store/panelLockStore';
+import { useAppearanceStore, getPanelBackground } from '../store/appearanceStore';
+import { DEFAULT_BACKGROUND } from './panelBackground';
 import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
 import { registerBuiltins } from './builtinPlugins';
 import type { InstanceConfig } from "../types/instance";
@@ -53,6 +55,21 @@ beforeEach(() => {
   useGroupStore.getState().restoreGroups(new Map());
   usePanelShortcutStore.getState().restore({});
   usePanelLockStore.setState({ lockedIds: new Set() });
+  useAppearanceStore.setState({global:{...DEFAULT_BACKGROUND},panels:{}});
+});
+it('backgrounds survive workspace restore with new agent IDs and stable app IDs',()=>{
+  const agent=useInstanceStore.getState().addInstance({...config,panelView:'terminal'});
+  useLayoutStore.getState().addPanel(agent,'terminal');
+  const widget=useLayoutStore.getState().addWidgetPanel('timer');
+  const background={...DEFAULT_BACKGROUND,mode:'image' as const,imageId:'test-image',fit:'contain' as const};
+  useAppearanceStore.getState().setPanel(agent,background);
+  useAppearanceStore.getState().setPanel(widget,{...DEFAULT_BACKGROUND,mode:'color',color:'#112233'});
+  useAppearanceStore.getState().setPanel('closed',{...DEFAULT_BACKGROUND,mode:'color'});
+  const saved=serializeWorkspace();expect(Object.keys(saved.panelBackgrounds!)).toEqual([agent,widget]);
+  useAppearanceStore.setState({panels:{}});deserializeWorkspace(saved);
+  const newAgent=[...useInstanceStore.getState().instances.keys()][0];
+  expect(newAgent).not.toBe(agent);expect(getPanelBackground(newAgent)).toEqual(background);
+  expect(getPanelBackground(widget).color).toBe('#112233');
 });
 it('restores panel locks with remapped agent IDs and keeps custom slot geometry through focus changes', () => {
   const agent = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' });

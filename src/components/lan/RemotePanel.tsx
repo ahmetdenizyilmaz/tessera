@@ -8,6 +8,7 @@ import { splitRemotePanelId, useLanStore } from '../../store/lanStore';
 import { closePanel } from '../../lib/panelCleanup';
 import { RemoteTerminalView } from './RemoteTerminalView';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
+import { PanelAppearanceButton } from '../appearance/BackgroundSettings';
 import { PanelLockButton } from '../layout/PanelLockButton';
 
 interface TranscriptMessage {
@@ -88,7 +89,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
+    <div className="remote-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
       <div className="terminal-toolbar" style={{ minHeight: 36, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <ProviderIcon provider={panel.provider} size={16} />
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -105,6 +106,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
         <span title={peer.connected ? 'Encrypted LAN connection active' : 'Remote computer offline'} style={{ color: peer.connected ? '#51cf66' : 'var(--text-muted)', display: 'flex' }}>
           {peer.connected ? <Monitor size={14} /> : <WifiOff size={14} />}
         </span>
+        <PanelAppearanceButton panelId={instanceId} />
         <PanelLockButton panelId={instanceId} />
         <button className="btn btn-secondary" onClick={() => void refresh()} disabled={!peer.connected || loading} style={{ padding: 4 }} title={isTerminal ? 'Refresh terminal screen' : 'Refresh transcript'}>
           <RefreshCw size={13} className={loading ? 'spin' : ''} />

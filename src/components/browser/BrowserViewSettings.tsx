@@ -6,9 +6,10 @@ import { useBrowserViewStore } from '../../store/browserViewStore';
 import { usePluginStore } from '../../store/pluginStore';
 import { webAppIcon } from '../../lib/webApps';
 import { PluginIcon } from '../icons/PluginIcon';
+import { PanelBackgroundDialog } from '../appearance/BackgroundSettings';
 import { AddonManager } from '../plugins/AddonManager';
 
-export function BrowserViewSettings({ site, pluginName, title, surface }: { site: string; pluginName: string; title: string; surface: RefObject<HTMLDivElement | null> }) {
+export function BrowserViewSettings({ site, pluginName, title, surface, panelId }: { panelId: string; site: string; pluginName: string; title: string; surface: RefObject<HTMLDivElement | null> }) {
   const [open, setOpen] = useState(false), [error, setError] = useState('');
   const [share, setShare] = useState<number | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
@@ -18,6 +19,7 @@ export function BrowserViewSettings({ site, pluginName, title, surface }: { site
   const [fetchingIcon, setFetchingIcon] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [permissions, setPermissions] = useState(false);
+  const [appearance, setAppearance] = useState(false);
   const id = useId();
   const document = trigger.current?.ownerDocument;
   const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
@@ -100,10 +102,12 @@ export function BrowserViewSettings({ site, pluginName, title, surface }: { site
           } catch { setError('Could not save the icon setting. Please try again.'); }
           finally { setFetchingIcon(false); }
         }}>{fetchingIcon ? 'Checking…' : webApp.icon === '' ? 'Refresh icon' : 'Use website icon'}</button></div>}
+      <button type="button" className="browser-settings-reset" onClick={() => { setOpen(false); setAppearance(true); }}><Settings2 size={14}/>Panel background...</button>
       {error && <p className="browser-settings-error" role="alert">{error}</p>}
       {webApp?.htmlPlugin && <button type="button" className="browser-settings-reset" onClick={() => { setOpen(false); setPermissions(true); }}><ShieldCheck size={14}/>App permissions…</button>}
       {webApp && <button type="button" className="browser-settings-remove" onClick={() => { setOpen(false); setRemoving(true); }}><Trash2 size={14}/>{webApp.htmlPlugin ? 'Remove HTML app…' : 'Remove web player…'}</button>}
     </div>, document.body)}
+    {appearance && <PanelBackgroundDialog panelId={panelId} web={!webApp?.htmlPlugin} onClose={() => setAppearance(false)}/>}
     {removing && <AddonManager initialName={pluginName} onClose={() => setRemoving(false)}/>}
     {permissions && <AddonManager initialPermissions={pluginName} onClose={() => setPermissions(false)}/>}
   </>;

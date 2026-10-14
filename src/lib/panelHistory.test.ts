@@ -14,6 +14,8 @@ import { useWorkspaceHistoryStore as history } from '../store/workspaceHistorySt
 import { RECENT_PANELS_KEY, useRecentPanelStore as recents } from '../store/recentPanelStore';
 import { usePanelShortcutStore } from '../store/panelShortcutStore';
 import { usePanelLockStore } from '../store/panelLockStore';
+import { useAppearanceStore } from '../store/appearanceStore';
+import { DEFAULT_BACKGROUND } from './panelBackground';
 import { useWorkspaceWindowStore } from '../store/workspaceWindowStore';
 import { useLanStore } from '../store/lanStore';
 import { createDetachedLayout, connectDetachedLayout } from './detachedLayout';
@@ -355,4 +357,13 @@ it('seeds existing panels into recents and updates renamed panels without record
     expect(recents.getState().entries[0].saved.panel.name).toBe('New title');
     expect(history.getState().past).toEqual([]);
   } finally { stop(); vi.useRealTimers(); }
+});
+
+it('closing and reopening a panel restores its own background',async()=>{
+  const id=agent();const background={...DEFAULT_BACKGROUND,mode:'image' as const,imageId:'remembered-image',fit:'center' as const};
+  useAppearanceStore.getState().setPanel(id,background);
+  const saved=captureClosedPanel(id)!;expect(saved.panel.background).toEqual(background);
+  await closePanel(id,false);useAppearanceStore.getState().setPanel(id,null);
+  expect(restoreClosedPanel(saved)).toBe(true);
+  expect(useAppearanceStore.getState().panels[id]).toEqual(background);
 });

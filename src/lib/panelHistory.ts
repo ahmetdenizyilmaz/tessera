@@ -1,3 +1,4 @@
+import { useAppearanceStore } from '../store/appearanceStore';
 import { canonicalAppName } from './bundledApps';
 import { captureGroupSnapshot, ensurePanelAtLevel, getPanelLocations, removePanelsFromWorkspace,
   updateLevelLayout, useGroupStore } from '../store/groupStore';
@@ -38,6 +39,7 @@ export function captureClosedPanel(id: string): ClosedPanel | null {
     if (!type || (!instance && !plugin && !group && type !== 'widget' && type !== 'computer' && !remote)) return null;
     return {
       id: panelId, type,
+      background: useAppearanceStore.getState().panels[panelId],
       locked: usePanelLockStore.getState().lockedIds.has(panelId),
       name: instance?.name ?? plugin?.title ?? group?.name ?? remote?.panel.name ??
         (type === 'computer' ? 'Computer' : layout.widgetKinds[panelId] ?? 'Panel'),
@@ -147,6 +149,7 @@ export function restoreClosedPanel(saved: ClosedPanel, wizardId?: string): boole
     // Detached workspace roots are hidden containers, not tabs in Main.
     if (!(windowRoot && panel.id === saved.panel.id)) ensurePanelAtLevel(panel.id, parent, panel.type);
     usePanelLockStore.getState().setLocked(panel.id, !!panel.locked);
+    useAppearanceStore.getState().setPanel(panel.id, panel.background ?? null);
     const children = (panel.children ?? []).filter(child => restore(child, panel.id)).map(child => child.id);
     if (panel.group && samePanels(children, panel.group.childIds)) updateLevelLayout(panel.id, {
       tabOrder: panel.group.childIds, layoutConfig: panel.group.layoutConfig,

@@ -31,7 +31,10 @@ export function HtmlPermissionFields({ requested, value, onChange, disabled }: {
   const toggle = <T extends string>(items: T[], item: T) => items.includes(item) ? items.filter(v => v !== item) : [...items, item];
   const knownIds = new Set(targets.map(t => t.id));
   return <div className="html-app-permissions">
-    {!requested.network.length && !requested.panels.length && <p className="html-app-local"><ShieldCheck size={18}/>This app runs locally. No network or conversation access requested.</p>}
+    {!requested.network.length && !requested.panels.length && !requested.media?.length && <p className="html-app-local"><ShieldCheck size={18}/>This app runs locally. No network or conversation access requested.</p>}
+    {!!requested.media?.length && <fieldset disabled={disabled}><legend>Desktop media</legend><p>Access Windows media players such as Spotify. No Spotify login or internet access is needed.</p>
+      {requested.media.map(permission => <label key={permission}><input type="checkbox" checked={value.media?.includes(permission) ?? false} onChange={() => onChange({...value,media:toggle(value.media ?? [],permission)})}/><span>{permission === 'read' ? 'See players, current song, and cover art' : 'Control playback: play, pause, skip, and seek'}</span></label>)}
+    </fieldset>}
     {!!requested.network.length && <fieldset disabled={disabled}><legend>Allowed websites</legend><p>Only checked sites can be contacted through the app API.</p>
       {requested.network.map(origin => <label key={origin}><input type="checkbox" checked={value.network.includes(origin)} onChange={() => onChange({...value, network:toggle(value.network,origin)})}/><span>{origin}</span></label>)}
     </fieldset>}
@@ -82,7 +85,7 @@ export function HtmlAppImport({ onDone, onCancel, onBusy, initialPreview }: { on
     {!initialPreview && <><h3>Import a local HTML app</h3><p className="addon-hint">Games, calculators, notes, and other small apps. Choose a self-contained HTML file, or a folder/ZIP with manifest.json and its assets.</p>
     <div className="html-app-actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void choose(false)}><FileCode2 size={16}/>Choose HTML / ZIP</button>
       <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void choose(true)}><FolderOpen size={16}/>Choose folder</button></div>
-    <p className="addon-hint">Or try an example:</p><div className="html-app-actions">{[['calculator','Calculator'],['notes','Notes'],['timer','Timer'],['clock','Clock'],['memory','Memory Break']].map(([name,label])=><button type="button" className="btn btn-secondary btn-sm" key={name} disabled={busy} onClick={()=>void sample(name)}>{label}</button>)}</div></>}
+    <p className="addon-hint">Or try an example:</p><div className="html-app-actions">{[['calculator','Calculator'],['notes','Notes'],['timer','Timer'],['clock','Clock'],['memory','Memory Break'],['music','Music Remote']].map(([name,label])=><button type="button" className="btn btn-secondary btn-sm" key={name} disabled={busy} onClick={()=>void sample(name)}>{label}</button>)}</div></>}
     {preview && <div className="html-app-preview"><h3>{preview.manifest.name}<small>v{preview.manifest.version}</small></h3><p>{preview.manifest.description}</p>{preview.source && <p className="addon-hint">Source: {preview.source}</p>}
       <p className="addon-hint">{preview.fileCount} files · {(preview.bytes / 1024).toFixed(0)} KB{preview.replaces ? ` · Replaces v${preview.replaces}` : ''}</p>
       {preview.replaces && <p className="html-app-notice">Updating closes this app’s open panels. Its saved data is kept. Review permissions for this version below.</p>}

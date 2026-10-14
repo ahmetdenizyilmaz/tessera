@@ -58,6 +58,10 @@ zip = { version = "=8.6.0", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38.2"
+windows = { version = "0.61.3", features = ["Media_Control", "Storage_Streams", "Win32_System_WinRT"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.61.3", features = ["Media_Playback", "Storage"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

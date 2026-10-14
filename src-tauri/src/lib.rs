@@ -163,7 +163,7 @@ pub fn run() {
             workspace_windows::workspace_drop_target,
             workspace_windows::workspace_window_place,
             workspace_windows::workspace_window_destroy,
-            browser::browser_panel_create,
+            browser::browser_panel_appearance, browser::browser_panel_create,
             browser::browser_panel_bounds,
             browser::browser_panel_action,
             browser::browser_panel_status,

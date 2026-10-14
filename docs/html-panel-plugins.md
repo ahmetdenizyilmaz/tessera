@@ -8,7 +8,7 @@ notes, games, dashboards, and small utilities. Most apps need no permissions.
 Open **Apps → Import HTML app…** (also in File and App library).
 Choose a self-contained `.html` file, a folder, or a ZIP containing `manifest.json`.
 Review the app and any optional permissions, then choose **Install and open**.
-Notes, Timer, Clock, Calculator, and Memory Break are included automatically.
+Notes, Timer, Clock, Calculator, Memory Break, and Music Remote are included automatically.
 They use the same HTML-app system as imported apps. Their source is in [`examples/html-apps`](../examples/html-apps).
 
 Installed apps appear in **Apps → App library**, **New session → More → App library**, and detached-window
@@ -76,6 +76,7 @@ to import, no npm dependency, and no Node.js runtime.
 ```js
 const info = await Tessera.ready;
 // info: { instanceId, pluginName, name, version, permissions }
+const updatedInfo = await Tessera.getInfo(); // Refresh after permission changes
 const note = await Tessera.storage.get('draft', '');
 await Tessera.storage.set('draft', 'Remember this after restarting');
 await Tessera.storage.remove('obsolete');
@@ -184,6 +185,59 @@ about once per second. Avoid automatic acknowledgement loops. Native `read_panel
 never exposes an app's private storage. HTML app destinations are local to this
 Tessera installation in version 1.
 
+## Optional desktop music controls
+
+Music Remote controls existing Windows media sessions, such as Spotify or browser
+players. Open it from **App library**, start music in your player, then choose
+**Allow media access**. Reading media and controlling playback are separate,
+optional permissions; both start off. No Spotify login, network access, or panel
+messaging is required. The player must expose Windows media controls.
+
+```json
+"permissions": { "media": ["read", "control"] }
+```
+
+```js
+await Tessera.ui.openPermissions(); // Opens host UI; never grants access itself
+const snapshot = await Tessera.media.snapshot();
+// { supported, sessions: [{ id, source, title, artist, playing }], current }
+// current also has album, position/duration in seconds, controls, artworkKey,
+// and artwork (a JPEG data URL or null).
+const selected = snapshot.current;
+if (selected) {
+  await Tessera.media.control(selected.id, 'pause');
+  const refreshed = await Tessera.media.snapshot(selected.id, selected.artworkKey);
+  // Unchanged artwork is omitted. Keep the previous image in that case.
+}
+```
+
+Actions: `play`, `pause`, `toggle`, `previous`, `next`, and `seek` (seconds as a
+third argument). Check `current.controls` and the returned `{ accepted, reason }`;
+each player supports different controls. Sessions are opaque IDs valid for the
+current host process. A closed selected player never redirects a control to a
+different player. Music Remote remembers the source app and reconnects only when
+it has exactly one available session after restarting. Multiple sessions remain
+an explicit choice. Volume control and launching a music app are not exposed.
+On other operating systems `snapshot.supported` is false.
+
+The native broker rechecks grants, limits queued work, and performs OS calls on
+a background thread. Music Remote pauses polling while hidden. Its cover-art
+visibility, accent color, and selected player are saved per panel.
+
+## Panel appearance
+
+Use the panel header's **Panel appearance** button, or **Settings → Panel background**
+for website/HTML panels. **Tessera Settings → Appearance** sets the global default.
+Individual panels can follow the default or keep a separate color/image, with
+Fill, Fit, Stretch, Center, Tile, and an image-dimming control.
+
+Terminal backgrounds update without restarting the agent. Local HTML apps receive
+the background behind their content; opaque elements within an app retain their
+own design. Live websites keep their page design, with customization applied to
+the focus card. Images are stored locally in IndexedDB. Workspace exports carry
+image references, not the image files; select an image again on a different PC.
+These are static backgrounds; animated HTML backgrounds are not executed.
+
 ## Isolation and limits
 
 Each app uses a native child webview and its own persistent browser profile.
@@ -210,3 +264,9 @@ For real WebView2 integration, run Vite on port 1420, build
 then run `node tools/test-html-plugin-native.mjs`. The harness has its own app
 profile, uses synthetic panels, and closes its own windows. No live model turns
 or user sessions are used.
+
+`node tools/test-music-native.mjs` uses the same harness with a silent synthetic
+Windows media session to test grants/revocation, cover art, playback controls,
+appearance, and restart persistence. It never sends controls to the user's
+players. `node tools/test-appearance.mjs` checks background inheritance, images,
+terminal repaint, About, and the responsive resource bar in headless Edge.

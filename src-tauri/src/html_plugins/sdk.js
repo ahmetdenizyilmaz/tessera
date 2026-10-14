@@ -16,6 +16,7 @@
   const api = {
     version: 1,
     ready,
+    getInfo: () => call('ready'),
     storage: {
       entries: (prefix = "", scope = "app") => call("storage.entries", { prefix, scope }),
       get: async (key, fallback = null, scope = 'app') => (await call('storage.get', { key, scope })) ?? fallback,
@@ -25,6 +26,7 @@
     ui: {
       setTitle: title => call('ui.title', { title }),
       setBadge: count => call('ui.badge', { count }),
+      openPermissions: () => call('ui.openPermissions'),
     },
     panels: {
       list: () => call('panels.list'),
@@ -40,6 +42,10 @@
         const response = await call('net.fetch', { ...options, url });
         return Object.freeze({ ...response, text: async () => response.body, json: async () => JSON.parse(response.body) });
       },
+    },
+    media: {
+      snapshot: (sessionId = null, artworkKey = null) => call('media.snapshot', { sessionId, artworkKey }),
+      control: (sessionId, action, position) => call('media.control', { sessionId, action, position }),
     },
   };
   for (const value of Object.values(api)) if (value && typeof value === 'object') Object.freeze(value);

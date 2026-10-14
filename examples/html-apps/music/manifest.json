@@ -1,0 +1,9 @@
+{
+  "id": "tessera.music-remote",
+  "name": "Music Remote",
+  "version": "1.0.0",
+  "description": "Cover art and playback controls for Spotify and other Windows media players.",
+  "entry": "index.html",
+  "icon": "Music",
+  "permissions": { "media": ["read", "control"] }
+}
