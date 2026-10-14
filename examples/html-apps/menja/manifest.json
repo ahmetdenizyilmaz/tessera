@@ -1,0 +1,8 @@
+{
+  "id": "tessera.game-menja",
+  "name": "Menja",
+  "version": "1.0.0",
+  "description": "Slice flying 3D cubes into tiny pieces. Chase a high score or relax in casual mode.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}

@@ -8,10 +8,30 @@ notes, games, dashboards, and small utilities. Most apps need no permissions.
 Open **Apps → Import HTML app…** (also in File and App library).
 Choose a self-contained `.html` file, a folder, or a ZIP containing `manifest.json`.
 Review the app and any optional permissions, then choose **Install and open**.
-Notes, Timer, Clock, Calculator, Memory Break, Music Remote, 2048, Tetris, and Breakout are included automatically.
+Notes, Timer, Clock, Calculator, Memory Break, Music Remote, Menja, ONOFF, Radius Raid, 2048, Tetris, and Breakout are included automatically.
 They use the same HTML-app system as imported apps. Their source is in [`examples/html-apps`](../examples/html-apps).
 
-Choose **App library → Games** for the games. 2048 comes from
+Choose **App library → Games** for the games:
+
+- [Menja](https://github.com/MilllerTime/menja), by Caleb Miller: slice flying 3D
+  cubes, chase a score, or play an endless casual mode. Best scores are saved.
+- [ONOFF](https://github.com/starzonmyarmz/js13k-2018), by Daniel Marino and Brad
+  Dunbar: switch between light and dark worlds in a precision platformer.
+  Level progress and deaths save independently per panel; reopen and press Play
+  to continue that level. Original synthesized music is optional.
+- [Radius Raid](https://github.com/jackrugile/radius-raid), by Jack Rugile: a neon
+  space shooter with enemy waves and powerups. Best scores and completed-run
+  statistics are saved; reopening starts at the menu for a new run.
+
+These games scale with their panels and pause on blur. Sound starts off. Each
+package includes its source revision, readable runtime code, original license
+and credits. ONOFF and Radius Raid use MIT licenses (including TinyMusic and
+Howler notices). **Menja is a separate GPL-3.0 game**, including its Tessera
+adaptations; its full corresponding source is shipped in the package and in
+`examples/html-apps/menja`, with no build step required. See each package's
+`README.txt`, `LICENSE.txt`, and `UPSTREAM.json`.
+
+The earlier games remain available. 2048 comes from
 [Gabriele Cirulli's repository](https://github.com/gabrielecirulli/2048);
 [Tetris](https://github.com/jakesgordon/javascript-tetris) and
 [Breakout](https://github.com/jakesgordon/javascript-breakout) come from Jake Gordon's

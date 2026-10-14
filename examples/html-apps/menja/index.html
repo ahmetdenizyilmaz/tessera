@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+
+	<title>Menja</title>
+	<meta name="description" content="A game about smashing cubes.">
+	<meta name="theme-color" content="#2c3f51">
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+
+	<!-- build:css combined.css -->
+	<link rel="stylesheet" href="css/style.css">
+	<link rel="stylesheet" href="panel.css">
+	<!-- endbuild -->
+</head>
+<body>
+	<!-- Game canvas -->
+	<canvas id="c"></canvas>
+
+	<!-- Gameplay HUD -->
+	<div class="hud">
+		<div class="hud__score">
+			<div class="score-lbl"></div>
+			<div class="cube-count-lbl"></div>
+		</div>
+		<button class="pause-btn" aria-label="Pause game" type="button"><div></div></button>
+		<div class="slowmo">
+			<div class="slowmo__bar"></div>
+		</div>
+	</div>
+
+	<!-- Menu System -->
+	<div class="menus">
+		<div class="menu menu--main">
+			<h1>MENJA</h1><p class="instructions">Hold and swipe to smash cubes.<br>Ranked challenge or endless casual play.</p>
+			<button type="button" class="play-normal-btn">PLAY GAME</button>
+			<button type="button" class="play-casual-btn">CASUAL MODE</button>
+			
+		</div>
+		<div class="menu menu--pause">
+			<h1>Paused</h1>
+			<button type="button" class="resume-btn">RESUME GAME</button>
+			<button type="button" class="menu-btn--pause">MAIN MENU</button>
+		</div>
+		<div class="menu menu--score">
+			<h1>Game Over</h1>
+			<h2>Your Score:</h2>
+			<div class="final-score-lbl"></div>
+			<div class="high-score-lbl"></div>
+			<button type="button" class="play-again-btn">PLAY AGAIN</button>
+			<button type="button" class="menu-btn--score">MAIN MENU</button>
+		</div>
+	</div>
+
+	<!-- build:js combined.js -->
+	<script src="js/globalConfig.js"></script>
+	<script src="js/state.js"></script>
+	<script src="js/utils.js"></script>
+	<script src="js/3dModels.js"></script>
+	<script src="js/Entity.js"></script>
+	<script src="js/getTarget.js"></script>
+	<script src="js/createBurst.js"></script>
+	<script src="js/sparks.js"></script>
+	<script src="js/hud.js"></script>
+	<script src="js/menus.js"></script>
+	<script src="js/actions.js"></script>
+	<script src="js/tick.js"></script>
+	<script src="js/draw.js"></script>
+	<script src="js/canvas.js"></script>
+	<script src="js/interaction.js"></script>
+	<script src="js/index.js"></script>
+	<!-- endbuild -->
+<footer class="panel-footer">Caleb Miller · <button id="credits" type="button">Credits &amp; source</button></footer>
+<dialog id="credits-dialog"><h2>Menja</h2><p>A game by Caleb Miller. Tessera adaptation, 14 October 2026.</p><p>GPL-3.0. You may redistribute and modify this game under its license. It comes without warranty. The complete readable source is included in this app package; no build step is needed.</p><p><code>github.com/MilllerTime/menja</code></p><details><summary>License</summary><pre id="license"></pre></details><form method="dialog"><button>Close</button></form></dialog>
+<script src="panel.js"></script>
+</body>
+</html>

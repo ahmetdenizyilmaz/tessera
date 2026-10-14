@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/starzonmyarmz/js13k-2018",
+  "commit": "cb1e2e4615af6195aeb0dade06c08738511dd3b6",
+  "license": "MIT",
+  "changes": [
+    "Adapted for Tessera on 2026-10-14: responsive panel layout, keyboard-accessible controls and credits",
+    "Pause on blur and visibility changes; storage validation and saved scores or level progress",
+    "Self-contained offline assets; no analytics, external navigation, or optional permissions",
+    "Full readable runtime source included; see README.txt for modifications and licensing"
+  ]
+}

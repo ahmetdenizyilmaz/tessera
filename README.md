@@ -66,7 +66,8 @@ agents, credentials, model discovery, permissions, and session storage.
   included automatically. Apps keep their own saved data; network access and
   messaging with selected agent panels are optional permissions. See the
   [HTML app guide](docs/html-panel-plugins.md) for the manifest, SDK, and limits.
-- **Offline games** — 2048, Tetris, Breakout, and Memory Break appear under
+- **Offline games** — Menja (3D cube slicing), ONOFF (world-switching platformer),
+  Radius Raid (space shooter), 2048, Tetris, Breakout, and Memory Break appear under
   **App library → Games**. Downloaded open-source games retain their licenses and
   credits. Saved games follow their panels; real-time games pause when you return
   to work.
@@ -266,5 +267,10 @@ the providers it supports. Provider names and logos belong to their respective o
 ---
 
 ## License
+
+Bundled third-party HTML games retain their own licenses and credits. Menja is
+GPL-3.0, with its full source in `examples/html-apps/menja`; the other downloaded
+games are MIT. See [HTML app credits](docs/html-panel-plugins.md#install-and-use)
+and each package's license files.
 
 [MIT](LICENSE) © Ahmet Deniz Yılmaz

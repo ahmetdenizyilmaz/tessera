@@ -1,0 +1,8 @@
+{
+  "id": "tessera.game-onoff",
+  "name": "ONOFF",
+  "version": "1.0.0",
+  "description": "Switch between light and dark worlds in a precision platformer. Your level progress is saved per panel.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}

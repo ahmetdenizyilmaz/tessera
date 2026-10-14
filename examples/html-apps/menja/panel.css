@@ -1,0 +1,19 @@
+/* Tessera adaptation, 2026-10-14. GPL-3.0; see LICENSE.txt. */
+* { box-sizing: border-box; }
+button { cursor: pointer; border-radius: 10px; }
+button:focus-visible, summary:focus-visible { outline: 2px solid #a7edff; outline-offset: 3px; }
+h1 { font-size: clamp(32px, 10vw, 64px); margin-bottom: .45em; }
+.instructions { font: 13px/1.7 system-ui, sans-serif; font-weight: 400; letter-spacing: 0; margin: 0 12px 24px; color: #c4dae9; }
+.menu > button { margin: 3px 0; font-size: 16px; border: 1px solid #ffffff30; background: #20364b88; opacity: 1; }
+.menu > button:hover { background: #3f6b8b; }
+.pause-btn { width: auto; background: #16263555; border-radius: 0 0 0 12px; }
+.panel-footer { position: fixed; bottom: 8px; inset-inline: 8px; text-align: center; font: 11px/1.5 system-ui, sans-serif; letter-spacing: 0; color: #bed2e1; pointer-events: none; }
+.panel-footer button { pointer-events: auto; display: inline; width: auto; padding: 5px; font: inherit; opacity: 1; text-decoration: underline; }
+dialog { color: #e6f0f7; background: #152736; border: 1px solid #567589; border-radius: 16px; padding: 22px; width: min(500px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow: auto; font: 14px/1.6 system-ui, sans-serif; letter-spacing: 0; }
+dialog::backdrop { background: #000a; backdrop-filter: blur(5px); }
+dialog h2 { font: 600 22px system-ui, sans-serif; text-align: left; margin: 0 0 12px; }
+dialog button { width: auto; margin: 16px 0 0 auto; background: #375975; font: inherit; opacity: 1; }
+dialog code { overflow-wrap: anywhere; }
+dialog pre { white-space: pre-wrap; font: 11px/1.5 monospace; }
+summary { cursor: pointer; }
+@media(max-height: 400px) { h1 { font-size: 30px; } .instructions { margin-bottom: 8px; font-size: 11px; } .menu > button { padding: 7px 14px; font-size: 14px; } .high-score-lbl { margin-bottom: 12px; } .final-score-lbl { font-size: 40px; } }

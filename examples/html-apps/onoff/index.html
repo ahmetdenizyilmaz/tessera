@@ -1,0 +1,89 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ONOFF</title><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="panel.css"></head>
+<body class="on"><header class="toolbar"><strong>ON<span>OFF</span></strong><span id="progress">Loading…</span><button id="play" disabled>Play</button><button id="restart" disabled>Restart level</button><button id="sound" aria-pressed="false">Sound off</button><button id="credits">Credits</button></header>
+<main id="stage">  <svg id="game" viewBox="0 0 768 480" aria-label="ONOFF platformer">
+    <defs>
+      <pattern id="spike-up" width="16" height="10" patternUnits="userSpaceOnUse">
+        <polygon points="8 0 16 8 0 8"/>
+      </pattern>
+      <pattern id="spike-down" width="16" height="10" patternUnits="userSpaceOnUse">
+        <polygon points="0 0 16 0 8 8"/>
+      </pattern>
+      <pattern id="spike-left" width="10" height="16" patternUnits="userSpaceOnUse">
+        <polygon points="8 0 8 16 0 8"/>
+      </pattern>
+      <pattern id="spike-right" width="10" height="16" patternUnits="userSpaceOnUse">
+        <polygon points="0 0 8 8 0 16"/>
+      </pattern>
+    </defs>
+
+    <svg id="congrats" hidden>
+      <path class="light" d="M300 158h-30v60h-12v-72h54v72h-12v-60zm54 24h24v36h-54v-72h54v12h-42v48h30v-12h-12v-12zm114 12v24h-12v-72h54v72h-12v-24h-30zm-35 0v24h-12v-24h-19v24h-12v-72h54v48h-11zm197 0h-42v-48h54v12h-42v24h42v36h-54v-12h42v-12zm-75-36v60h-12v-60h-21v-12h54v12h-21zm-87 24h30v-24h-30v24zm-66 0h30v-24h-30v24zm-156 36h-54v-72h54v72zm-66-60h-42v48h42v12h-54v-72h54v12zm24 48h30v-48h-30v48z"/>
+      <path class="light" d="M333 353v7h-4v-16h10v16h-2v-7h-4zm0-2h4v-5h-4v5zm24 0h4v2h-4v7h-4v-16h4v7zm64 0h4v2h-4v5h6v2h-10v-16h10v2h-6v5zm24 7h4v-14h2v16h-10v-16h4v14zm-16-14h10v16h-2v-14h-4v14h-4v-16zm-24 0h10v16h-2v-14h-1v14h-2v-14h-1v14h-4v-16zm-29 2h-3v-2h10v2h-3v14h-4v-14zm-31 0v12h6v2h-10v-16h10v2h-6zm-24 0v12h4v-12h-4zm-4-2h10v16h-10v-16zm72 2v12h4v-12h-4zm-4-2h10v16h-10v-16zm-24 0h2v7h-2v-7zm0 9h2v7h-2v-7zm-36-2v2h-4v-2h4z"/>
+
+      <g class="menu">
+        <g class="item selected">
+          <path class="stars" d="M467 355.5l-3.7 1.9.7-4.1-3-2.9 4.1-.6 1.9-3.8 1.9 3.8 4.1.6-3 2.9.7 4.1zM301 355.5l-3.7 1.9.7-4.1-3-2.9 4.1-.6 1.9-3.8 1.9 3.8 4.1.6-3 2.9.7 4.1z"/>
+        </g>
+      </g>
+    </svg>
+
+    <svg id="hud" y="24">
+      <defs>
+        <pattern id="n0" width="10" height="16"><path d="M2 2v12h6V2H2zM0 0h10v16H0V0zm4 6h2v4H4V6z"/></pattern>
+        <pattern id="n1" width="10" height="16"><path d="M4 14V2H0V0h6v14h4v2H0v-2h4z"/></pattern>
+        <pattern id="n2" width="10" height="16"><path d="M8 2H0V0h10v9H2v5h8v2H0V7h8z"/></pattern>
+        <pattern id="n3" width="10" height="16"><path d="M8 9H2V7h6V2H0V0h10v16H0v-2h8z"/></pattern>
+        <pattern id="n4" width="10" height="16"><path d="M8 9H0V0h2v7h6V0h2v16H8z"/></pattern>
+        <pattern id="n5" width="10" height="16"><path d="M10 7v9H0v-2h8V9H0V0h10v2H2v5z"/></pattern>
+        <pattern id="n6" width="10" height="16"><path d="M2 14h6V9H2v5zm-2 2V0h10v2H2v5h8v9H0z"/></pattern>
+        <pattern id="n7" width="10" height="16"><path d="M8 2H0V0h10v16H8z"/></pattern>
+        <pattern id="n8" width="10" height="16"><path d="M2 14h6V9H2v5zm-2 2V0h10v16H0zm2-9h6V2H2v5z"/></pattern>
+        <pattern id="n9" width="10" height="16"><path d="M0 0h10v16H8V9H0V0zm8 2H2v5h6V2z"/></pattern>
+      </defs>
+
+      <svg id="level" x="24">
+        <path d="M8.7 13.6L4.2 16c-.3.2-.6.1-.9 0A.8.8 0 0 1 3 15l.9-4.8L.3 6.9a.8.8 0 0 1-.3-.8c.1-.3.4-.5.7-.6l5-.7L8 .4a.8.8 0 0 1 1.4 0l2.3 4.4 5 .7c.4 0 .6.3.7.6.1.3 0 .6-.2.8l-3.6 3.4.8 4.8c0 .3 0 .6-.3.7-.2.2-.6.3-.8.1l-4.6-2.3z" shape-rendering="auto"/>
+        <svg x="20"><g id="level-counter"></g></svg>
+      </svg>
+
+      <svg id="deaths" x="84">
+        <path d="M13 10v6h-2v-1H9v1H7v-1H5v1H3v-6H0V0h16v10h-3zM9 3v4h4V3H9zM3 3v4h4V3H3z"/>
+        <svg x="20"><g id="death-counter"></g></svg>
+      </svg>
+
+      <svg id="esc" x="434" hidden>
+        <path d="M152 9h-2V7h4v9h-10V0h10v2h-6v12h4V9zM72 7h4v2h-4v5h6v2H68V0h10v2h-6v5zm18 0v9H80v-2h8V9h-8V0h10v2h-6v5h6zm6-5v12h6v2H92V0h10v2h-6zm64 0v12h4V2h-4zm-4-2h10v16h-10V0zm36 9v7h-4V0h10v16h-2V9h-4zm0-2h4V2h-4v5zm24 0h4v2h-4v7h-4V0h4v7zm64 0h4v2h-4v5h6v2h-10V0h10v2h-6v5zm24 7h4V0h2v16h-10V0h4v14zM288 0h10v16h-2V2h-4v14h-4V0zm-24 0h10v16h-2V2h-1v14h-2V2h-1v14h-4V0zm-29 2h-3V0h10v2h-3v14h-4V2zm-31 0v12h6v2h-10V0h10v2h-6zm-24 0v12h4V2h-4zm-4-2h10v16h-10V0zm72 2v12h4V2h-4zm-4-2h10v16h-10V0zM16 9v7h-4V0h10v9h-2v7h-2V9h-2zm0-2h4V2h-4v5zM4 9v7H0V0h10v9H4zm0-2h4V2H4v5zm24 0h4v2h-4v5h6v2H24V0h10v2h-6v5zm30 0v9H48v-2h8V9h-8V0h10v2h-6v5h6zM46 7v9H36v-2h8V9h-8V0h10v2h-6v5h6zm69-5h-3V0h10v2h-3v14h-4V2zm13 0v12h4V2h-4zm-4-2h10v16h-10V0zm96 0h2v7h-2V0zm0 9h2v7h-2V9zm-36-2v2h-4V7h4z"/>
+      </svg>
+    </svg>
+
+    <svg id="death">
+      <rect x="27" y="27" width="10" height="12" style="transform-origin: 32px 32px"/>
+      <rect x="20" y="4" width="2" height="2" style="transform-origin: -10px 30px"/>
+      <rect x="0" y="28" width="2" height="2" style="transform-origin: 7px 70px"/>
+      <rect x="37" y="12" width="2" height="2" style="transform-origin: 15px 15px"/>
+      <rect x="5" y="42" width="2" height="2" style="transform-origin: 30px 70px"/>
+      <rect x="48" y="53" width="2" height="2" style="transform-origin: 60px 30px"/>
+      <rect x="55" y="26" width="2" height="2" style="transform-origin: 37px 5px"/>
+      <rect x="10" y="15" width="2" height="2" style="transform-origin: -2px 55px"/>
+      <rect x="24" y="11" width="6" height="6" style="transform-origin: 5px 32px"/>
+      <rect x="20" y="43" width="6" height="6" style="transform-origin: 46px 51px"/>
+      <rect x="32" y="46" width="6" height="6" style="transform-origin: 54px 37px"/>
+      <rect x="37" y="59" width="2" height="2" style="transform-origin: 65px 41px"/>
+      <rect x="23" y="55" width="2" height="2" style="transform-origin: 45px 51px"/>
+      <rect x="62" y="41" width="2" height="2" style="transform-origin: 56px 6px"/>
+      <rect x="52" y="2" width="2" height="2" style="transform-origin: 14px -13px"/>
+      <rect x="41" y="21" width="8" height="8" style="transform-origin: 28px 15px"/>
+      <rect x="48" y="11" width="4" height="4" style="transform-origin: 10px -4px"/>
+      <rect x="42" y="36" width="8" height="8" style="transform-origin: 47px 19px"/>
+      <rect x="53" y="44" width="3" height="3" style="transform-origin: 57px 16px"/>
+      <rect x="10" y="52" width="2" height="2" style="transform-origin: 47px 66px"/>
+      <rect x="15" y="22" width="8" height="8" style="transform-origin: 14px 44px"/>
+      <rect x="7" y="29" width="4" height="4" style="transform-origin: 19px 56px"/>
+      <rect x="14" y="36" width="4" height="4" style="transform-origin: 30px 55px"/>
+    </svg>
+  </svg>
+
+<div id="pause-overlay"><h1>Two worlds. One way through.</h1><p>Move with A/D or ←/→. Jump with W or ↑.<br>Press Space to switch worlds.</p><button id="resume" disabled>Loading…</button><p class="hint">Progress saves at each level. Games pause when you switch panels.</p></div></main>
+<footer>Move A/D · Jump W/↑ · Switch Space · Pause P/Esc</footer>
+<dialog id="credits-dialog"><h2>ONOFF</h2><p>Game by Daniel Marino and Brad Dunbar. Music uses TinyMusic by Kevin Ennis. MIT licensed.</p><p><code>github.com/starzonmyarmz/js13k-2018</code></p><p>Offline panel adaptation for Tessera. Progress saves per panel. No network or messaging permissions.</p><details><summary>Licenses</summary><pre id="license"></pre></details><form method="dialog"><button>Close</button></form></dialog>
+<script type="module" src="index.js"></script></body></html>

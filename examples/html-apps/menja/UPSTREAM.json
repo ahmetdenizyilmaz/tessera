@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/MilllerTime/menja",
+  "commit": "51bd97609c32f07cb6729528b3443da934e655df",
+  "license": "GPL-3.0-only",
+  "changes": [
+    "Adapted for Tessera on 2026-10-14: responsive panel layout, keyboard-accessible controls and credits",
+    "Pause on blur and visibility changes; storage validation and saved scores or level progress",
+    "Self-contained offline assets; no analytics, external navigation, or optional permissions",
+    "Full readable runtime source included; see README.txt for modifications and licensing"
+  ]
+}

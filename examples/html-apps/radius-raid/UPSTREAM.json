@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/jackrugile/radius-raid",
+  "commit": "016cb866b6078672e37a1691bd9fe555364dbf58",
+  "license": "MIT",
+  "changes": [
+    "Adapted for Tessera on 2026-10-14: responsive panel layout, keyboard-accessible controls and credits",
+    "Pause on blur and visibility changes; storage validation and saved scores or level progress",
+    "Self-contained offline assets; no analytics, external navigation, or optional permissions",
+    "Full readable runtime source included; see README.txt for modifications and licensing"
+  ]
+}

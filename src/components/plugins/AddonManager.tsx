@@ -54,7 +54,7 @@ export function AddonManager({ onClose, initialName, initialImport = false, init
           else if (!event.shiftKey && (focused === last || focused === dialog.current)) { event.preventDefault(); first?.focus(); }
         }
       }}>
-      <header><div><h2 id={headingId}>App library</h2><p>Small tools, quiet games, and your favorite websites</p></div>
+      <header><div><h2 id={headingId}>App library</h2><p>Small tools, games, and your favorite websites</p></div>
         <button type="button" className="addon-close" aria-label="Close add-on manager" disabled={busy} onClick={onClose}><X size={18}/></button></header>
       {!importing && !permissions && <nav className="app-library-tabs" aria-label="Library sections"><button disabled={busy} aria-pressed={tab==='installed'} onClick={()=>setTab('installed')}><Grid2X2 size={15}/>Your apps</button><button disabled={busy} aria-pressed={tab==='github'} onClick={()=>setTab('github')}><Github size={15}/>Get apps</button></nav>}
       <div className="addon-list">
@@ -64,7 +64,8 @@ export function AddonManager({ onClose, initialName, initialImport = false, init
         <div className="app-library-filter"><input type="search" aria-label="Search installed apps" placeholder="Search your apps" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label="App category" value={category} onChange={e=>setCategory(e.target.value)}>{['All','Tools','Games','Web players'].map(c=><option key={c}>{c}</option>)}</select></div>
         {activeApps.map(app => <div className="addon-row" key={app.name} data-addon-name={app.name}>
           <div className="addon-info"><PluginIcon icon={webAppIcon(app)} size={23}/><span><strong>{app.defaultTitle}</strong>
-            <small>{app.htmlPlugin ? 'HTML app' : 'Web player'} · {openCount(app.name)} open</small></span>
+            <small>{app.htmlPlugin ? 'HTML app' : 'Web player'} · {openCount(app.name)} open</small>
+            {app.description && <small className="addon-description">{app.description}</small>}</span>
             <button type="button" className="btn btn-secondary btn-sm" aria-label={`Open ${app.defaultTitle}`} disabled={busy} onClick={()=>launch(app.name)}><Play size={14}/>Open</button>
             {app.htmlPlugin && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} aria-label={`Permissions for ${app.defaultTitle}`} onClick={() => setPermissions(app.name)}><ShieldCheck size={14}/></button>}
             <button type="button" className="btn btn-secondary btn-sm addon-remove" aria-label={`Remove ${app.defaultTitle}`} disabled={busy}

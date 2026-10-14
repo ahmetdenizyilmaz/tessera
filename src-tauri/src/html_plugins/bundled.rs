@@ -1,9 +1,9 @@
-//! First-party apps use the same package validator, native WebView and SDK as
+//! Bundled apps use the same package validator, native WebView and SDK as
 //! downloaded apps. No privileged iframe or legacy bridge is involved.
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const SAMPLES: &[&str] = &["notes", "timer", "clock", "calculator", "memory", "music", "2048", "tetris", "breakout"];
+pub const SAMPLES: &[&str] = &["notes", "timer", "clock", "calculator", "memory", "music", "menja", "onoff", "radius-raid", "2048", "tetris", "breakout"];
 pub fn sample(sample: &str) -> Result<Package, String> {
     macro_rules! files {
         ($name:literal $(, $asset:literal)*) => { BTreeMap::from([
@@ -20,6 +20,35 @@ pub fn sample(sample: &str) -> Result<Package, String> {
             "js/keyboard_input_manager.js", "js/html_actuator.js", "js/grid.js", "js/tile.js", "js/local_storage_manager.js", "js/game_manager.js"),
         "tetris" => files!("tetris", "panel.css", "panel.js", "game.js", "LICENSE.txt", "UPSTREAM.json"),
         "breakout" => files!("breakout", "panel.css", "panel.js", "game.js", "breakout.js", "levels.js", "LICENSE.txt", "UPSTREAM.json"),
+        "menja" => files!("menja",
+            "LICENSE.txt", "README.txt", "UPSTREAM.json", "css/style.css",
+            "js/3dModels.js", "js/Entity.js", "js/actions.js", "js/canvas.js",
+            "js/createBurst.js", "js/draw.js", "js/getTarget.js", "js/globalConfig.js",
+            "js/hud.js", "js/index.js", "js/interaction.js", "js/menus.js",
+            "js/sparks.js", "js/state.js", "js/tick.js", "js/utils.js",
+            "panel.css", "panel.js"),
+        "onoff" => files!("onoff",
+            "LICENSE.txt", "README.txt", "TinyMusic-LICENSE.txt", "UPSTREAM.json",
+            "index.js", "panel.css", "panel.js", "src/bar.js",
+            "src/body.js", "src/counter.js", "src/create.js", "src/dimensions.js",
+            "src/goal.js", "src/guy.js", "src/keys.js", "src/levels.js",
+            "src/sleep.js", "src/sound.js", "src/spikes.js", "src/tinymusic.js",
+            "styles.css"),
+        "radius-raid" => files!("radius-raid",
+            "Howler-LICENSE.txt", "LICENSE.txt", "README.txt", "UPSTREAM.json",
+            "js/audio.js", "js/bullet.js", "js/button.js", "js/definitions.js",
+            "js/ease.js", "js/enemy.js", "js/explosion.js", "js/game.js",
+            "js/hero.js", "js/howler.min.js", "js/levelpop.js", "js/particle.js",
+            "js/particleemitter.js", "js/powerup.js", "js/storage.js", "js/text.js",
+            "js/textpop.js", "js/util.js", "panel.css", "panel.js",
+            "sounds/click-0.mp3", "sounds/click-0.webm", "sounds/death-0.mp3", "sounds/death-0.webm",
+            "sounds/explosion-0.mp3", "sounds/explosion-0.webm", "sounds/explosion-1.mp3", "sounds/explosion-1.webm",
+            "sounds/explosionAlt-0.mp3", "sounds/explosionAlt-0.webm", "sounds/hit-0.mp3", "sounds/hit-0.webm",
+            "sounds/hit-1.mp3", "sounds/hit-1.webm", "sounds/hit-2.mp3", "sounds/hit-2.webm",
+            "sounds/hover-0.mp3", "sounds/hover-0.webm", "sounds/levelup-0.mp3", "sounds/levelup-0.webm",
+            "sounds/powerup-0.mp3", "sounds/powerup-0.webm", "sounds/shoot-0.mp3", "sounds/shoot-0.webm",
+            "sounds/shootAlt-0.mp3", "sounds/shootAlt-0.webm", "sounds/takingDamage-0.mp3", "sounds/takingDamage-0.webm",
+            "sounds/takingDamage-1.mp3", "sounds/takingDamage-1.webm", "sounds/takingDamage-2.mp3", "sounds/takingDamage-2.webm"),
         _ => return Err("Unknown example app".into()),
     };
     package::validate(assets)
@@ -86,16 +115,16 @@ pub async fn html_plugin_migrate_notes(caller:Webview,app:tauri::AppHandle,state
     use super::*;
     #[test] fn all_bundled_apps_use_unprivileged_packages(){for id in SAMPLES{let p=sample(id).unwrap();assert!(p.manifest.permissions.network.is_empty());assert!(p.manifest.permissions.panels.is_empty());}}
     #[test] fn bundled_games_include_the_entire_offline_package_and_original_license() {
-        for id in ["2048", "tetris", "breakout"] {
+        for id in ["2048", "tetris", "breakout", "menja", "onoff", "radius-raid"] {
             let bundled = sample(id).unwrap();
             let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/html-apps").join(id);
             let imported = package::inspect(&folder).unwrap();
             assert_eq!(bundled.digest, imported.digest, "Missing embedded assets for {id}");
             assert!(bundled.manifest.permissions.media.is_empty());
             let license = std::str::from_utf8(&bundled.files["LICENSE.txt"]).unwrap();
-            assert!(license.contains("Permission is hereby granted"));
+            assert!(license.contains(if id == "menja" { "GNU GENERAL PUBLIC LICENSE" } else { "Permission is hereby granted" }));
             let source: Value = serde_json::from_slice(&bundled.files["UPSTREAM.json"]).unwrap();
-            assert_eq!(source["license"], "MIT");
+            assert_eq!(source["license"], if id == "menja" { "GPL-3.0-only" } else { "MIT" });
             assert_eq!(source["commit"].as_str().unwrap().len(), 40);
             let html = std::str::from_utf8(&bundled.files["index.html"]).unwrap();
             for attr in ["src=\"", "href=\""] {

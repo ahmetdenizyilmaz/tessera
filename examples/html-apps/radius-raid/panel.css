@@ -1,0 +1,29 @@
+/* Tessera panel adaptation. MIT; see LICENSE.txt. */
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { display: flex; flex-direction: column; align-items: stretch; background: #111923; color: #e7edf8; font: 13px/1.5 system-ui, sans-serif; }
+button { font: inherit; color: inherit; cursor: pointer; border: 1px solid #3c4e64; background: #203044; border-radius: 8px; padding: 6px 10px; white-space: nowrap; }
+button:hover { background: #31475e; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, summary:focus-visible { outline: 2px solid #83b9ff; outline-offset: 2px; }
+.toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #344255; z-index: 1; }
+.toolbar strong { font-size: 15px; letter-spacing: .07em; }
+.toolbar strong span { margin: 0; color: #85a5c4; }
+#progress, #best { flex: 1; font-size: 11px; color: #afc3d7; margin: 0 8px; white-space: nowrap; }
+#stage { flex: 1; min-height: 0; min-width: 0; position: relative; overflow: hidden; }
+footer { flex: none; padding: 7px 10px; border-top: 1px solid #344255; color: #a0b2c6; font-size: 11px; text-align: center; }
+dialog { color: #e7edf8; background: #172432; border: 1px solid #50647b; border-radius: 14px; padding: 22px; width: min(490px, calc(100vw - 28px)); max-height: calc(100vh - 32px); overflow: auto; }
+dialog::backdrop { background: #000a; backdrop-filter: blur(4px); }
+dialog h2 { margin-top: 0; font-size: 22px; }
+dialog code { overflow-wrap: anywhere; }
+dialog pre { white-space: pre-wrap; font: 11px/1.5 monospace; }
+dialog form { margin-top: 18px; display: flex; justify-content: flex-end; gap: 8px; }
+summary { cursor: pointer; }
+@media(max-width: 480px) { .toolbar { padding: 8px; gap: 5px; } .toolbar strong { font-size: 13px; } #progress, #best { flex-basis: calc(100% - 160px); margin-right: 0; text-align: right; } button { font-size: 12px; padding: 5px 8px; } }
+body { background: #080d17; }
+.toolbar strong { color: #94c4ff; }
+#wrap { width: 800px; height: 600px; position: absolute; top: 50%; left: 50%; transform-origin: center; background: #000; opacity: 0; }
+.loaded #wrap { opacity: 1; }
+#wrap-inner { width: 100%; height: 100%; overflow: hidden; position: relative; }
+#cbg1, #cbg2, #cbg3, #cbg4 { position: absolute; left: 0; top: 0; pointer-events: none; }
+#cmg { display: block; position: relative; cursor: crosshair; touch-action: none; }

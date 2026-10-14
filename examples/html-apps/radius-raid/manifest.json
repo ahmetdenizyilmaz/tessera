@@ -1,0 +1,8 @@
+{
+  "id": "tessera.game-radius-raid",
+  "name": "Radius Raid",
+  "version": "1.0.0",
+  "description": "Survive waves of enemies in a neon space shooter, collect powerups, and beat your best score.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}
