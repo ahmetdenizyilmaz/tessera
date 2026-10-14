@@ -100,11 +100,14 @@ impl PanelBus {
         guard.replace_local(panels);
     }
 
+    pub fn upsert_html_panel(&self, panel: PanelInfo) { self.registry.lock().unwrap_or_else(|e|e.into_inner()).upsert_html(panel); }
+    pub fn remove_html_panel(&self, id: &str) { self.registry.lock().unwrap_or_else(|e|e.into_inner()).remove_html(id); self.forget_panel(id); }
+
     pub fn local_panels(&self) -> Vec<PanelInfo> {
         self.with_registry(|r| {
             r.all()
                 .into_iter()
-                .filter(|p| p.remote_device_id.is_none())
+                .filter(|p| p.remote_device_id.is_none() && p.kind != "html-plugin")
                 .collect()
         })
     }

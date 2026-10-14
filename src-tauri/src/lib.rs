@@ -24,6 +24,7 @@ pub mod util;
 pub mod ws;
 pub mod workspace_windows;
 pub mod website_icon;
+pub mod html_plugins;
 
 use analytics::posthog::PostHogTracker;
 use db::Database;
@@ -31,13 +32,13 @@ use pty::manager::PtyManager;
 use relay::client::RelayClient;
 use stream::manager::StreamJsonManager;
 
-fn main_view_commands<R: tauri::Runtime>(
+pub fn main_view_commands<R: tauri::Runtime>(
     handler: impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static,
 ) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
     move |invoke| {
         // App commands are unrestricted by Tauri's plugin ACL by default.
         // Website views must never reach filesystem, agent, or account commands.
-        if invoke.message.webview().label() != "main" {
+        if invoke.message.webview().label() != "main" && invoke.message.command() != "html_plugin_call" {
             invoke.resolver.reject("Website panels cannot call Tessera commands");
             return true;
         }
@@ -57,6 +58,7 @@ pub fn run() {
         }))
         .manage(launch::LaunchQueue::default())
         .manage(browser::BrowserPanels::default())
+        .manage(html_plugins::HtmlPlugins::default())
         .manage(lan_manager)
         .manage(lan::terminal::TerminalRequests::default())
         .setup(|app| {
@@ -143,7 +145,19 @@ pub fn run() {
         .register_uri_scheme_protocol("screenshot", |_ctx, request| {
             computer::handle_screenshot_protocol(request)
         })
+        .register_asynchronous_uri_scheme_protocol("tessera-plugin", |ctx, request, responder| {
+            html_plugins::serve(ctx.app_handle().clone(), ctx.webview_label().to_string(), request, responder);
+        })
         .invoke_handler(main_view_commands(tauri::generate_handler![
+            html_plugins::scan_plugins,
+            html_plugins::html_plugin_inspect,
+            html_plugins::html_plugin_sample,
+            html_plugins::html_plugin_install,
+            html_plugins::html_plugin_permissions,
+            html_plugins::html_plugin_set_enabled,
+            html_plugins::html_plugin_remap_targets,
+            html_plugins::html_plugin_targets,
+            html_plugins::runtime::html_plugin_call,
             workspace_windows::workspace_drop_target,
             workspace_windows::workspace_window_place,
             workspace_windows::workspace_window_destroy,

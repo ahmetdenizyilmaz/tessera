@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Calculator</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#151924;color:#edf2ff;font:15px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:18px}.calculator{width:min(100%,340px)}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}h1{font-size:18px;font-weight:600;margin:0}header span{font-size:12px;color:#939db3}input{width:100%;background:#202739;color:#eef3ff;border:1px solid #34405a;border-radius:14px;padding:24px 16px;font:28px ui-monospace,monospace;text-align:right;outline:none}input:focus{border-color:#87b5ff}.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px}button{border:1px solid #323c51;background:#222a3b;color:#e8eeff;border-radius:11px;padding:16px 8px;font:20px system-ui;cursor:pointer}button:hover{background:#313e55}button:focus-visible{outline:2px solid #87b5ff;outline-offset:2px}.operator{color:#9ec5ff;background:#1d3048}.equals{background:#6ba7ee;color:#101824}.clear{color:#efafa6}#status{min-height:24px;color:#9cacc5;font-size:12px;margin-top:16px;text-align:center}
+</style></head><body><main class="calculator"><header><h1>Calculator</h1><span>Local app</span></header><input id="display" aria-label="Expression" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0"><div class="keys">
+<button class="clear" data-key="clear">AC</button><button data-key="(">(</button><button data-key=")">)</button><button class="operator" data-key="/">÷</button>
+<button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button><button class="operator" data-key="*">×</button>
+<button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button><button class="operator" data-key="-">−</button>
+<button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button><button class="operator" data-key="+">+</button>
+<button data-key="0">0</button><button data-key=".">.</button><button data-key="back" aria-label="Backspace">⌫</button><button class="equals" data-key="=">=</button>
+</div><div id="status" role="status">Type an expression. Enter to calculate.</div></main>
+<script>
+const display=document.querySelector('#display'), status=document.querySelector('#status');
+// Parse only arithmetic. No eval, Function constructor, or remote code.
+function calculate(source){
+  if(source.length>500)throw Error('Expression is too long');
+  const compact=source.replace(/\s/g,''), tokens=compact.match(/(?:\d*\.?\d+(?:e[+-]?\d+)?)|[()+*/-]/gi)||[];
+  if(tokens.join('')!==compact||!tokens.length)throw Error('Enter an arithmetic expression');
+  let index=0;
+  function atom(){const token=tokens[index++];if(token==='+'||token==='-')return(token==='-'?-1:1)*atom();if(token==='('){const value=sum();if(tokens[index++]!==')')throw Error('Missing closing parenthesis');return value;}if(token===undefined||!/^(?:\d|\.)/.test(token))throw Error('Expected a number');return Number(token);}
+  function product(){let value=atom();while(tokens[index]==='*'||tokens[index]==='/'){const op=tokens[index++],right=atom();value=op==='*'?value*right:value/right;}return value;}
+  function sum(){let value=product();while(tokens[index]==='+'||tokens[index]==='-'){const op=tokens[index++],right=product();value=op==='+'?value+right:value-right;}return value;}
+  const result=sum();if(index!==tokens.length||!Number.isFinite(result))throw Error('Cannot calculate this expression');return Number(result.toPrecision(12)).toString();
+}
+function press(key){status.textContent='Type an expression. Enter to calculate.';if(key==='clear')display.value='';else if(key==='back')display.value=display.value.slice(0,-1);else if(key==='='){try{display.value=calculate(display.value);}catch(error){status.textContent=error.message;}}else display.value+=key;display.focus();}
+document.querySelector('.keys').addEventListener('click',event=>{const button=event.target.closest('button');if(button)press(button.dataset.key);});
+display.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();press('=');}if(event.key==='Escape'){event.preventDefault();press('clear');}});
+</script></body></html>

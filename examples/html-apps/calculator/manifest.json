@@ -1,0 +1,8 @@
+{
+  "id": "tessera.calculator",
+  "name": "Calculator",
+  "version": "1.0.0",
+  "description": "A small keyboard-friendly calculator. Runs entirely on your computer.",
+  "entry": "index.html",
+  "icon": "Calculator"
+}

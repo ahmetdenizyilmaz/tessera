@@ -17,6 +17,7 @@ import { PanelLockButton } from '../layout/PanelLockButton';
 export function BrowserPanel({ instanceId, site }: { instanceId: string; site: string }) {
   const useLayoutStore = usePanelLayout();
   const instance = usePluginStore(s => s.instances.get(instanceId));
+  const htmlPlugin = usePluginStore(s => !!s.registry.get(instance?.pluginName ?? '')?.htmlPlugin);
   const homeUrl=usePluginStore(s=>s.registry.get(instance?.pluginName??'')?.homeUrl);
   const appTitle=usePluginStore(s=>s.registry.get(instance?.pluginName??'')?.defaultTitle) ?? 'Web app';
   const title=instance?.title??'Web app';
@@ -37,6 +38,16 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
     });
     return () => { disposed = true; void listener.then(unlisten => unlisten()); };
   }, [instanceId]);
+
+  useEffect(() => {
+    if (!htmlPlugin) return;
+    const unlisten = listen<{ id: string; title?: string; badge?: number | null }>('html-plugin-ui', ({ payload }) => {
+      if (payload.id !== instanceId) return;
+      if (payload.title !== undefined) usePluginStore.getState().setInstanceTitle(instanceId, payload.title);
+      if (payload.badge !== undefined) usePluginStore.getState().setInstanceBadge(instanceId, payload.badge);
+    });
+    return () => { void unlisten.then(fn => fn()); };
+  }, [instanceId, htmlPlugin]);
 
   useEffect(() => {
     const view = surface.current?.ownerDocument.defaultView ?? window;
@@ -62,7 +73,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
           nextStatus = Date.now() + 1500;
           const status = await browserCommand<{ url: string }>(instanceId, 'browser_panel_status');
           if (!disposed) {
-            usePluginStore.getState().setBrowserUrl(instanceId, status.url);
+            if (!htmlPlugin) usePluginStore.getState().setBrowserUrl(instanceId, status.url);
             setSyncError('');
           }
         }
@@ -82,7 +93,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
       view.cancelAnimationFrame(frame);
       void browserCommand(instanceId, 'browser_panel_bounds', { bounds: null }).catch(() => {});
     };
-  }, [instanceId, site, homeUrl, attempt]);
+  }, [instanceId, site, homeUrl, attempt, htmlPlugin]);
 
   const action = (action: string) => {
     setError('');
@@ -97,14 +108,14 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
       <span className="browser-title">{title}<PanelShortcutBadge panelId={instanceId} /></span>
       <BrowserViewSettings site={site} pluginName={instance?.pluginName ?? site} title={appTitle} surface={surface} />
       <PanelLockButton panelId={instanceId} />
-      <button className="browser-navigation" title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
+      {!htmlPlugin && <><button className="browser-navigation" title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
       <button className="browser-navigation" title="Forward" aria-label="Forward" disabled={!ready} onClick={() => action('forward')}><ArrowRight size={14} /></button>
-      <button className="browser-navigation" title={`${title} home`} aria-label={`${title} home`} disabled={!ready} onClick={() => action('home')}><Home size={14} /></button>
+      <button className="browser-navigation" title={`${title} home`} aria-label={`${title} home`} disabled={!ready} onClick={() => action('home')}><Home size={14} /></button></>}
       <button title={`Reload ${title}`} aria-label={`Reload ${title}`} disabled={!ready} onClick={() => action('reload')}><RefreshCw size={14} /></button>
       <MovePanelButton panelId={instanceId} />
       <button title={maximized ? 'Restore panel size' : 'Maximize panel'} aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
         onClick={() => useLayoutStore.getState().toggleMaximized(instanceId)}>{maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
-      <button title="Open in default browser" aria-label="Open in default browser" disabled={!ready} onClick={() => action('external')}><ExternalLink size={14} /></button>
+      {!htmlPlugin && <button title="Open in default browser" aria-label="Open in default browser" disabled={!ready} onClick={() => action('external')}><ExternalLink size={14} /></button>}
       <button title={`Close ${title} panel`} aria-label={`Close ${title} panel`} onClick={close}><X size={14} /></button>
     </div>
     {shownError && <div className="browser-error" role="alert">{shownError}<button onClick={() => setAttempt(n => n + 1)}>Retry</button></div>}

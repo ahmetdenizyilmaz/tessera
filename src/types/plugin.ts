@@ -8,9 +8,12 @@ export interface PluginManifest {
   icon: string;                     // Lucide icon name OR filename
   defaultTitle: string;
   builtin?: boolean;                // true for built-in plugins served from /plugins/
-  browserSite?: string;             // stable native website profile, without the plugin SDK
+  browserSite?: string;             // stable native profile; only imported HTML apps receive an SDK
   homeUrl?: string;
   customWebApp?: boolean;
+  htmlPlugin?: boolean;
+  permissions?: HtmlPluginPermissions;
+  enabled?: boolean;
   favicon?: string;                 // cached PNG; an empty web panel icon means automatic
   titleButtons?: PluginTitleButton[];
   sidebar?: PluginSidebarConfig;
@@ -21,6 +24,10 @@ export interface PluginManifest {
   license?: string;
   homepage?: string;
 }
+
+export type PanelPermission = 'list' | 'read' | 'send' | 'receive';
+export interface HtmlPluginPermissions { network: string[]; panels: PanelPermission[] }
+export interface HtmlPluginGrants extends HtmlPluginPermissions { targets: string[] }
 
 export interface PluginTitleButton {
   id: string;

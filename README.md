@@ -61,6 +61,11 @@ agents, credentials, model discovery, permissions, and session storage.
 
 ## Features
 
+- **Local HTML panel apps** — import a single HTML file or a folder/ZIP from
+  **Plugins → Import HTML app…**. Calculator, Quick Notes, and Memory Break are
+  included as examples. Apps keep their own saved data; network access and
+  messaging with selected agent panels are optional permissions. See the
+  [HTML app guide](docs/html-panel-plugins.md) for the manifest, SDK, and limits.
 - **Website panels** — Lichess is included. To add your own, open **New session → More → +**,
   enter a name and web address, then choose an icon or upload an image. The shortcut stays in
   More for future sessions. Website panels follow the same grouping, resizing, detached-window,

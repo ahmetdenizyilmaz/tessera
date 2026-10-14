@@ -548,6 +548,12 @@ export function deserializeWorkspace(raw: unknown): void {
   const liveIds = new Set(useInstanceStore.getState().instances.keys());
   useLlmChatStore.getState().remapConversations(idMap, liveIds);
   useOfficeGameStore.getState().remapPanels(idMap);
+  // Only transfer an existing grant along the exact restored panel mapping.
+  // New/unrelated panels never inherit another conversation's app permissions.
+  if (idMap.size && [...usePluginStore.getState().registry.values()].some(app => app.htmlPlugin && app.permissions?.panels.length)) {
+    void invoke('html_plugin_remap_targets', { mapping: Object.fromEntries(idMap) })
+      .catch(error => console.error('Could not restore HTML app panel permissions:', error));
+  }
   const openPanels = new Set([...useLayoutStore.getState().tabOrder, ...[...newGroups.values()].flatMap(group => group.childIds)]);
   usePanelLockStore.setState({ lockedIds: new Set((snapshot.lockedPanelIds ?? []).map(remapId).filter(id => openPanels.has(id))) });
   usePanelShortcutStore.getState().restore(Object.fromEntries(

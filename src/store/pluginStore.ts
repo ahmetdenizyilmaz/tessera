@@ -4,10 +4,11 @@ import type { PluginManifest, PluginInstance } from '../types/plugin';
 import { loadWebApps, saveWebApps, webAppManifest, webAppIcon, validWebAppIcon, restoreBrowserIcon, saveBrowserIcon, type WebAppInput } from '../lib/webApps';
 import { fetchWebsiteIcon } from '../lib/websiteIcon';
 import { loadRemovedPlugins, saveRemovedPlugins } from '../lib/pluginAvailability';
+import { loadHtmlApps, saveHtmlApps } from '../lib/htmlPlugins';
 
 // ─── Module-Level Constants (React 19 + Zustand infinite loop prevention) ────
 
-const EMPTY_REGISTRY: Map<string, PluginManifest> = new Map(loadWebApps().map(m=>[m.name,m]));
+const EMPTY_REGISTRY: Map<string, PluginManifest> = new Map([...loadWebApps(), ...loadHtmlApps()].map(m=>[m.name,m]));
 const EMPTY_INSTANCES: Map<string, PluginInstance> = new Map();
 
 // ─── Plugin Store ────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ interface PluginState {
 
   /** Register a built-in plugin manifest (idempotent) */
   registerBuiltin: (name: string, manifest: PluginManifest) => void;
+  registerHtmlApp: (manifest: PluginManifest) => void;
   addWebApp: (input:WebAppInput) => string;
   restoreWebApp: (manifest:PluginManifest) => void;
   setWebAppIcon: (name: string, icon: string) => void;
@@ -130,10 +132,15 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     });
   },
 
+  registerHtmlApp: manifest => {
+    const registry = new Map(get().registry).set(manifest.name, manifest);
+    saveHtmlApps(registry);
+    set({registry});
+    get().setPluginRemoved(manifest.name, false);
+  },
+
   scanPlugins: async () => {
     try {
-      // TODO: Implement Rust command `scan_plugins` in src-tauri/src/
-      // Expected return: Array of { name: string, manifest: PluginManifest }
       const results = await invoke<Array<{ name: string; manifest: PluginManifest }>>('scan_plugins');
       // Preserve built-in plugins, then add scanned external plugins
       const next = new Map<string, PluginManifest>();
@@ -141,7 +148,13 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       for (const entry of results) {
         if(!next.has(entry.name))next.set(entry.name, restoreBrowserIcon(entry.manifest));
       }
-      set({ registry: next });
+      saveHtmlApps(next);
+      const removedPlugins = new Set(get().removedPlugins);
+      for (const { name, manifest } of results) if (manifest.htmlPlugin) {
+        if (manifest.enabled === false) removedPlugins.add(name); else removedPlugins.delete(name);
+      }
+      saveRemovedPlugins(removedPlugins);
+      set({ registry: next, removedPlugins });
     } catch {
       // Gracefully handle missing Rust command or scan errors.
       // Registry stays as-is (built-ins on first call, previous state on re-scan).

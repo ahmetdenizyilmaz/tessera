@@ -1,5 +1,6 @@
 import { usePluginStore } from '../store/pluginStore';
 import { closePanel } from './panelCleanup';
+import { setHtmlAppEnabled } from './htmlPlugins';
 
 const removing = new Map<string, Promise<void>>();
 
@@ -11,6 +12,10 @@ export function removePlugin(name: string): Promise<void> {
   const task = Promise.resolve().then(async () => {
     if (!usePluginStore.getState().registry.has(name)) return;
     usePluginStore.getState().setPluginRemoved(name, true);
+    if (usePluginStore.getState().registry.get(name)?.htmlPlugin) {
+      try { await setHtmlAppEnabled(name, false); }
+      catch (error) { usePluginStore.getState().setPluginRemoved(name, false); throw error; }
+    }
     const ids = [...usePluginStore.getState().instances.values()].filter(instance => instance.pluginName === name).map(instance => instance.id);
     for (const id of ids) await closePanel(id, false);
   }).finally(() => removing.delete(name));

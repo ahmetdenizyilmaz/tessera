@@ -84,6 +84,28 @@ it('retains a pinned Claude session ID before its first transcript is written', 
   expect([...useInstanceStore.getState().instances.values()][0].claudeSessionId).toBe(sessionId);
   expect(invoke).not.toHaveBeenCalledWith('session_exists', expect.anything());
 });
+
+it('restores HTML app identity and transfers optional grants only to the exact restored agent', () => {
+  const pluginName = 'html-test.restore';
+  usePluginStore.getState().registerHtmlApp({ name: pluginName, defaultTitle: 'Local notes', version: '1',
+    description: '', entry: 'index.html', icon: 'NotebookPen', htmlPlugin: true, browserSite: pluginName,
+    permissions: { network: [], panels: ['list', 'send'] } });
+  try {
+    const agent = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' });
+    useLayoutStore.getState().addPanel(agent, 'terminal');
+    const app = usePluginStore.getState().createInstance(pluginName);
+    useLayoutStore.getState().addPanel(app, 'plugin');
+    const saved = serializeWorkspace();
+    deserializeWorkspace(saved);
+    const restoredAgent = [...useInstanceStore.getState().instances.keys()][0];
+    expect(restoredAgent).not.toBe(agent);
+    expect(usePluginStore.getState().instances.get(app)?.pluginName).toBe(pluginName);
+    expect(invoke).toHaveBeenCalledWith('html_plugin_remap_targets', { mapping: { [agent]: restoredAgent } });
+  } finally {
+    const registry = new Map(usePluginStore.getState().registry); registry.delete(pluginName);
+    usePluginStore.setState({ registry, instances: new Map() });
+  }
+});
 it('restores independent detached tabs and bounds, and recovers an invalid window to Main', () => {
   registerBuiltins();
   const browser = usePluginStore.getState().createInstance('lichess');

@@ -25,7 +25,8 @@ pub fn definitions() -> Vec<Value> {
         other agent refer to these same destinations. Call this when the user says 'the other session', \
         'another subwindow', or 'the other one', before sending a message or reading its context. \
         Returns names, qualified names, computer names, ids, providers, working directories, busy/reachable state and is_self. \
-        Choose the matching non-self recipient; ask which one if several match. Does not list closed history.",
+        Choose the matching non-self recipient; ask which one if several match. Does not list closed history. \
+        Also lists local HTML app panels that the user has explicitly allowed this panel to message.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         }),
         json!({
@@ -41,7 +42,9 @@ pub fn definitions() -> Vec<Value> {
         Use wait_for_reply=false for back-and-forth exchanges. Busy Codex recipients queue messages for \
         automatic delivery; a queued response means accepted, so do not resend. Stop when the task is \
         resolved, avoiding acknowledgement loops. Set wait_for_reply for an isolated request needing its answer. \
-        Sending a message does not approve permissions or bypass a pending prompt.",
+        Sending a message does not approve permissions or bypass a pending prompt. \
+        For an allowed HTML app destination, delivery is to its asynchronous inbox; wait_for_reply is ignored. \
+        Its replies arrive through this same panel messaging system. App private storage cannot be read with read_panel.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -109,9 +112,11 @@ pub async fn call(
 
 fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
-    let panels: Vec<Value> = bus.with_registry(|r| {
-        r.all()
+    // Fetch the snapshot first; do not hold the registry lock while checking
+    // HTML app permissions (the runtime also updates registry membership).
+    let panels: Vec<Value> = bus.with_registry(|r| r.all())
             .into_iter()
+            .filter(|p| p.kind != "html-plugin" || crate::html_plugins::can_receive(app, &p.id, caller_id))
             .map(|p| {
                 json!({
                     "id": p.id,
@@ -132,8 +137,7 @@ fn list_panels(app: &AppHandle, caller_id: &str) -> Result<Value, String> {
                     "is_self": p.id == caller_id,
                 })
             })
-            .collect()
-    });
+            .collect();
     let others = panels
         .iter()
         .filter(|p| p["is_self"] != json!(true))
@@ -247,6 +251,12 @@ async fn send_to_panel_traced(app: &AppHandle, caller_id: &str, args: Value, tra
     let sender_name = bus
         .with_registry(|r| r.get(caller_id).map(|p| p.name.clone()))
         .unwrap_or_else(|| "another panel".to_string());
+
+    if target.kind == "html-plugin" {
+        let result = crate::html_plugins::receive(app, &target.id, caller_id, &sender_name, &message, hop)?;
+        bus.record_inbound_hop(&target.id,hop);
+        return Ok(result);
+    }
 
     if let (Some(device_id), Some(remote_panel_id)) =
         (&target.remote_device_id, &target.remote_panel_id)
@@ -424,6 +434,7 @@ async fn deliver_to_terminal(
 async fn read_panel(app: &AppHandle, caller_id: &str, args: Value) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
     let target = resolve_target(&bus, caller_id, &args)?;
+    if target.kind == "html-plugin" { return Err("HTML apps receive messages but do not expose their private storage as conversation history".into()); }
     let limit = args
         .get("limit")
         .and_then(|v| v.as_u64())

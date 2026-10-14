@@ -1,19 +1,23 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { RotateCcw, Trash2, X } from 'lucide-react';
+import { RotateCcw, Trash2, X, FileCode2, ShieldCheck } from 'lucide-react';
 import { usePluginStore } from '../../store/pluginStore';
 import { webAppIcon } from '../../lib/webApps';
 import { removePlugin } from '../../lib/pluginActions';
 import { PluginIcon } from '../icons/PluginIcon';
 import { usePanelWindow } from '../windows/PanelWindowContext';
 import './addons.css';
+import { HtmlAppImport, HtmlAppPermissions } from './HtmlAppControls';
+import { setHtmlAppEnabled } from '../../lib/htmlPlugins';
 
-export function AddonManager({ onClose, initialName }: { onClose: () => void; initialName?: string }) {
+export function AddonManager({ onClose, initialName, initialImport = false, initialPermissions }: { onClose: () => void; initialName?: string; initialImport?: boolean; initialPermissions?: string }) {
   const ownerDocument = usePanelWindow().document ?? document;
   const registry = usePluginStore(s => s.registry);
   const instances = usePluginStore(s => s.instances);
   const removed = usePluginStore(s => s.removedPlugins);
   const [selected, setSelected] = useState(initialName ?? '');
+  const [importing, setImporting] = useState(initialImport);
+  const [permissions, setPermissions] = useState(initialPermissions ?? '');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const dialog = useRef<HTMLDivElement>(null), headingId = useId();
   useEffect(() => {
@@ -37,7 +41,7 @@ export function AddonManager({ onClose, initialName }: { onClose: () => void; in
         event.stopPropagation();
         if (event.key === 'Escape') { event.preventDefault(); if (!busy) onClose(); }
         if (event.key === 'Tab') {
-          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), summary')].filter(el => el.getClientRects().length);
+          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), summary')].filter(el => el.getClientRects().length);
           const first = controls[0], last = controls.at(-1), focused = ownerDocument.activeElement;
           if (event.shiftKey && (focused === first || focused === dialog.current)) { event.preventDefault(); last?.focus(); }
           else if (!event.shiftKey && (focused === last || focused === dialog.current)) { event.preventDefault(); first?.focus(); }
@@ -47,9 +51,13 @@ export function AddonManager({ onClose, initialName }: { onClose: () => void; in
         <button type="button" className="addon-close" aria-label="Close add-on manager" disabled={busy} onClick={onClose}><X size={18}/></button></header>
       <p className="addon-hint">Removing an add-on closes its open panels and removes it from launch menus. Saved logins and add-on data are kept.</p>
       <div className="addon-list">
+        {importing ? <HtmlAppImport onDone={onClose} onCancel={() => setImporting(false)} onBusy={setBusy}/> : permissions && registry.has(permissions) ?
+          <HtmlAppPermissions manifest={registry.get(permissions)!} onClose={() => setPermissions('')} onBusy={setBusy}/> : <>
+        <button type="button" className="btn btn-secondary html-app-import-button" onClick={() => setImporting(true)}><FileCode2 size={16}/>Import HTML app</button>
         {activeApps.map(app => <div className="addon-row" key={app.name} data-addon-name={app.name}>
           <div className="addon-info"><PluginIcon icon={webAppIcon(app)} size={23}/><span><strong>{app.defaultTitle}</strong>
-            <small>{app.browserSite ? 'Web player' : app.builtin ? 'Built-in plugin' : 'Plugin'} · {openCount(app.name)} open</small></span>
+            <small>{app.htmlPlugin ? 'Local HTML app' : app.browserSite ? 'Web player' : app.builtin ? 'Built-in plugin' : 'Plugin'} · {openCount(app.name)} open</small></span>
+            {app.htmlPlugin && <button type="button" className="btn btn-secondary btn-sm" aria-label={`Permissions for ${app.defaultTitle}`} onClick={() => setPermissions(app.name)}><ShieldCheck size={14}/></button>}
             <button type="button" className="btn btn-secondary btn-sm addon-remove" aria-label={`Remove ${app.defaultTitle}`} disabled={busy}
               onClick={() => { setError(''); setSelected(app.name); }}><Trash2 size={14}/>Remove</button></div>
           {selected === app.name && <div className="addon-confirm"><p>Remove <strong>{app.defaultTitle}</strong>?{openCount(app.name) > 0 && ` This will close ${openCount(app.name)} open ${openCount(app.name) === 1 ? 'panel' : 'panels'}.`}</p>
@@ -61,10 +69,10 @@ export function AddonManager({ onClose, initialName }: { onClose: () => void; in
           <p className="addon-hint">Restore adds the shortcut back with its saved settings.</p>
           {removedApps.map(app => <div className="addon-info addon-row" key={app.name} data-addon-name={app.name}>
             <PluginIcon icon={webAppIcon(app)} size={23}/><span><strong>{app.defaultTitle}</strong><small>Removed</small></span>
-            <button type="button" className="btn btn-secondary btn-sm" aria-label={`Restore ${app.defaultTitle}`} disabled={busy} onClick={() => {
-              setError(''); try { usePluginStore.getState().setPluginRemoved(app.name, false); } catch { setError('Could not save this change. Please try again.'); }
+            <button type="button" className="btn btn-secondary btn-sm" aria-label={`Restore ${app.defaultTitle}`} disabled={busy} onClick={async () => {
+              setError(''); setBusy(true); try { if (app.htmlPlugin) await setHtmlAppEnabled(app.name, true); usePluginStore.getState().setPluginRemoved(app.name, false); } catch { setError('Could not save this change. Please try again.'); } finally { setBusy(false); }
             }}><RotateCcw size={14}/>Restore</button></div>)}
-        </details>}
+        </details>}</>}
       </div>
       {error && <p className="addon-error" role="alert">{error}</p>}
     </div>

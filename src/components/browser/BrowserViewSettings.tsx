@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, MousePointer2, PanelTop, RotateCcw, Settings2, Trash2, X } from 'lucide-react';
+import { Check, MousePointer2, PanelTop, RotateCcw, Settings2, Trash2, X, ShieldCheck } from 'lucide-react';
 import { browserDisplayMode, browserPanelShare, DEFAULT_BROWSER_LIVE_SHARE, type BrowserDisplayMode } from '../../lib/browserDisplay';
 import { useBrowserViewStore } from '../../store/browserViewStore';
 import { usePluginStore } from '../../store/pluginStore';
@@ -17,6 +17,7 @@ export function BrowserViewSettings({ site, pluginName, title, surface }: { site
   const webApp = usePluginStore(s => s.registry.get(pluginName));
   const [fetchingIcon, setFetchingIcon] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [permissions, setPermissions] = useState(false);
   const id = useId();
   const document = trigger.current?.ownerDocument;
   const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
@@ -100,8 +101,10 @@ export function BrowserViewSettings({ site, pluginName, title, surface }: { site
           finally { setFetchingIcon(false); }
         }}>{fetchingIcon ? 'Checking…' : webApp.icon === '' ? 'Refresh icon' : 'Use website icon'}</button></div>}
       {error && <p className="browser-settings-error" role="alert">{error}</p>}
-      {webApp && <button type="button" className="browser-settings-remove" onClick={() => { setOpen(false); setRemoving(true); }}><Trash2 size={14}/>Remove web player…</button>}
+      {webApp?.htmlPlugin && <button type="button" className="browser-settings-reset" onClick={() => { setOpen(false); setPermissions(true); }}><ShieldCheck size={14}/>App permissions…</button>}
+      {webApp && <button type="button" className="browser-settings-remove" onClick={() => { setOpen(false); setRemoving(true); }}><Trash2 size={14}/>{webApp.htmlPlugin ? 'Remove HTML app…' : 'Remove web player…'}</button>}
     </div>, document.body)}
     {removing && <AddonManager initialName={pluginName} onClose={() => setRemoving(false)}/>}
+    {permissions && <AddonManager initialPermissions={pluginName} onClose={() => setPermissions(false)}/>}
   </>;
 }

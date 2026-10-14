@@ -58,6 +58,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [managingAddons, setManagingAddons] = useState(false);
+  const [importingPlugin, setImportingPlugin] = useState(false);
   const pluginRegistry = usePluginStore(s => s.registry);
   const removedPlugins = usePluginStore(s => s.removedPlugins);
   const barRef = useRef<HTMLDivElement>(null);
@@ -78,7 +79,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
     { label: 'Save Workspace', shortcut: 'Ctrl+S', action: onSaveWorkspace },
     { label: 'Load Workspace', shortcut: 'Ctrl+O', action: onLoadWorkspace },
     { separator: true },
-    { label: 'Import Plugin...', action: () => {}, disabled: true },
+    { label: 'Import HTML app…', action: () => { setImportingPlugin(true); setManagingAddons(true); } },
     { separator: true },
     { label: 'Settings', shortcut: 'Ctrl+,', action: onSettings },
   ];
@@ -108,7 +109,8 @@ export const MenuBar: React.FC<MenuBarProps> = ({
         action: () => createPluginPanel(plugin.name),
       })),
     { separator: true },
-    { label: 'Manage add-ons…', action: () => setManagingAddons(true) },
+    { label: 'Import HTML app…', icon: 'FileText', action: () => { setImportingPlugin(true); setManagingAddons(true); } },
+    { label: 'Manage add-ons…', action: () => { setImportingPlugin(false); setManagingAddons(true); } },
   ];
 
   const helpItems: MenuEntry[] = [
@@ -201,7 +203,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           </div>
         ))}
       </div>
-      {managingAddons && <AddonManager onClose={() => setManagingAddons(false)}/>}
+      {managingAddons && <AddonManager initialImport={importingPlugin} onClose={() => setManagingAddons(false)}/>}
     </div>
   );
 };

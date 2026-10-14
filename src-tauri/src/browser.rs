@@ -8,17 +8,17 @@ use std::collections::HashMap;
 pub struct BrowserPanels(tokio::sync::Mutex<HashMap<String, SitePolicy>>);
 
 #[derive(Clone)]
-struct SitePolicy { home: tauri::Url, custom: bool }
+struct SitePolicy { home: tauri::Url, custom: bool, html: bool }
 
 impl SitePolicy {
     fn new(site: &str, home: Option<&str>) -> Result<Self,String> {
-        if site == "lichess" { return Ok(Self {home:"https://lichess.org/".parse().unwrap(),custom:false}); }
+        if site == "lichess" { return Ok(Self {home:"https://lichess.org/".parse().unwrap(),custom:false,html:false}); }
         if !site.starts_with("web-app-") || site.len() <= 8 || label(site).is_err() { return Err("Unknown website module".into()); }
         let home = home.ok_or("A home address is required")?.parse::<tauri::Url>().map_err(|_|"Invalid web address")?;
         if !web_address(&home) {return Err("Only http and https addresses without credentials are supported".into());}
-        Ok(Self {home,custom:true})
+        Ok(Self {home,custom:true,html:false})
     }
-    fn allows(&self, url: &tauri::Url) -> bool { if self.custom {web_address(url)} else {allowed(url)} }
+    fn allows(&self, url: &tauri::Url) -> bool { if self.html { crate::html_plugins::navigation_allowed(url,&self.home) } else if self.custom {web_address(url)} else {allowed(url)} }
 }
 
 fn web_address(url: &tauri::Url) -> bool {
@@ -93,23 +93,29 @@ fn install_panel_shortcut(view: &Webview, app: tauri::AppHandle, id: String) -> 
 pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state: tauri::State<'_, BrowserPanels>, id: String, site: String, url: Option<String>, home_url: Option<String>) -> Result<(), String> {
     authorize(&caller)?;
     let label = label(&id)?;
-    let policy = SitePolicy::new(&site,home_url.as_deref())?;
     let mut profiles = state.0.lock().await;
     if app.get_webview(&label).is_some() { return Ok(()); }
-    let url = url.and_then(|u| u.parse::<tauri::Url>().ok()).filter(|u|policy.allows(u)).unwrap_or_else(||policy.home.clone());
+    let (policy, profile) = if site.starts_with("html-") {
+        let (home,profile) = crate::html_plugins::prepare(&app,&id,&site)?;
+        (SitePolicy { home,custom:false,html:true }, profile)
+    } else {
+        (SitePolicy::new(&site,home_url.as_deref())?,app.path().app_local_data_dir().map_err(|e|e.to_string())?.join("browser-profiles").join(&site))
+    };
+    let url = if policy.html { policy.home.clone() } else { url.and_then(|u| u.parse::<tauri::Url>().ok()).filter(|u|policy.allows(u)).unwrap_or_else(||policy.home.clone()) };
     let window = app.get_window("main").ok_or("Main window is unavailable")?;
-    let profile = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("browser-profiles").join(&site);
     std::fs::create_dir_all(&profile).map_err(|e| e.to_string())?;
     let popup_app = app.clone();
     let popup_label = label.clone();
     let navigation_policy=policy.clone();
     let popup_policy=policy.clone();
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+    let html = policy.html;
+    let builder = WebviewBuilder::new(&label, if html { WebviewUrl::CustomProtocol(url) } else { WebviewUrl::External(url) })
         .data_directory(profile)
         .focused(false)
         .disable_drag_drop_handler()
         .on_navigation(move |url|navigation_policy.allows(url))
         .on_new_window(move |url, _| {
+            if html { return NewWindowResponse::Deny; }
             if popup_policy.allows(&url) {
                 let app = popup_app.clone();
                 let label = popup_label.clone();
@@ -121,9 +127,13 @@ pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state:
             }
             NewWindowResponse::Deny
         });
+    let builder = if html {
+        builder.initialization_script(crate::html_plugins::SDK).on_download(|_,_|false)
+    } else { builder };
     // Start offscreen; the renderer supplies measured bounds after creation.
-    let view = window.add_child(builder, tauri::LogicalPosition::new(-10000.0, -10000.0), tauri::LogicalSize::new(1.0, 1.0))
-        .map_err(|e| e.to_string())?;
+    let view = match window.add_child(builder, tauri::LogicalPosition::new(-10000.0, -10000.0), tauri::LogicalSize::new(1.0, 1.0)) {
+        Ok(view) => view, Err(error) => { if html { crate::html_plugins::closed(&app,&id); } return Err(error.to_string()); }
+    };
     #[cfg(windows)]
     install_panel_shortcut(&view, app.clone(), id)?;
     profiles.insert(label,policy);
@@ -175,6 +185,7 @@ pub async fn browser_panel_action(caller: Webview, app: tauri::AppHandle, state:
         "reload" => view.reload(),
         "home" => view.navigate(policy.home.clone()),
         "external" => {
+            if policy.html { return Err("Local HTML apps stay inside Tessera".into()); }
             let url = view.url().map_err(|e| e.to_string())?;
             if !policy.allows(&url) { return Err("Unsupported address".into()); }
             return app.shell().open(url.to_string(), None).map_err(|e| e.to_string());
@@ -192,7 +203,7 @@ pub async fn browser_panel_status(caller: Webview, app: tauri::AppHandle, state:
     authorize(&caller)?;
     let view = app.get_webview(&label(&id)?).ok_or("Browser panel is not ready")?;
     let policy=state.0.lock().await.get(&label(&id)?).cloned().ok_or("Website profile is unavailable")?;
-    Ok(BrowserStatus { url: saved_url(&view.url().map_err(|e| e.to_string())?, &policy) })
+    Ok(BrowserStatus { url: if policy.html { String::new() } else { saved_url(&view.url().map_err(|e| e.to_string())?, &policy) } })
 }
 
 #[tauri::command]
@@ -201,6 +212,7 @@ pub async fn browser_panel_close(caller: Webview, app: tauri::AppHandle, state: 
     let mut profiles = state.0.lock().await;
     if let Some(view) = app.get_webview(&label(&id)?) { view.close().map_err(|e| e.to_string())?; }
     profiles.remove(&label(&id)?);
+    crate::html_plugins::closed(&app,&id);
     Ok(())
 }
 

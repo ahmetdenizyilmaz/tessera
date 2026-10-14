@@ -1,0 +1,8 @@
+{
+  "id": "tessera.quick-notes",
+  "name": "Quick Notes",
+  "version": "1.0.0",
+  "description": "A private scratchpad saved on this computer. No conversation or internet access.",
+  "entry": "index.html",
+  "icon": "NotebookPen"
+}

@@ -56,7 +56,7 @@ impl PanelInfo {
     /// a provider API, not a Claude Code process, so there is nothing to write
     /// a user turn into.
     pub fn reachable(&self) -> bool {
-        self.connected && (self.kind == "chat" || self.kind == "terminal")
+        self.connected && (self.kind == "chat" || self.kind == "terminal" || self.kind == "html-plugin")
     }
 
     pub fn qualified_name(&self) -> String {
@@ -95,7 +95,7 @@ pub struct PanelRegistry {
 impl PanelRegistry {
     pub fn replace_local(&mut self, panels: Vec<PanelInfo>) {
         self.panels
-            .retain(|_, panel| panel.remote_device_id.is_some());
+            .retain(|_, panel| panel.remote_device_id.is_some() || panel.kind == "html-plugin");
         self.panels
             .extend(panels.into_iter().map(|p| (p.id.clone(), p)));
     }
@@ -157,6 +157,9 @@ impl PanelRegistry {
     pub fn get(&self, id: &str) -> Option<&PanelInfo> {
         self.panels.get(id)
     }
+
+    pub fn upsert_html(&mut self, panel: PanelInfo) { self.panels.insert(panel.id.clone(),panel); }
+    pub fn remove_html(&mut self, id: &str) { if self.panels.get(id).is_some_and(|p| p.kind == "html-plugin") { self.panels.remove(id); } }
 
     pub fn all(&self) -> Vec<PanelInfo> {
         let mut v: Vec<PanelInfo> = self.panels.values().cloned().collect();

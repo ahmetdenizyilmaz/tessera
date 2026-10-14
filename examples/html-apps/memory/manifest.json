@@ -1,0 +1,8 @@
+{
+  "id": "tessera.memory-game",
+  "name": "Memory Break",
+  "version": "1.0.0",
+  "description": "A quiet matching game for a short break. Your best score stays on this computer.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}

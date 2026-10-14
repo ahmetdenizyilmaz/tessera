@@ -12,6 +12,7 @@ import { cleanupPty } from '../hooks/usePty';
 import { destroyTerminal } from '../hooks/useTerminal';
 import { clearTerminalState } from '../components/terminal/XTermView';
 import { invoke } from '@tauri-apps/api/core';
+import { browserCommand } from './browserPanels';
 import { closeRemoteGroup, closeRemotePanel, splitRemotePanelId } from '../store/lanStore';
 import { captureClosedPanel, recordPanelClose } from './panelHistory';
 import { usePanelLockStore } from '../store/panelLockStore';
@@ -74,6 +75,11 @@ async function closePanelContents(id: string): Promise<void> {
   if (panelType === 'widget') {
     // Nothing special for widgets
   } else if (panelType === 'plugin') {
+    const plugin = usePluginStore.getState().instances.get(id);
+    if (plugin && usePluginStore.getState().registry.get(plugin.pluginName)?.htmlPlugin) {
+      // Updating a local package must wait until its native runtime has closed.
+      await browserCommand(id, 'browser_panel_close');
+    }
     usePluginStore.getState().destroyInstance(id);
     useEventBusStore.getState().cleanupInstance(id);
   } else if (panelType === 'llm') {
