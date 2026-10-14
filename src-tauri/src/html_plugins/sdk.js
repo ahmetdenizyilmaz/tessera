@@ -1,10 +1,12 @@
 /* Tessera HTML app SDK v1. Injected before the app's own scripts. */
 (() => {
-  if (window !== window.top) return;
   // WebRTC bypasses normal HTTP/CSP routing and is outside the v1 app API.
   for (const key of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'mozRTCPeerConnection', 'RTCDataChannel']) {
     try { Object.defineProperty(window, key, { value: undefined, writable: false, configurable: false }); } catch {}
   }
+  // CSP blocks frame navigation, but browsers still create a same-origin blank
+  // frame realm. Apply the transport restriction there before exposing no SDK.
+  if (window !== window.top) return;
   const call = (method, params = {}) => window.__TAURI_INTERNALS__.invoke('html_plugin_call', { method, params });
   const ready = Promise.resolve().then(() => call('ready'));
   // An app that does not use the SDK should not produce an unhandled rejection.

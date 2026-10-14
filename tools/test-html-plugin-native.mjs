@@ -65,6 +65,7 @@ try{
   await rejects(calculator,"window.__TAURI_INTERNALS__.invoke('plugin:fs|read_text_file',{path:'synthetic.txt',options:{}})",/not allowed|not permitted|denied/i);
   await rejects(calculator,"fetch('https://example.com')",/Failed to fetch|fetch/i);
   expect(await probe(calculator,'typeof RTCPeerConnection')).toBe('undefined');
+  expect(await probe(calculator,"(()=>{const frame=document.createElement('iframe');document.body.append(frame);const type=typeof frame.contentWindow.RTCPeerConnection;frame.remove();return type})()")).toBe('undefined');
   const originalUrl=(await invoke('validation_info',{id:calculator})).url;
   await probe(calculator,"(()=>{window.location.href='https://example.com';return true})()");
   expect((await invoke('validation_info',{id:calculator})).url).toBe(originalUrl);

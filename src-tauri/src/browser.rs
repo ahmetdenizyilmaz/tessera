@@ -128,7 +128,7 @@ pub async fn browser_panel_create(caller: Webview, app: tauri::AppHandle, state:
             NewWindowResponse::Deny
         });
     let builder = if html {
-        builder.initialization_script(crate::html_plugins::SDK).on_download(|_,_|false)
+        builder.initialization_script_for_all_frames(crate::html_plugins::SDK).on_download(|_,_|false)
     } else { builder };
     // Start offscreen; the renderer supplies measured bounds after creation.
     let view = match window.add_child(builder, tauri::LogicalPosition::new(-10000.0, -10000.0), tauri::LogicalSize::new(1.0, 1.0)) {
