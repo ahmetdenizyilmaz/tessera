@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { MosaicLayout } from '../src/components/layout/MosaicLayout';
 import { TabBar } from '../src/components/tabs/TabBar';
+import { MenuBar } from '../src/components/menubar/MenuBar';
 import { DetachedWindows } from '../src/components/windows/DetachedWindows';
 import { useLayoutStore } from '../src/store/layoutStore';
 import { useGroupStore } from '../src/store/groupStore';
@@ -16,6 +17,8 @@ import '../src/styles/global.css';
 import '../src/styles/mosaic.css';
 
 const native = new URL(location.href).searchParams.has('native');
+const addons = new URL(location.href).searchParams.has('addons');
+const noop = () => {};
 const realInvoke = native && window.__TAURI_INTERNALS__.invoke;
 window.calls = [];
 window.views = {};
@@ -55,6 +58,8 @@ window.timer = useLayoutStore.getState().activeTabId;
 useLayoutStore.getState().setFocused(window.lichess);
 createRoot(document.getElementById('root')).render(<React.StrictMode>
   <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    {addons && <MenuBar onNewInstance={() => creation.openNewSessionWizard()} onQuickInstance={noop} onNewLlmChat={noop} onNewComputer={noop}
+      onResumeSession={noop} onSessionHistory={noop} onSaveWorkspace={noop} onLoadWorkspace={noop} onSettings={noop} onAbout={noop}/>}
     <TabBar /><div style={{ flex: 1, minHeight: 0 }}><MosaicLayout /></div>
   </div><DetachedWindows />
 </React.StrictMode>);

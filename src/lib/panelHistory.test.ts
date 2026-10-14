@@ -1,7 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { closePanel } from './panelCleanup';
-import { captureClosedPanel, findRememberedPanel, installRecentPanelTracking, openRecentPanel } from './panelHistory';
+import { captureClosedPanel, findRememberedPanel, installRecentPanelTracking, openRecentPanel, restoreClosedPanel } from './panelHistory';
+import { removePlugin } from './pluginActions';
+import { loadRemovedPlugins, REMOVED_PLUGINS_KEY } from './pluginAvailability';
 import { beginPanelResize, readLevelGeometry } from './layoutHistory';
 import { captureGroupSnapshot, ensurePanelAtLevel, getPanelLocations, removePanelsFromWorkspace, useGroupStore } from '../store/groupStore';
 import { computeRects, useLayoutStore } from '../store/layoutStore';
@@ -66,7 +68,8 @@ beforeEach(() => {
   useGroupStore.setState({ groups: new Map(), groupStack: [] });
   useGroupStore.getState().restoreGroups(new Map());
   useInstanceStore.setState({ instances: new Map() });
-  usePluginStore.setState({ instances: new Map() }); registerBuiltins();
+  usePluginStore.setState({ instances: new Map(), removedPlugins: new Set() }); registerBuiltins();
+  localStorage.removeItem(REMOVED_PLUGINS_KEY);
   useLlmChatStore.setState({ conversations: {} });
   useWorkspaceWindowStore.setState({ windows: [] });
   usePanelShortcutStore.setState({ bindings: {} });
@@ -74,6 +77,44 @@ beforeEach(() => {
   useLanStore.setState({ status: null, hiddenPanelIds: [], hiddenPeerIds: [] });
   history.setState({ past: [], future: [], busy: false });
   recents.setState({ entries: [] });
+});
+
+it('removes all copies of a web add-on and prevents old snapshots or undo from reopening it until restored', async () => {
+  const other = agent(), parent = group(), nested = group(parent);
+  const name = usePluginStore.getState().addWebApp({ name: 'Player', url: 'https://player.test', icon: 'Music' });
+  const definition = usePluginStore.getState().registry.get(name)!;
+  const ids = [null, parent, nested].map(destination => {
+    const id = usePluginStore.getState().createInstance(name);
+    ensurePanelAtLevel(id, destination, 'plugin'); return id;
+  });
+  const saved = captureClosedPanel(ids[0])!, snapshot = serializeWorkspace();
+  await removePlugin(name);
+  expect(loadRemovedPlugins().has(name)).toBe(true);
+  for (const id of ids) {
+    expect(getPanelLocations().has(id)).toBe(false);
+    expect(usePluginStore.getState().instances.has(id)).toBe(false);
+  }
+  expect(useInstanceStore.getState().instances.has(other)).toBe(true);
+  expect(usePluginStore.getState().registry.get(name)).toEqual(definition);
+  expect(usePluginStore.getState().createInstance(name)).toBe('');
+  expect(restoreClosedPanel(saved)).toBe(false);
+  deserializeWorkspace(snapshot);
+  expect([...usePluginStore.getState().instances.values()].some(instance => instance.pluginName === name)).toBe(false);
+  expect(getPanelLocations().has(ids[0])).toBe(false);
+  usePluginStore.getState().setPluginRemoved(name, false);
+  expect(restoreClosedPanel(saved)).toBe(true);
+  expect(usePluginStore.getState().registry.get(name)?.browserSite).toBe(definition.browserSite);
+});
+
+it('keeps add-on panels open if saving removal fails', async () => {
+  const id = usePluginStore.getState().createInstance('lichess');
+  ensurePanelAtLevel(id, null, 'plugin');
+  const storage = vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('Storage full'); });
+  try { await expect(removePlugin('lichess')).rejects.toThrow('Storage full'); }
+  finally { storage.mockRestore(); }
+  expect(usePluginStore.getState().removedPlugins.has('lichess')).toBe(false);
+  expect(usePluginStore.getState().instances.has(id)).toBe(true);
+  expect(getPanelLocations().has(id)).toBe(true);
 });
 
 it.each(['claude', 'codex', 'opencode', 'antigravity'] as const)('undo/redo resumes the same %s conversation and preserves other agents', async provider => {

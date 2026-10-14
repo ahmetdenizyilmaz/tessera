@@ -5,6 +5,7 @@ import { useInstanceStore } from '../../store/instanceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useGroupStore } from '../../store/groupStore';
 import { useWorkspaceWindowStore } from '../../store/workspaceWindowStore';
+import { usePluginStore } from '../../store/pluginStore';
 import { findRememberedPanel, openRecentPanel } from '../../lib/panelHistory';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import type { RememberedPanel } from '../../types/panelHistory';
@@ -23,6 +24,7 @@ function detail(panel: RememberedPanel) {
 
 export function RecentPanels({ wizardId }: { wizardId: string }) {
   const entries = useRecentPanelStore(s => s.entries);
+  const removedPlugins = usePluginStore(s => s.removedPlugins);
   // Visibility follows live panels, including groups and detached windows,
   // without waiting for the debounced recent-history snapshot.
   useLayoutStore(s => s.tabOrder);
@@ -32,7 +34,9 @@ export function RecentPanels({ wizardId }: { wizardId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
   const listId = useId();
-  const closedEntries = entries.filter(entry => !findRememberedPanel(entry.saved.panel));
+  const hasRemovedPlugin = (panel: RememberedPanel): boolean => !!panel.plugin && removedPlugins.has(panel.plugin.pluginName)
+    || !!panel.children?.some(hasRemovedPlugin);
+  const closedEntries = entries.filter(entry => !findRememberedPanel(entry.saved.panel) && !hasRemovedPlugin(entry.saved.panel));
   const filtered = closedEntries.filter(entry => `${entry.saved.panel.name} ${detail(entry.saved.panel)}`.toLowerCase().includes(query.trim().toLowerCase()));
   return <section className="nsw-recents">
     <button type="button" className="nsw-recents-toggle" aria-expanded={expanded} aria-controls={listId}

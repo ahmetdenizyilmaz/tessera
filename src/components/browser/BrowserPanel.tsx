@@ -95,7 +95,7 @@ export function BrowserPanel({ instanceId, site }: { instanceId: string; site: s
     <div className="terminal-toolbar browser-toolbar">
       <PluginIcon icon={instance?.icon??'Globe'} size={15} className="browser-brand" />
       <span className="browser-title">{title}<PanelShortcutBadge panelId={instanceId} /></span>
-      <BrowserViewSettings site={site} title={appTitle} surface={surface} />
+      <BrowserViewSettings site={site} pluginName={instance?.pluginName ?? site} title={appTitle} surface={surface} />
       <PanelLockButton panelId={instanceId} />
       <button className="browser-navigation" title="Back" aria-label="Back" disabled={!ready} onClick={() => action('back')}><ArrowLeft size={14} /></button>
       <button className="browser-navigation" title="Forward" aria-label="Forward" disabled={!ready} onClick={() => action('forward')}><ArrowRight size={14} /></button>

@@ -43,6 +43,8 @@ function DetachedTab({ id, active, select, menu }: { id: string; active: boolean
 function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorkspace; child: Window }) {
   const history = useWorkspaceHistoryStore();
   const groups = useGroupStore(s => s.groups);
+  const registry = usePluginStore(s => s.registry);
+  const removedPlugins = usePluginStore(s => s.removedPlugins);
   const [path, setPath] = useState<string[]>([]);
   const [newMenu, setNewMenu] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -131,7 +133,7 @@ function DetachedWorkspaceView({ workspace, child }: { workspace: DetachedWorksp
             <div className="menu-dropdown-sep" />
             <button className="menu-dropdown-item" onClick={() => { openNewSessionWizard(groupId); setNewMenu(false); }}>New session</button>
             <button className="menu-dropdown-item" onClick={() => { createGroupPanel(groupId); setNewMenu(false); }}>New group</button>
-            {[...usePluginStore.getState().registry.values()].map(plugin => <button key={plugin.name} className="menu-dropdown-item" onClick={() => newPlugin(plugin.name)}>{plugin.defaultTitle}</button>)}
+            {[...registry.values()].filter(plugin => !removedPlugins.has(plugin.name)).map(plugin => <button key={plugin.name} className="menu-dropdown-item" onClick={() => newPlugin(plugin.name)}>{plugin.defaultTitle}</button>)}
           </div>}
         </div>
         {active && <button className="detached-tool" title="Move active panel back to main window" onClick={() => movePanelToWindow(active, null)}><ExternalLink size={14} /></button>}

@@ -87,6 +87,34 @@ try {
   });
   await expect.poll(() => page.evaluate(() => window.iconCalls.some(c => c.url === 'https://slow.test/assets/mark.svg'))).toBe(true);
   expect(await page.evaluate(() => window.plugins.getState().registry.get(window.slowIconApp).icon)).toBe('Music');
-  expect(errors).toEqual([]);
   console.log('PASS root favicon fallback, missing-icon globe, and manual override during an outstanding request');
+
+  // Built-in web panels must expose the same settings without becoming custom
+  // apps or changing their long-lived native profile (and saved logins).
+  await page.locator('.nsw-more').getByRole('button', { name: 'Lichess', exact: true }).click();
+  const createsBeforeIcon = await page.evaluate(() => window.webCalls.filter(c => c.command === 'browser_panel_create').length);
+  await page.getByRole('button', { name: 'Lichess view settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Use website icon', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh icon', exact: true })).toBeEnabled();
+  await expect(page.getByRole('dialog').locator('.browser-settings-icon img')).toHaveCount(1);
+  const lichess = await page.evaluate(() => window.plugins.getState().registry.get('lichess'));
+  expect(lichess).toMatchObject({ builtin: true, browserSite: 'lichess', homeUrl: 'https://lichess.org/', icon: '' });
+  expect(lichess.customWebApp).toBeUndefined();
+  expect(lichess.favicon).toMatch(/^data:image\/png;base64,/);
+  expect(await page.evaluate(() => window.webCalls.filter(c => c.command === 'browser_panel_create').length)).toBe(createsBeforeIcon);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tessera-web-apps')).some(m => m.name === 'lichess'))).toBe(false);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.tab-item').filter({ hasText: 'Lichess' }).locator('img')).toHaveCount(1);
+
+  await page.reload(); await page.waitForFunction(() => !!window.newSession); await installIconServer();
+  await page.evaluate(() => window.newSession());
+  const lichessShortcut = page.locator('.nsw-more').getByRole('button', { name: 'Lichess', exact: true });
+  await expect(lichessShortcut.locator('img')).toHaveCount(1); await lichessShortcut.click();
+  await page.getByRole('button', { name: 'Lichess view settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh icon', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => window.iconCalls)).toEqual([]);
+  expect(await page.evaluate(() => window.plugins.getState().registry.get('lichess'))).toEqual(lichess);
+  expect(await page.evaluate(() => window.webCalls.find(c => c.command === 'browser_panel_create').args.site)).toBe('lichess');
+  expect(errors).toEqual([]);
+  console.log('PASS built-in Lichess settings, cached shortcut/tab icon after restart, and unchanged native view/profile');
 } finally { await browser.close(); }

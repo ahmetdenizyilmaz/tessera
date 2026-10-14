@@ -104,6 +104,8 @@ export function restoreClosedPanel(saved: ClosedPanel, wizardId?: string): boole
   }
   if (!windowRoot && !canPlacePanel(destination, wizardId)) { notifyPanelLimit(); return false; }
   const all = flatten(saved.panel);
+  const removed = all.find(p => p.plugin && usePluginStore.getState().removedPlugins.has(p.plugin.pluginName));
+  if (removed) { notify(`Restore ${removed.name} in Manage add-ons before reopening it.`); return false; }
   const unavailable = all.find(p => p.plugin && !usePluginStore.getState().registry.has(p.plugin.pluginName));
   if (unavailable) { notify(`Install ${unavailable.plugin!.pluginName} to reopen ${unavailable.name}.`); return false; }
   const missingRemote = all.find(p => p.remoteDeviceId && !useLanStore.getState().status?.peers.some(peer =>

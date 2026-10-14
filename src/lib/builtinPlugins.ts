@@ -30,6 +30,6 @@ export function registerBuiltins(): void {
   registerBuiltin('lichess', {
     name: 'lichess', version: '1.0.0', description: 'Play chess on Lichess with your own account',
     entry: '', icon: 'Chess', defaultTitle: 'Lichess', builtin: true,
-    browserSite: 'lichess', accentColor: '#82b86b',
+    browserSite: 'lichess', homeUrl: 'https://lichess.org/', accentColor: '#82b86b',
   });
 }

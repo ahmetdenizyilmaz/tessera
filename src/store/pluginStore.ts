@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { PluginManifest, PluginInstance } from '../types/plugin';
-import { loadWebApps, saveWebApps, webAppManifest, webAppIcon, validWebAppIcon, type WebAppInput } from '../lib/webApps';
+import { loadWebApps, saveWebApps, webAppManifest, webAppIcon, validWebAppIcon, restoreBrowserIcon, saveBrowserIcon, type WebAppInput } from '../lib/webApps';
 import { fetchWebsiteIcon } from '../lib/websiteIcon';
+import { loadRemovedPlugins, saveRemovedPlugins } from '../lib/pluginAvailability';
 
 // ─── Module-Level Constants (React 19 + Zustand infinite loop prevention) ────
 
@@ -17,6 +18,10 @@ interface PluginState {
 
   /** Running plugin instances keyed by instance ID */
   instances: Map<string, PluginInstance>;
+
+  /** Removed from launch menus; definitions/data remain available for restore. */
+  removedPlugins: Set<string>;
+  setPluginRemoved: (name: string, removed: boolean) => void;
 
   /** Register a built-in plugin manifest (idempotent) */
   registerBuiltin: (name: string, manifest: PluginManifest) => void;
@@ -64,6 +69,15 @@ interface PluginState {
 export const usePluginStore = create<PluginState>((set, get) => ({
   registry: EMPTY_REGISTRY,
   instances: EMPTY_INSTANCES,
+  removedPlugins: loadRemovedPlugins(),
+  setPluginRemoved: (name, removed) => {
+    if (!get().registry.has(name)) return;
+    const removedPlugins = new Set(get().removedPlugins);
+    if (removed) removedPlugins.add(name); else removedPlugins.delete(name);
+    // Save first: a storage failure must not remove a shortcut or close panels.
+    saveRemovedPlugins(removedPlugins);
+    set({ removedPlugins });
+  },
   addWebApp: input => {
     const manifest=webAppManifest(input), registry=new Map(get().registry);
     registry.set(manifest.name,manifest);
@@ -81,10 +95,11 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
   setWebAppIcon: (name, icon) => {
     const current = get().registry.get(name);
-    if (!current?.customWebApp || !validWebAppIcon(icon)) return;
+    if (!current?.browserSite || !current.homeUrl || !validWebAppIcon(icon)) return;
     const manifest = { ...current, icon };
     const registry = new Map(get().registry).set(name, manifest);
-    saveWebApps(registry);
+    if (manifest.customWebApp) saveWebApps(registry);
+    else saveBrowserIcon(manifest);
     const instances = new Map(get().instances);
     for (const [id, instance] of instances) if (instance.pluginName === name) instances.set(id, { ...instance, icon: webAppIcon(manifest) });
     set({ registry, instances });
@@ -92,13 +107,14 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
   refreshWebAppIcon: async (name, force = false) => {
     const original = get().registry.get(name);
-    if (!original?.customWebApp || original.icon !== '' || !original.homeUrl || original.favicon && !force) return;
+    if (!original?.browserSite || original.icon !== '' || !original.homeUrl || original.favicon && !force) return;
     try {
       const favicon = await fetchWebsiteIcon(original.homeUrl, force);
       const current = get().registry.get(name);
       if (!favicon || !current || current.icon !== '' || current.homeUrl !== original.homeUrl) return;
       const manifest = { ...current, favicon }, registry = new Map(get().registry).set(name, manifest);
-      saveWebApps(registry);
+      if (manifest.customWebApp) saveWebApps(registry);
+      else saveBrowserIcon(manifest);
       const instances = new Map(get().instances);
       for (const [id, instance] of instances) if (instance.pluginName === name) instances.set(id, { ...instance, icon: favicon });
       set({ registry, instances });
@@ -109,7 +125,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     set((state) => {
       if (state.registry.has(name)) return state;
       const next = new Map(state.registry);
-      next.set(name, manifest);
+      next.set(name, restoreBrowserIcon(manifest));
       return { registry: next };
     });
   },
@@ -123,7 +139,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       const next = new Map<string, PluginManifest>();
       get().registry.forEach((m, name) => { if (m.builtin || m.customWebApp) next.set(name, m); });
       for (const entry of results) {
-        if(!next.has(entry.name))next.set(entry.name, entry.manifest);
+        if(!next.has(entry.name))next.set(entry.name, restoreBrowserIcon(entry.manifest));
       }
       set({ registry: next });
     } catch {
@@ -133,6 +149,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
 
   createInstance: (pluginName: string) => {
+    if (get().removedPlugins.has(pluginName)) return '';
     const manifest = get().registry.get(pluginName);
     if (!manifest) {
       console.warn(`[pluginStore] Cannot create instance: plugin "${pluginName}" not found in registry`);
@@ -162,6 +179,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
 
   restoreInstance: (pluginName: string, id: string, title?: string) => {
+    if (get().removedPlugins.has(pluginName)) return false;
     const manifest = get().registry.get(pluginName);
     if (!manifest) {
       console.warn(`[pluginStore] Cannot restore instance: plugin "${pluginName}" not found in registry`);

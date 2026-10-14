@@ -40,3 +40,4 @@
 .browser-settings-icon > button { padding:6px 8px; border:1px solid var(--border); border-radius:6px; color:var(--text-primary); background:var(--bg-hover); font:inherit; font-size:11px; cursor:pointer; }
 .browser-settings-icon > button:disabled { opacity:.5; cursor:default; }
 .browser-settings-error { color: var(--error); font-size: 11px; margin: 10px 0 0; }
+.browser-settings-remove{display:flex;align-items:center;gap:7px;margin-top:12px;padding:7px 0;border:0;background:transparent;color:#e89c99;font:inherit;font-size:11px;cursor:pointer}.browser-settings-remove:hover{color:#ffb6b1}

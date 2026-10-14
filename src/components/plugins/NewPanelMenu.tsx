@@ -1,6 +1,7 @@
 import { Folder } from 'lucide-react';
 import { PluginIcon } from '../icons/PluginIcon';
 import { usePluginStore } from '../../store/pluginStore';
+import { webAppIcon } from '../../lib/webApps';
 import { PanelViewPreview } from '../icons/PanelViewPreview';
 import claudeIcon from '../../assets/claude-icon.ico';
 import openaiIcon from '../../assets/openai-icon.png';
@@ -44,7 +45,8 @@ export function NewPanelMenu({
 }: NewPanelMenuProps) {
   // Read plugin registry
   const registry = usePluginStore((s) => s.registry);
-  const plugins = Array.from(registry.entries());
+  const removedPlugins = usePluginStore(s => s.removedPlugins);
+  const plugins = Array.from(registry.entries()).filter(([name]) => !removedPlugins.has(name));
 
   return (
     <>
@@ -201,7 +203,7 @@ export function NewPanelMenu({
             {plugins.map(([name, manifest]) => (
               <MenuItem
                 key={name}
-                icon={<PluginIcon icon={manifest.icon} size={16} />}
+                icon={<PluginIcon icon={webAppIcon(manifest)} size={16} />}
                 label={manifest.defaultTitle}
                 onClick={() => { onClose(); onNewPlugin(name); }}
               />

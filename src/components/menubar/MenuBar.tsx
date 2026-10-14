@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useWorkspaceHistoryStore } from '../../store/workspaceHistoryStore';
+import { usePluginStore } from '../../store/pluginStore';
+import { createPluginPanel } from '../../lib/newSessionActions';
+import { AddonManager } from '../plugins/AddonManager';
 
 interface MenuBarProps {
   onNewInstance: () => void;
@@ -55,6 +58,9 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onNewLichess,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [managingAddons, setManagingAddons] = useState(false);
+  const pluginRegistry = usePluginStore(s => s.registry);
+  const removedPlugins = usePluginStore(s => s.removedPlugins);
   const barRef = useRef<HTMLDivElement>(null);
   const history = useWorkspaceHistoryStore();
 
@@ -93,9 +99,12 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   ];
 
   const pluginItems: MenuEntry[] = [
-    { label: 'Lichess', action: () => onNewLichess?.() },
-    { label: 'Notepad', action: () => onNewNotepad?.() },
-    { label: 'Timer', action: () => onNewTimer?.() },
+    ...[...pluginRegistry.values()].filter(plugin => !removedPlugins.has(plugin.name)).map(plugin => ({ label: plugin.defaultTitle, action: () => {
+      const builtinAction = plugin.name === 'lichess' ? onNewLichess : plugin.name === 'notepad' ? onNewNotepad : plugin.name === 'timer' ? onNewTimer : undefined;
+      if (builtinAction) builtinAction(); else createPluginPanel(plugin.name);
+    } })),
+    { separator: true },
+    { label: 'Manage add-ons…', action: () => setManagingAddons(true) },
   ];
 
   const helpItems: MenuEntry[] = [
@@ -182,6 +191,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           </div>
         ))}
       </div>
+      {managingAddons && <AddonManager onClose={() => setManagingAddons(false)}/>}
     </div>
   );
 };

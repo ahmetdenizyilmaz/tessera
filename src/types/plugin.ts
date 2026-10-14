@@ -11,7 +11,7 @@ export interface PluginManifest {
   browserSite?: string;             // stable native website profile, without the plugin SDK
   homeUrl?: string;
   customWebApp?: boolean;
-  favicon?: string;                 // cached PNG; an empty custom icon means automatic
+  favicon?: string;                 // cached PNG; an empty web panel icon means automatic
   titleButtons?: PluginTitleButton[];
   sidebar?: PluginSidebarConfig;
   accentColor?: string;

@@ -1,6 +1,7 @@
 import type { PluginManifest } from '../types/plugin';
 
 export const WEB_APPS_KEY='tessera-web-apps';
+export const BROWSER_ICONS_KEY='tessera-browser-icons';
 export const WEB_APP_ICONS=['Globe','Chess','Music','Video','Gamepad2','MessageCircle','BookOpen','FileText','Clock'] as const;
 export interface WebAppInput { name:string; url:string; icon:string; favicon?:string }
 export function webAppUrl(value:string):string {
@@ -21,7 +22,28 @@ export function webAppManifest(input:WebAppInput,id=`web-app-${crypto.randomUUID
   return {name:id,version:'1.0.0',description:`${name} web panel`,entry:'',icon:input.icon,...(favicon ? {favicon} : {}),defaultTitle:name,customWebApp:true,browserSite:id,homeUrl:webAppUrl(input.url)};
 }
 export function webAppIcon(manifest: PluginManifest): string {
-  return manifest.customWebApp && manifest.icon === '' ? manifest.favicon || 'Globe' : manifest.icon;
+  return manifest.browserSite && manifest.icon === '' ? manifest.favicon || 'Globe' : manifest.icon;
+}
+// Built-in/scanned app definitions stay owned by their plugin. Persist only
+// the user's icon choice, without replacing the app or its browser profile.
+function loadBrowserIcons(): Record<string, { homeUrl?: unknown; icon?: unknown; favicon?: unknown }> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BROWSER_ICONS_KEY) ?? '{}');
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+  } catch { return {}; }
+}
+export function restoreBrowserIcon(manifest: PluginManifest): PluginManifest {
+  if (manifest.customWebApp || !manifest.browserSite || !manifest.homeUrl) return manifest;
+  const saved = loadBrowserIcons()[manifest.name];
+  if (!saved || saved.homeUrl !== manifest.homeUrl || !validWebAppIcon(saved.icon)) return manifest;
+  const favicon = saved.icon === '' && typeof saved.favicon === 'string' && saved.favicon.startsWith('data:') && validWebAppIcon(saved.favicon)
+    ? saved.favicon : undefined;
+  return { ...manifest, icon: saved.icon, favicon };
+}
+export function saveBrowserIcon(manifest: PluginManifest): void {
+  localStorage.setItem(BROWSER_ICONS_KEY, JSON.stringify({ ...loadBrowserIcons(), [manifest.name]: {
+    homeUrl: manifest.homeUrl, icon: manifest.icon, favicon: manifest.favicon,
+  } }));
 }
 export function loadWebApps():PluginManifest[] {
   try {
