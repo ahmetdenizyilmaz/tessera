@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/jakesgordon/javascript-tetris",
+  "commit": "e5c0c42f7dac0f3514a55eff656c6e22e95d68ed",
+  "license": "MIT",
+  "changes": [
+    "Responsive Tessera panel interface and accessible controls",
+    "Independent saved games per panel; shared best scores",
+    "Pause on blur for real-time games; offline assets only"
+  ],
+  "excludedAssets": [
+    "Original fonts, texture, stats, audio and Flash libraries"
+  ]
+}

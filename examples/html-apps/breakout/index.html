@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Breakout</title><link rel="stylesheet" href="panel.css"></head>
+<body><main>
+<header><div><span class="eyebrow">ONE MORE BRICK</span><h1>Breakout<span class="dot"></span></h1></div><div class="tools"><button id="play" class="primary">Start</button><button id="new">New game</button></div></header>
+<div class="arena"><canvas id="canvas" width="600" height="560" aria-label="Breakout game board. Move the paddle using left and right arrows or the pointer."></canvas><div id="overlay"><strong id="status">Ready when you are</strong><span id="subtitle">Press Start or Space</span></div></div>
+<div class="toolbar"><div class="levels"><button id="prev" aria-label="Previous level">&#8592;</button><span>Level <b id="level">1</b></span><button id="next" aria-label="Next level">&#8594;</button></div><label><input type="checkbox" id="sound"> Sound</label></div>
+<p class="hint">Move the paddle with your pointer or &#8592; &#8594; / A D<br>Space to pause &middot; Progress saves automatically</p>
+<details><summary>Credits &amp; source</summary><p>JavaScript Breakout by <strong>Jake Gordon and contributors</strong>, 2011–2016. MIT license. Adapted for Tessera.</p><code>github.com/jakesgordon/javascript-breakout</code><p>The package includes the original license and source revision. Original audio and Flash libraries are excluded; sound effects are synthesized locally.</p></details>
+</main><script src="game.js"></script><script src="breakout.js"></script><script src="levels.js"></script><script src="panel.js"></script></body></html>

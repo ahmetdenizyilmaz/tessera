@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/jakesgordon/javascript-breakout",
+  "commit": "eed59e2affa9423b93d2ac8ff93061bb88b33284",
+  "license": "MIT",
+  "changes": [
+    "Responsive Tessera panel interface and accessible controls",
+    "Independent saved games per panel; shared best scores",
+    "Pause on blur for real-time games; offline assets only"
+  ],
+  "excludedAssets": [
+    "Original fonts, texture, stats, audio and Flash libraries"
+  ]
+}

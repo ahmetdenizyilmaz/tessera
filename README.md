@@ -62,10 +62,14 @@ agents, credentials, model discovery, permissions, and session storage.
 ## Features
 
 - **Local HTML panel apps** — import a single HTML file or a folder/ZIP from
-  **Apps → Import HTML app…**. Notes, Timer, Clock, Calculator, and Memory Break are
+  **Apps → Import HTML app…**. Notes, Timer, Clock, Calculator, and Music Remote are
   included automatically. Apps keep their own saved data; network access and
   messaging with selected agent panels are optional permissions. See the
   [HTML app guide](docs/html-panel-plugins.md) for the manifest, SDK, and limits.
+- **Offline games** — 2048, Tetris, Breakout, and Memory Break appear under
+  **App library → Games**. Downloaded open-source games retain their licenses and
+  credits. Saved games follow their panels; real-time games pause when you return
+  to work.
 - **App library** — search installed apps without crowding New Session. Connect
   a public GitHub repository to browse and download community apps after a
   permission review. See [catalog publishing](docs/github-app-catalog.md).

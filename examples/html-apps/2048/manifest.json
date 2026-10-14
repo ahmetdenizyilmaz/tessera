@@ -1,0 +1,8 @@
+{
+  "id": "tessera.game-2048",
+  "name": "2048",
+  "version": "1.0.0",
+  "description": "Slide matching tiles to reach 2048. Offline play with saved boards.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}

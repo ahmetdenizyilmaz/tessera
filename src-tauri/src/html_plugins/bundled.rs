@@ -3,16 +3,26 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const SAMPLES: &[&str] = &["notes", "timer", "clock", "calculator", "memory", "music"];
+pub const SAMPLES: &[&str] = &["notes", "timer", "clock", "calculator", "memory", "music", "2048", "tetris", "breakout"];
 pub fn sample(sample: &str) -> Result<Package, String> {
-    macro_rules! files { ($name:literal) => { (include_bytes!(concat!("../../../examples/html-apps/",$name,"/manifest.json")).as_slice(), include_bytes!(concat!("../../../examples/html-apps/",$name,"/index.html")).as_slice()) }; }
-    let (manifest, html) = match sample {
+    macro_rules! files {
+        ($name:literal $(, $asset:literal)*) => { BTreeMap::from([
+            ("manifest.json".into(), include_bytes!(concat!("../../../examples/html-apps/", $name, "/manifest.json")).to_vec()),
+            ("index.html".into(), include_bytes!(concat!("../../../examples/html-apps/", $name, "/index.html")).to_vec()),
+            $(($asset.into(), include_bytes!(concat!("../../../examples/html-apps/", $name, "/", $asset)).to_vec()),)*
+        ]) };
+    }
+    let assets = match sample {
         "notes" => files!("notes"), "timer" => files!("timer"), "clock" => files!("clock"),
         "calculator" => files!("calculator"), "memory" => files!("memory"),
         "music" => files!("music"),
+        "2048" => files!("2048", "panel.css", "panel.js", "style/main.css", "LICENSE.txt", "UPSTREAM.json",
+            "js/keyboard_input_manager.js", "js/html_actuator.js", "js/grid.js", "js/tile.js", "js/local_storage_manager.js", "js/game_manager.js"),
+        "tetris" => files!("tetris", "panel.css", "panel.js", "game.js", "LICENSE.txt", "UPSTREAM.json"),
+        "breakout" => files!("breakout", "panel.css", "panel.js", "game.js", "breakout.js", "levels.js", "LICENSE.txt", "UPSTREAM.json"),
         _ => return Err("Unknown example app".into()),
     };
-    package::validate(BTreeMap::from([("manifest.json".into(),manifest.to_vec()),("index.html".into(),html.to_vec())]))
+    package::validate(assets)
 }
 
 pub fn provision(app: &tauri::AppHandle, inner: &mut Inner) -> Result<(), String> {
@@ -75,6 +85,27 @@ pub async fn html_plugin_migrate_notes(caller:Webview,app:tauri::AppHandle,state
 #[cfg(test)] mod tests {
     use super::*;
     #[test] fn all_bundled_apps_use_unprivileged_packages(){for id in SAMPLES{let p=sample(id).unwrap();assert!(p.manifest.permissions.network.is_empty());assert!(p.manifest.permissions.panels.is_empty());}}
+    #[test] fn bundled_games_include_the_entire_offline_package_and_original_license() {
+        for id in ["2048", "tetris", "breakout"] {
+            let bundled = sample(id).unwrap();
+            let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/html-apps").join(id);
+            let imported = package::inspect(&folder).unwrap();
+            assert_eq!(bundled.digest, imported.digest, "Missing embedded assets for {id}");
+            assert!(bundled.manifest.permissions.media.is_empty());
+            let license = std::str::from_utf8(&bundled.files["LICENSE.txt"]).unwrap();
+            assert!(license.contains("Permission is hereby granted"));
+            let source: Value = serde_json::from_slice(&bundled.files["UPSTREAM.json"]).unwrap();
+            assert_eq!(source["license"], "MIT");
+            assert_eq!(source["commit"].as_str().unwrap().len(), 40);
+            let html = std::str::from_utf8(&bundled.files["index.html"]).unwrap();
+            for attr in ["src=\"", "href=\""] {
+                for suffix in html.split(attr).skip(1) {
+                    let path = suffix.split('"').next().unwrap();
+                    assert!(bundled.files.contains_key(path), "{id} references missing or remote asset {path}");
+                }
+            }
+        }
+    }
     #[test] fn migrates_every_notebook_and_preserves_edits_on_retry(){
         let mut store=BTreeMap::from([("app/notes".into(),json!("existing Quick Notes"))]);
         let books=BTreeMap::from([("plugin-notepad-one".into(),json!([{"id":"same","title":"First","content":"keep\nthis","updatedAt":2}])),("plugin-notepad-closed".into(),json!([{"id":"same","title":"Second","content":"also keep","updatedAt":3}]))]);

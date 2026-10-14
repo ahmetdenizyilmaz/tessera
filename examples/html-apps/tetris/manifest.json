@@ -1,0 +1,8 @@
+{
+  "id": "tessera.game-tetris",
+  "name": "Tetris",
+  "version": "1.0.0",
+  "description": "Stack falling blocks and clear lines. Pauses when you return to work.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}

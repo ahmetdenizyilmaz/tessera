@@ -8,8 +8,20 @@ notes, games, dashboards, and small utilities. Most apps need no permissions.
 Open **Apps → Import HTML app…** (also in File and App library).
 Choose a self-contained `.html` file, a folder, or a ZIP containing `manifest.json`.
 Review the app and any optional permissions, then choose **Install and open**.
-Notes, Timer, Clock, Calculator, Memory Break, and Music Remote are included automatically.
+Notes, Timer, Clock, Calculator, Memory Break, Music Remote, 2048, Tetris, and Breakout are included automatically.
 They use the same HTML-app system as imported apps. Their source is in [`examples/html-apps`](../examples/html-apps).
+
+Choose **App library → Games** for the games. 2048 comes from
+[Gabriele Cirulli's repository](https://github.com/gabrielecirulli/2048);
+[Tetris](https://github.com/jakesgordon/javascript-tetris) and
+[Breakout](https://github.com/jakesgordon/javascript-breakout) come from Jake Gordon's
+repositories. Each package retains its MIT license, credits, and pinned upstream
+commit in `UPSTREAM.json`. All runtime assets are bundled for offline play; no
+network, media-control, or panel-messaging permissions are requested. The original
+Breakout audio and Flash library are excluded; optional effects use Web Audio.
+Boards save independently per panel, and best scores are shared within each game.
+Tetris and Breakout pause when they lose focus and restore paused after a restart.
+Resizing or detaching a panel keeps its current game.
 
 Installed apps appear in **Apps → App library**, **New session → More → App library**, and detached-window
 menus. They use the same resize, grouping, lock, focus, and detach rules as other

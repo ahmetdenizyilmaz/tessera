@@ -1,0 +1,8 @@
+{
+  "id": "tessera.game-breakout",
+  "name": "Breakout",
+  "version": "1.0.0",
+  "description": "Bounce the ball, break bricks, and explore colorful levels.",
+  "entry": "index.html",
+  "icon": "Gamepad2"
+}

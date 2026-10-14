@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/gabrielecirulli/2048",
+  "commit": "478b6ec346e3787f589e4af751378d06ded4cbbc",
+  "license": "MIT",
+  "changes": [
+    "Responsive Tessera panel interface and accessible controls",
+    "Independent saved games per panel; shared best scores",
+    "Pause on blur for real-time games; offline assets only"
+  ],
+  "excludedAssets": [
+    "Original fonts, texture, stats, audio and Flash libraries"
+  ]
+}
