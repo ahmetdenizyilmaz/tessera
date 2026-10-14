@@ -82,7 +82,7 @@ function ChildTile({ childId }: { childId: string }) {
   }
 
   return (
-    <div className="group-preview"
+    <div
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -139,7 +139,7 @@ function ChildTile({ childId }: { childId: string }) {
         style={{
           fontSize: 11,
           fontWeight: 600,
-          color: 'var(--text-primary)',
+          color: 'var(--panel-foreground, var(--text-primary))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -168,7 +168,7 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
   };
 
   return (
-    <div
+    <div className="group-preview"
       style={{
         display: 'flex',
         flexDirection: 'column',

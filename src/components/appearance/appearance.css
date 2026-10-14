@@ -3,6 +3,7 @@
 .panel-appearance[data-custom-background] > :is(.terminal-panel,.llm-panel,.widget-panel,.browser-panel,.remote-panel,.computer-panel,.group-preview) { background:transparent!important }
 .panel-appearance[data-custom-background] :is(.chat-view,.chat-container,.chat-messages,.codex-chat,.codex-transcript,.opencode-chat,.antigravity-chat,.llm-messages,.browser-surface,.browser-placeholder,.remote-terminal) { background:transparent!important }
 .panel-appearance[data-custom-background] :is(.chat-view,.chat-container,.chat-messages,.codex-chat,.codex-transcript,.opencode-chat,.antigravity-chat,.llm-messages) { color:var(--panel-foreground) }
+.panel-appearance[data-custom-background] :is(.markdown-content,.markdown-content h3,.md-table th,.md-blockquote,.md-inline-code,.md-path) { color:var(--panel-foreground) }
 .background-dialog { width:min(530px,calc(100vw - 32px));max-height:calc(100vh - 48px);display:flex;flex-direction:column;border:1px solid var(--border);border-radius:18px;background:var(--bg-surface);box-shadow:0 25px 90px #0007;overflow:hidden;outline:none }
 .background-dialog > header { display:flex;align-items:center;justify-content:space-between;padding:22px 24px 18px;border-bottom:1px solid var(--border) }
 .background-dialog h2 { font-size:20px;margin:3px 0 0;letter-spacing:-.02em }.background-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--text-muted)}

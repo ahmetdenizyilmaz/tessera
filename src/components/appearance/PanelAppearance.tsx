@@ -21,5 +21,5 @@ export function useBackgroundImage(background: PanelBackground) {
 export function PanelAppearance({ panelId, children }: { panelId: string; children: ReactNode }) {
   const background = usePanelBackground(panelId), image = useBackgroundImage(background);
   return <div className="panel-appearance" data-custom-background={background.mode !== 'theme' ? '' : undefined}
-    style={{ ...backgroundStyle(background, image?.image), '--panel-foreground': backgroundForeground(background) } as CSSProperties}>{children}</div>;
+    style={{ ...backgroundStyle(background, image?.image), '--panel-foreground': background.mode === 'theme' ? undefined : backgroundForeground(background) } as CSSProperties}>{children}</div>;
 }
