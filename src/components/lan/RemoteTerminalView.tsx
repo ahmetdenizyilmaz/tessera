@@ -184,7 +184,7 @@ export function RemoteTerminalView({ deviceId, panelId, connected, inputSupporte
   }, [deviceId, panelId, connected, inputSupported, refreshKey]);
 
   return (
-    <div className="remote-terminal" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#1a1a2e' }}>
+    <div className="remote-terminal" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
       {!loaded && !error && connected && <div style={{ padding: 10, color: 'var(--text-muted)' }}>Loading terminal screen…</div>}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }} aria-label="Remote terminal screen">
         <div ref={container} style={{ width: 'max-content', minWidth: '100%' }} />

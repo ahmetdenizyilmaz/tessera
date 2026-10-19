@@ -28,7 +28,7 @@ registerBuiltins();
 window.layout = useLayoutStore;
 window.groups = useGroupStore;
 window.plugins = usePluginStore;
-window.lichess = usePluginStore.getState().createInstance('lichess');
+window.lichess = usePluginStore.getState().createInstance(new URLSearchParams(location.search).get('app') || 'lichess');
 useLayoutStore.getState().addPanel(window.lichess, 'plugin');
 window.gameGroup = useGroupStore.getState().createGroup(null, 'Games');
 useLayoutStore.getState().addPanel(window.gameGroup, 'group');

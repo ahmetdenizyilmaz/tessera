@@ -49,3 +49,30 @@ it('loads only valid saved app settings and preserves the current setting when s
   expect(() => useBrowserViewStore.getState().setPreference('lichess', null)).toThrow('Storage full');
   expect(useBrowserViewStore.getState().preferences.lichess).toEqual({ share: .2, mode: 'live' });
 });
+
+it('saves and restores Live view for dotted HTML game IDs without changing other apps', async () => {
+  vi.resetModules();
+  const { useBrowserViewStore } = await import('../store/browserViewStore');
+  const games = ['html-tessera.game-radius-raid', 'html-tessera.game-menja', 'html-tessera.game-onoff'];
+  useBrowserViewStore.getState().setPreference('lichess', { share: .2, mode: 'focus' });
+  for (const game of games) useBrowserViewStore.getState().setPreference(game, { share: .295, mode: 'live' });
+  vi.resetModules();
+  const restored = (await import('../store/browserViewStore')).useBrowserViewStore;
+  for (const game of games) {
+    expect(browserDisplayMode(.295, restored.getState().preferences[game])).toBe('live');
+    expect(browserDisplayMode(.1, restored.getState().preferences[game])).toBe('focus');
+  }
+  restored.getState().setPreference(games[0], null);
+  expect(restored.getState().preferences[games[0]]).toBeUndefined();
+  expect(restored.getState().preferences[games[1]]).toEqual({ share: .295, mode: 'live' });
+  expect(restored.getState().preferences.lichess).toEqual({ share: .2, mode: 'focus' });
+});
+
+it('still rejects malformed app identities when accepting namespaced HTML apps', async () => {
+  vi.resetModules();
+  const { useBrowserViewStore } = await import('../store/browserViewStore');
+  for (const site of ['', '__proto__', 'html-../app', 'html-app..name', 'html-app.', 'html-App.name', 'html-app/name', `html-${'a'.repeat(81)}.game`]) {
+    expect(() => useBrowserViewStore.getState().setPreference(site, { share: .2, mode: 'live' })).toThrow();
+  }
+  expect(useBrowserViewStore.getState().preferences).toEqual({});
+});

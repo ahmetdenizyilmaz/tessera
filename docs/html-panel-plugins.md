@@ -260,6 +260,12 @@ visibility, accent color, and selected player are saved per panel.
 
 Use the panel header's **Panel appearance** button, or **Settings → Panel background**
 for website/HTML panels. **Tessera Settings → Appearance** sets the global default.
+The same tab contains the app theme picker. Theme changes update default panel
+backgrounds and terminal text/cursor colors live, including light ANSI palettes
+for light themes; custom color/image backgrounds keep their contrast settings.
+Panel settings open with **Apply to other panels** unchecked: edits affect only
+that panel. Check it to edit the global default instead. Switching this checkbox
+does not change any saved backgrounds; existing custom panel backgrounds stay intact.
 Individual panels can follow the default or keep a separate color/image, with
 Fill, Fit, Stretch, Center, Tile, and an image-dimming control.
 

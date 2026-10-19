@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Globe, ImagePlus, Palette, RotateCcw, Settings2, X } from 'lucide-react';
+import { Check, ImagePlus, Palette, RotateCcw, Settings2, X } from 'lucide-react';
 import { useAppearanceStore } from '../../store/appearanceStore';
 import { backgroundForeground, backgroundStyle, DEFAULT_BACKGROUND, importBackgroundImage, type PanelBackground } from '../../lib/panelBackground';
 import { useBackgroundImage } from './PanelAppearance';
@@ -35,17 +35,26 @@ export function BackgroundEditor({ value, onChange, disabled = false }: { value:
 }
 
 export function BackgroundSettings({ panelId, web = false }: { panelId?: string; web?: boolean }) {
-  const [scope,setScope] = useState<'panel'|'global'>(panelId?'panel':'global');
-  const global = useAppearanceStore(s=>s.global), own = useAppearanceStore(s=>panelId?s.panels[panelId]:undefined);
-  const isPanel = scope==='panel' && !!panelId, inherited = isPanel && !own, value = isPanel ? own ?? global : global;
-  const update = (next:PanelBackground) => isPanel ? useAppearanceStore.getState().setPanel(panelId,next) : useAppearanceStore.getState().setGlobal(next);
+  const [editGlobal, setEditGlobal] = useState(false);
+  const scopeHelpId = useId();
+  const global = useAppearanceStore(s => s.global);
+  const own = useAppearanceStore(s => panelId ? s.panels[panelId] : undefined);
+  const isPanel = !!panelId && !editGlobal;
+  const value = isPanel ? own ?? global : global;
+  const update = (next: PanelBackground) => isPanel
+    ? useAppearanceStore.getState().setPanel(panelId, next)
+    : useAppearanceStore.getState().setGlobal(next);
   return <section className="background-settings">
-    {panelId && <div className="background-scope" role="group" aria-label="Settings scope"><button type="button" aria-pressed={isPanel} onClick={()=>setScope('panel')}>This panel</button><button type="button" aria-pressed={!isPanel} onClick={()=>setScope('global')}><Globe size={14}/>All panels</button></div>}
-    <p className="background-help">{isPanel?'Keep a personal background for this panel, or follow your global settings.':'Default background for panels that use global settings. Panels with their own background keep it.'}</p>
-    {isPanel && <label className="background-inherit"><input type="checkbox" checked={inherited} onChange={e=>useAppearanceStore.getState().setPanel(panelId,e.target.checked?null:{...global})}/>Use global background<span>{inherited?'Following global settings':'Custom for this panel'}</span></label>}
-    <BackgroundEditor value={value} onChange={update} disabled={inherited}/>
+    {panelId && <label className="background-scope-toggle">
+      <span>Apply to other panels</span>
+      <input type="checkbox" checked={editGlobal} aria-describedby={scopeHelpId} onChange={e => setEditGlobal(e.target.checked)}/>
+    </label>}
+    <p id={scopeHelpId} className="background-help">{isPanel
+      ? 'Changes apply only to this panel.'
+      : 'Default background for panels that use global settings. Panels with their own background keep it.'}</p>
+    <BackgroundEditor value={value} onChange={update}/>
     {web && <p className="background-help">Websites keep their own page design. This background appears on the panel’s focus card. Local HTML apps also receive the background behind their content.</p>}
-    <button type="button" className="background-reset" disabled={inherited} onClick={()=>update({...DEFAULT_BACKGROUND})}><RotateCcw size={14}/>Restore theme background</button>
+    <button type="button" className="background-reset" onClick={()=>update({...DEFAULT_BACKGROUND})}><RotateCcw size={14}/>Restore theme background</button>
     <p className="background-help">Changes are saved automatically.</p>
   </section>;
 }

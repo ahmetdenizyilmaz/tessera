@@ -16,13 +16,12 @@ export function applyTheme(theme: ThemeId): void {
 
 export function initThemeManager(): void {
   // Apply current theme
-  const theme = (useSettingsStore.getState().settings as any).theme ?? 'dark';
-  applyTheme(theme);
+  const resolveTheme = (value: string) => THEMES.find(theme => theme.id === value)?.id ?? 'dark';
+  applyTheme(resolveTheme(useSettingsStore.getState().settings.theme));
 
   // Subscribe to changes
-  useSettingsStore.subscribe((state) => {
-    const t = (state.settings as any).theme ?? 'dark';
-    applyTheme(t);
+  useSettingsStore.subscribe((state, previous) => {
+    if (state.settings.theme !== previous.settings.theme) applyTheme(resolveTheme(state.settings.theme));
   });
 }
 

@@ -1,4 +1,4 @@
-import { BackgroundSettings } from '../appearance/BackgroundSettings';
+import { AppearanceSettings } from '../settings/AppearanceSettings';
 import React, { useState } from 'react';
 import { GeneralSettings } from '../settings/GeneralSettings';
 import { PermissionsSettings } from '../settings/PermissionsSettings';
@@ -47,7 +47,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
       case 'antigravity': return <AntigravitySettings />;
       case 'network': return <NetworkSettings />;
       case 'general': return <GeneralSettings />;
-      case 'appearance': return <BackgroundSettings />;
+      case 'appearance': return <AppearanceSettings />;
       case 'permissions': return <PermissionsSettings />;
       case 'environment': return <EnvironmentSettings />;
       case 'advanced': return <AdvancedSettings />;

@@ -3,7 +3,10 @@ import { validBrowserSizePreference, type BrowserSizePreference } from '../lib/b
 
 export const BROWSER_VIEWS_KEY = 'tessera-browser-views';
 type Preferences = Record<string, BrowserSizePreference>;
-const validSite = (site: string) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,120}$/.test(site);
+// Website players use simple slugs; HTML apps use their validated manifest ID,
+// such as html-tessera.game-radius-raid. Keep that identity intact on save/load.
+const validSite = (site: string) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,120}$/.test(site)
+  || /^html-[a-z0-9][a-z0-9.-]{0,79}$/.test(site) && site.slice(5).split('.').every(Boolean);
 
 function load(): Preferences {
   try {
