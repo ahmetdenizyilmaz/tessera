@@ -70,6 +70,14 @@ try {
       Array.from({ length: terminal.buffer.normal.length }, (_, i) => !!terminal.buffer.normal.getLine(i)).every(Boolean);
 
     const nativeCalls = [];
+    const waitFor = async (check) => {
+      const deadline = performance.now() + 3000;
+      while (!check()) {
+        if (performance.now() > deadline) throw new Error('Timed out waiting for the resize coordinator');
+        await new Promise(requestAnimationFrame);
+      }
+    };
+    const settled = async () => { await new Promise(resolve => setTimeout(resolve, 150)); await frames(); };
     let finish;
     const sizing = window.TesseraResize.createTerminalResize(terminal, fit, (cols, rows) => {
       nativeCalls.push({ cols, rows });
@@ -79,23 +87,23 @@ try {
     const noResizeBeforeSpawn = nativeCalls.length === 0;
     sizing.ready(initial);
     for (let i = 0; i < 5; i++) sizing.requestFit();
-    await frames();
+    await settled();
     const sameSizeIgnored = nativeCalls.length === 0;
-    host.style.width = '650px'; sizing.requestFit(); await frames();
+    host.style.width = '650px'; sizing.requestFit(); await waitFor(() => nativeCalls.length === 1);
     host.style.width = '580px'; sizing.requestFit();
-    host.style.width = '500px'; sizing.requestFit(); await frames();
+    host.style.width = '500px'; sizing.requestFit(); await settled();
     const oneResizeInFlight = nativeCalls.length === 1;
     const finalSize = { cols: terminal.cols, rows: terminal.rows };
-    finish(); await frames();
+    finish(); await waitFor(() => nativeCalls.length === 2);
     const coalescedLatestSize = nativeCalls.length === 2 &&
       JSON.stringify(nativeCalls[1]) === JSON.stringify(finalSize);
-    finish(); await frames();
-    host.style.display = 'none'; sizing.requestFit(); await frames();
+    finish(); await settled();
+    host.style.display = 'none'; sizing.requestFit(); await settled();
     const hiddenGeometryIgnored = nativeCalls.length === 2 &&
       terminal.cols === finalSize.cols && terminal.rows === finalSize.rows;
-    host.style.display = ''; sizing.requestFit(); await frames();
+    host.style.display = ''; sizing.requestFit(); await settled();
     const visibilityDoesNotResize = nativeCalls.length === 2;
-    host.style.width = '700px'; sizing.requestFit(); sizing.dispose(); await frames();
+    host.style.width = '700px'; sizing.requestFit(); sizing.dispose(); await settled();
     const disposedFitCancelled = nativeCalls.length === 2;
     terminal.dispose();
     return { replies, partialRenders, completedRenders, conptyGrowthAppendsRows, bufferValid,
