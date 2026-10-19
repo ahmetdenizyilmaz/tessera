@@ -278,6 +278,7 @@ pub async fn panel_registry_sync(
         .into_iter()
         .map(|p| crate::lan::protocol::RemotePanelInfo {
             terminal_input: p.kind == "terminal",
+            terminal_stream: p.kind == "terminal",
             reachable: p.reachable(),
             id: p.id,
             name: p.name,

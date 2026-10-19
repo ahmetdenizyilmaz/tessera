@@ -18,6 +18,7 @@ export interface RemotePanelInfo {
   model: string | null;
   reachable: boolean;
   terminalInput?: boolean;
+  terminalStream?: boolean;
 }
 
 export interface LanPeerState {

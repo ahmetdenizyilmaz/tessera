@@ -219,6 +219,7 @@ mod tests {
             model: None,
             reachable: true,
             terminal_input: false,
+            terminal_stream: false,
         }
     }
 

@@ -821,14 +821,26 @@ impl LanManager {
                 target_panel_id,
                 limit,
                 terminal,
+                mut terminal_options,
             } => {
+                let connection = self.connections.lock().unwrap().get(peer_id).cloned()
+                    .filter(|c| c.tx.same_channel(tx) && !*c.cancel.borrow());
+                let options_valid = terminal_options.as_ref().map(|o| o.validate()).unwrap_or(Ok(()));
+                if connection.is_none() || options_valid.is_err() {
+                    let _ = tx.send(WireMessage::ReadResult { request_id, result: None,
+                        error: Some(options_valid.err().unwrap_or_else(|| "LAN connection is no longer active".into())) });
+                    return;
+                }
+                if let Some(viewport) = terminal_options.as_mut().and_then(|o| o.viewport.as_mut()) {
+                    viewport.control_id = format!("{}:{}", connection.as_ref().unwrap().id, viewport.control_id);
+                }
                 // Do not block this connection's reader while the host UI is
                 // producing a snapshot; both PCs may be viewing each other.
                 let app = app.clone();
                 let tx = tx.clone();
                 tauri::async_runtime::spawn(async move {
                     let result = if terminal {
-                        terminal::read_local(&app, &target_panel_id).await
+                        terminal::read_local(&app, &target_panel_id, terminal_options).await
                     } else {
                         crate::panelbus::tools::read_local(&app, &target_panel_id, limit)
                             .await
@@ -982,7 +994,7 @@ impl LanManager {
         target_panel_id: &str,
         limit: usize,
     ) -> Result<Value, String> {
-        self.read_remote_view(device_id, target_panel_id, limit, false)
+        self.read_remote_view(device_id, target_panel_id, limit, false, None, None)
             .await
     }
 
@@ -1022,6 +1034,8 @@ impl LanManager {
         target_panel_id: &str,
         limit: usize,
         terminal: bool,
+        terminal_options: Option<terminal::TerminalReadOptions>,
+        connection_id: Option<&str>,
     ) -> Result<Value, String> {
         let request_id = uuid::Uuid::new_v4().to_string();
         let connection = self
@@ -1031,6 +1045,15 @@ impl LanManager {
             .get(device_id)
             .cloned()
             .ok_or("Remote computer is offline")?;
+        if let Some(options) = &terminal_options {
+            options.validate()?;
+            if options.viewport.is_some() && connection_id != Some(connection.id.as_str()) {
+                return Err("Connection changed. Read the terminal stream again before resizing.".into());
+            }
+            let supported = self.remote_panels.lock().unwrap().get(device_id)
+                .is_some_and(|panels| panels.iter().any(|p| p.id == target_panel_id && p.kind == "terminal" && p.terminal_stream));
+            if !supported { return Err("Update Tessera on the host computer to enable shared terminal streaming.".into()); }
+        }
         let (wait_tx, wait_rx) = oneshot::channel();
         self.pending
             .lock()
@@ -1042,6 +1065,7 @@ impl LanManager {
                 target_panel_id: target_panel_id.into(),
                 limit: limit.clamp(1, 100),
                 terminal,
+                terminal_options,
             })
             .is_err()
         {
@@ -1105,6 +1129,7 @@ fn local_panel_snapshot(app: &AppHandle) -> Vec<RemotePanelInfo> {
         .into_iter()
         .map(|p| RemotePanelInfo {
             terminal_input: p.kind == "terminal",
+            terminal_stream: p.kind == "terminal",
             reachable: p.reachable(),
             id: p.id,
             name: p.name,
@@ -1481,9 +1506,11 @@ pub async fn lan_read_panel(
 pub async fn lan_read_terminal(
     device_id: String,
     panel_id: String,
+    options: Option<terminal::TerminalReadOptions>,
+    connection_id: Option<String>,
     state: tauri::State<'_, LanManager>,
 ) -> Result<Value, String> {
-    state.read_remote_view(&device_id, &panel_id, 1, true).await
+    state.read_remote_view(&device_id, &panel_id, 1, true, options, connection_id.as_deref()).await
 }
 
 #[tauri::command]
@@ -1548,6 +1575,7 @@ mod tests {
             model: None,
             reachable: true,
             terminal_input: true,
+            terminal_stream: true,
         }];
         let registry = WireMessage::Registry { panels };
         write_wire(&mut a, &a_noise, &registry).await.unwrap();
@@ -1560,6 +1588,7 @@ mod tests {
             target_panel_id: "same-panel-id".into(),
             limit: 1,
             terminal: true,
+            terminal_options: None,
         };
         write_wire(&mut b, &b_noise, &request).await.unwrap();
         assert!(matches!(
@@ -1604,6 +1633,22 @@ mod tests {
         };
         write_wire(&mut b, &b_noise, &input).await.unwrap();
         assert_eq!(serde_json::to_value(read_wire(&mut a, &a_noise).await.unwrap()).unwrap(), serde_json::to_value(input).unwrap());
+        let stream_request = WireMessage::ReadRequest {
+            request_id: "stream-control".into(), target_panel_id: "same-panel-id".into(), limit: 1, terminal: true,
+            terminal_options: Some(protocol::TerminalReadOptions { stream: true,
+                cursor: Some(protocol::TerminalCursor { stream_id: "stream-a".into(), sequence: 10 }),
+                viewport: Some(protocol::TerminalViewport { cols: 140, rows: 45,
+                    input_session: "one-pty-lifetime".into(), control_id: "active-view".into() }) }),
+        };
+        write_wire(&mut b, &b_noise, &stream_request).await.unwrap();
+        assert_eq!(serde_json::to_value(read_wire(&mut a, &a_noise).await.unwrap()).unwrap(), serde_json::to_value(stream_request).unwrap());
+        let delta = WireMessage::ReadResult { request_id: "stream-control".into(), error: None,
+            result: Some(serde_json::json!({"kind":"terminalDelta", "streamId":"stream-a", "sequence":12,
+                "cols":140,"rows":45,"data":"", "events":[
+                    {"type":"resize","sequence":11,"cols":140,"rows":45},
+                    {"type":"data","sequence":12,"data":"\u{1b}[32mIncremental Ünye 漢字"}]})) };
+        write_wire(&mut a, &a_noise, &delta).await.unwrap();
+        assert_eq!(serde_json::to_value(read_wire(&mut b, &b_noise).await.unwrap()).unwrap(), serde_json::to_value(delta).unwrap());
     }
 
     #[test]

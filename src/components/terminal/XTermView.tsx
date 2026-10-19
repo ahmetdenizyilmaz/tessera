@@ -46,7 +46,7 @@ function routeOutput(instanceId: string, receive: (data: string) => void): Promi
 }
 
 /** Output buffered while the component is unmounted. */
-type BackgroundBuffer = { chunks: string[]; bytes: number; cancel: () => void };
+type BackgroundBuffer = { chunks: string[]; bytes: number; cancel: () => void; snapshot: () => { cols: number; rows: number; data: string } };
 const bgPtyBuffers: Map<string, BackgroundBuffer> =
   (globalThis as Record<string, unknown>).__bgPtyBuffers as Map<string, BackgroundBuffer> ??
   ((globalThis as Record<string, unknown>).__bgPtyBuffers = new Map());
@@ -58,10 +58,10 @@ const bgPtyBuffers: Map<string, BackgroundBuffer> =
 const BG_BUFFER_MAX_BYTES = 1024 * 1024;
 const BG_TRIM_MARKER = '\r\n\x1b[2m[… output trimmed while panel was hidden …]\x1b[0m\r\n';
 
-function startBackgroundBuffering(instanceId: string, release: () => void) {
+function startBackgroundBuffering(instanceId: string, release: () => void, snapshot: BackgroundBuffer['snapshot']) {
   if (bgPtyBuffers.has(instanceId)) { release(); return; }
   const chunks: string[] = [];
-  bgPtyBuffers.set(instanceId, { chunks, bytes: 0, cancel: release });
+  bgPtyBuffers.set(instanceId, { chunks, bytes: 0, cancel: release, snapshot });
 }
 
 function bufferBackgroundOutput(instanceId: string, data: string) {
@@ -80,12 +80,22 @@ function bufferBackgroundOutput(instanceId: string, data: string) {
   }
 }
 
-function consumeBackgroundBuffer(instanceId: string): string[] {
+function consumeBackgroundBuffer(instanceId: string, preserve: boolean): string[] {
   const bg = bgPtyBuffers.get(instanceId);
   if (!bg) return [];
+  let chunks = bg.chunks;
+  if (preserve) {
+    // The retained parser may have been resized by a LAN client while hidden.
+    // Restore its current geometry and state, not an old-size buffer plus a
+    // tail whose cursor coordinates belong to a different grid.
+    const snapshot = bg.snapshot();
+    terminalSizes.set(instanceId, { cols: snapshot.cols, rows: snapshot.rows });
+    terminalBuffers.set(instanceId, snapshot.data);
+    chunks = [];
+  }
   bg.cancel();
   bgPtyBuffers.delete(instanceId);
-  return bg.chunks;
+  return preserve ? chunks : [];
 }
 
 /** Call on explicit panel close to clean up saved state */
@@ -111,6 +121,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const resizeCoordinatorRef = useRef<ReturnType<typeof createTerminalResize> | null>(null);
+  const reclaimLocalRef = useRef<(() => void) | null>(null);
   const retryIntervalRef = useRef<number | null>(null);
   const [platform, setPlatform] = useState<Pick<ITerminalOptions, 'windowsPty'>>();
   const [platformError, setPlatformError] = useState<string>();
@@ -149,7 +160,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
   // Re-fit terminal when becoming visible (opacity:0 → 1 doesn't trigger ResizeObserver)
   useEffect(() => {
-    if (isVisible && isActive) resizeCoordinatorRef.current?.requestFit();
+    if (isVisible && isActive) { reclaimLocalRef.current?.(); resizeCoordinatorRef.current?.requestFit(); }
   }, [isVisible, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -162,6 +173,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
     const settings = useSettingsStore.getState().settings;
     const freshMount = consumeFreshMount(instanceId);
+    const bgChunks = consumeBackgroundBuffer(instanceId, !freshMount);
     if (freshMount) {
       terminalScrollStates.delete(instanceId);
       terminalSizes.delete(instanceId);
@@ -196,7 +208,6 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.open(container);
     const unwatchBackground = watchTerminalBackground(terminal, instanceId);
     const pathLinks = installTerminalPathLinks(terminal, getCwd);
-    const unshare = registerSharedTerminal(instanceId, terminal, serializeAddon);
     const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
     const cursorGuard = installTerminalCursorGuard(terminal, () => {
       if (useInstanceStore.getState().instances.get(instanceId)?.config.agentProvider === 'codex') {
@@ -221,9 +232,13 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       if (session?.busy !== old?.busy || session?.requests.length !== old?.requests.length) cursorGuard.update?.();
     });
     termRef.current = terminal;
-    const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize, () => activeRef.current);
+    const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize, () => mounted && activeRef.current);
     resizeCoordinator.pauseForRestore();
     resizeCoordinatorRef.current = resizeCoordinator;
+    const unshare = registerSharedTerminal(instanceId, terminal, serializeAddon, resizeCoordinator);
+    reclaimLocalRef.current = unshare.reclaimLocal;
+    container.addEventListener('pointerdown', unshare.reclaimLocal);
+    container.addEventListener('keydown', unshare.reclaimLocal);
 
     // ─── Clipboard ─────────────────────────────────────────────────────
     // xterm sends every keystroke to the PTY, so copy/paste needs explicit
@@ -340,7 +355,6 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     }
 
     // Replay any PTY output buffered while component was unmounted
-    const bgChunks = consumeBackgroundBuffer(instanceId);
     for (const chunk of bgChunks) {
       writeOutput(chunk);
     }
@@ -488,7 +502,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         clearInterval(retryIntervalRef.current);
         retryIntervalRef.current = null;
       }
-      resizeCoordinator.dispose();
+      container.removeEventListener('pointerdown', unshare.reclaimLocal);
+      container.removeEventListener('keydown', unshare.reclaimLocal);
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('paste', handleNativePaste, true);
       resizeObserver.disconnect();
@@ -516,6 +531,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       terminal.options.cursorBlink = false;
       const release = () => {
         disposed = true;
+        resizeCoordinator.dispose();
         unshare();
         terminal.dispose();
       };
@@ -527,13 +543,15 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       cursorGuard.dispose();
       scrollGuard.dispose();
       if (useInstanceStore.getState().instances.has(instanceId)) {
-        startBackgroundBuffering(instanceId, release);
+        startBackgroundBuffering(instanceId, release, () => ({ cols: terminal.cols, rows: terminal.rows,
+          data: serializeAddon.serialize() + pendingWrites.map(p => p.data).join('') }));
       } else {
         release();
         clearTerminalState(instanceId);
       }
       termRef.current = null;
       resizeCoordinatorRef.current = null;
+      reclaimLocalRef.current = null;
 
       // DON'T kill PTY here — it's killed explicitly via handleClose/closePanel
     };

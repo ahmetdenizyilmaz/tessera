@@ -11,7 +11,16 @@
 }
 .remote-panel-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .remote-panel-actions > * { flex-shrink: 0; }
-.remote-panel-actions button { display: inline-flex; align-items: center; justify-content: center; }
+.remote-panel-actions button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; }
+.remote-panel-actions { flex-wrap: wrap; }
+.remote-terminal-notice { flex: 0 0 auto; padding: 8px 10px; font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--border); }
+.remote-conversation { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-wrap: anywhere; }
+.remote-conversation-message { padding: 8px 10px; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--border); font-size: 12px; }
+.remote-conversation-message.user { align-self: flex-end; max-width: 85%; background: var(--accent-subtle, rgba(74,158,255,.12)); }
+.remote-conversation-role { font-size: 9px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.remote-conversation-long { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.remote-conversation-compose { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
+.remote-conversation-compose textarea { flex: 1; min-width: 0; min-height: 38px; max-height: 120px; resize: vertical; }
 @container (max-width: 340px) {
   .remote-panel .remote-panel-toolbar { flex-wrap: wrap; gap: 4px; }
   .remote-panel-heading { flex-basis: 100%; }

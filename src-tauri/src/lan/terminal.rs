@@ -7,6 +7,15 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
+pub use super::protocol::TerminalReadOptions;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum TerminalEvent {
+    Data { sequence: u64, data: String },
+    Resize { sequence: u64, cols: u16, rows: u16 },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalSnapshot {
@@ -16,17 +25,42 @@ pub struct TerminalSnapshot {
     data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     windows_pty: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sequence: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    events: Vec<TerminalEvent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    controlling: Option<bool>,
 }
 
 impl TerminalSnapshot {
     fn validate(&self) -> Result<(), String> {
-        if self.kind != "terminal"
+        if (self.kind != "terminal" && self.kind != "terminalDelta")
             || self.cols < 2
             || self.rows == 0
             || self.cols > 4096
             || self.rows > 4096
         {
             return Err("Invalid terminal snapshot geometry".into());
+        }
+        if self.kind == "terminalDelta" && (self.stream_id.is_none() || self.sequence.is_none() || !self.data.is_empty()) {
+            return Err("Invalid terminal stream frame".into());
+        }
+        let mut previous = None;
+        for event in &self.events {
+            let sequence = match event {
+                TerminalEvent::Data { sequence, .. } => *sequence,
+                TerminalEvent::Resize { sequence, cols, rows } => {
+                    if *cols < 2 || *rows == 0 || *cols > 4096 || *rows > 4096 { return Err("Invalid terminal resize event".into()); }
+                    *sequence
+                }
+            };
+            if previous.is_some_and(|p| p + 1 != sequence) || self.sequence.is_none_or(|end| sequence > end) {
+                return Err("Invalid terminal stream ordering".into());
+            }
+            previous = Some(sequence);
         }
         let size = serde_json::to_vec(self).map_err(|e| e.to_string())?.len();
         if size > 800 * 1024 {
@@ -41,7 +75,7 @@ pub struct TerminalRequests {
     pending: Mutex<HashMap<String, oneshot::Sender<Result<TerminalSnapshot, String>>>>,
 }
 
-pub async fn read_local(app: &AppHandle, panel_id: &str) -> Result<Value, String> {
+pub async fn read_local(app: &AppHandle, panel_id: &str, options: Option<TerminalReadOptions>) -> Result<Value, String> {
     let panel = app
         .state::<crate::panelbus::PanelBus>()
         .local_panels()
@@ -52,6 +86,15 @@ pub async fn read_local(app: &AppHandle, panel_id: &str) -> Result<Value, String
         return Err("This panel is not a terminal".into());
     }
     let input_session = crate::pty::manager::input_session(&app.state(), panel_id);
+    if let Some(options) = &options {
+        // The connection handler already validated the caller's control id,
+        // then prefixed it with that authenticated connection's identity.
+        if let Some(viewport) = &options.viewport {
+            if input_session.as_deref() != Some(&viewport.input_session) {
+                return Err("Host terminal changed. Reconnect its output stream before resizing.".into());
+            }
+        }
+    }
     let state = app.state::<TerminalRequests>();
     let request_id = uuid::Uuid::new_v4().to_string();
     let (tx, rx) = oneshot::channel();
@@ -65,7 +108,7 @@ pub async fn read_local(app: &AppHandle, panel_id: &str) -> Result<Value, String
     let result = async {
         app.emit(
             "lan-terminal-read",
-            serde_json::json!({"requestId": request_id, "panelId": panel_id}),
+            serde_json::json!({"requestId": request_id, "panelId": panel_id, "options": options}),
         )
         .map_err(|e| e.to_string())?;
         let snapshot = tokio::time::timeout(Duration::from_secs(5), rx)
@@ -141,6 +184,7 @@ mod tests {
             rows: 40,
             data: "\u{1b}[31mhello\u{1b}[0m".into(),
             windows_pty: None,
+            stream_id: None, sequence: None, events: vec![], controlling: None,
         };
         assert!(snapshot.validate().is_ok());
         snapshot.cols = 0;
@@ -148,5 +192,22 @@ mod tests {
         snapshot.cols = 120;
         snapshot.data = "\u{1b}".repeat(150_000); // JSON escaping counts toward the limit.
         assert!(snapshot.validate().is_err());
+    }
+
+    #[test]
+    fn validates_incremental_output_and_rejects_broken_resize_sequences() {
+        let mut frame: TerminalSnapshot = serde_json::from_value(serde_json::json!({
+            "kind":"terminalDelta", "cols":120, "rows":40, "data":"", "streamId":"stream", "sequence":3,
+            "events":[{"type":"data", "sequence":1, "data":"\u{1b}[3"},
+                {"type":"data", "sequence":2, "data":"1mUnicode: Ünye 漢字"},
+                {"type":"resize", "sequence":3, "cols":120, "rows":40}]
+        })).unwrap();
+        assert!(frame.validate().is_ok());
+        frame.events.push(TerminalEvent::Data { sequence: 5, data: "gap".into() });
+        frame.sequence = Some(5);
+        assert!(frame.validate().is_err());
+        frame.events.pop();
+        frame.events.push(TerminalEvent::Resize { sequence: 4, cols: 0, rows: 40 });
+        assert!(frame.validate().is_err());
     }
 }

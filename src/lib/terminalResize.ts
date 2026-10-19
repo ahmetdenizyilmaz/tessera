@@ -1,16 +1,16 @@
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 
-type Size = { cols: number; rows: number };
+type Size = { cols: number; rows: number; inputSession?: string };
 const same = (a: Size | undefined, b: Size | undefined) =>
-  !!a && !!b && a.cols === b.cols && a.rows === b.rows;
+  !!a && !!b && a.cols === b.cols && a.rows === b.rows && a.inputSession === b.inputSession;
 
 /** One owner for font, visibility and layout sizing. Native resize requests
  * are ordered and coalesced; unchanged geometry never reaches ConPTY. */
 export function createTerminalResize(
   terminal: Terminal,
   fit: FitAddon,
-  resize: (cols: number, rows: number) => Promise<void>,
+  resize: (cols: number, rows: number, inputSession?: string) => Promise<void>,
   isActive: () => boolean = () => true,
 ) {
   const view = terminal.element?.ownerDocument.defaultView ?? window;
@@ -21,29 +21,32 @@ export function createTerminalResize(
   let restoring = false;
   let started = false;
   let disposed = false;
-  let sending = false;
+  let sending: Promise<void> | undefined;
+  let remote: Size | undefined;
   let desired: Size | undefined;
   let sent: Size | undefined;
-  const send = async () => {
-    if (disposed || restoring || !started || !isActive() || sending || !desired || same(desired, sent)) return;
+  const send = async (): Promise<void> => {
+    if (disposed || restoring || !started || (!remote && !isActive()) || !desired || same(desired, sent)) return;
+    if (sending) { await sending; return send(); }
     const size = desired;
-    sending = true;
+    const operation = size.inputSession ? resize(size.cols, size.rows, size.inputSession) : resize(size.cols, size.rows);
+    sending = operation;
     try {
-      await resize(size.cols, size.rows);
+      await operation;
       sent = size;
       if (!disposed) terminal.refresh(0, terminal.rows - 1);
-    } catch (error) {
-      console.error("Terminal resize failed:", error);
     } finally {
-      sending = false;
-      if (!same(desired, size)) void send();
+      sending = undefined;
     }
+    if (!same(desired, size)) await send();
   };
+  const sendLocal = () => { void send().catch(error => console.error('Terminal resize failed:', error)); };
   const fitNow = () => {
     if (disposed || restoring) return;
     // Inactive tiles are previews of a live terminal. Shrinking their PTY
     // makes native TUIs erase/replay history, only to repeat that work when
     // the user returns. Establish initial geometry, then fit active views.
+    if (remote) return remote;
     if (started && !isActive()) return;
     const bounds = terminal.element?.parentElement?.getBoundingClientRect();
     // A hidden view has no meaningful geometry. FitAddon otherwise clamps
@@ -51,17 +54,29 @@ export function createTerminalResize(
     if (!bounds?.width || !bounds.height) return;
     const size = fit.proposeDimensions();
     if (!size || size.cols < 2 || size.rows < 1) return;
-    if (terminal.cols !== size.cols || terminal.rows !== size.rows) fit.fit();
+    // Newly opened background tiles still need a usable logical terminal.
+    if (!started && !isActive()) {
+      size.cols = Math.max(80, size.cols); size.rows = Math.max(24, size.rows);
+      terminal.resize(size.cols, size.rows);
+    } else if (terminal.cols !== size.cols || terminal.rows !== size.rows) fit.fit();
     desired = { cols: terminal.cols, rows: terminal.rows };
     // Repaint even if the character grid stayed the same: moving a window,
     // revealing a clipped panel or finishing a CSS transition can invalidate
     // the renderer without changing cols/rows. This does not send input.
     terminal.refresh(0, terminal.rows - 1);
-    void send();
+    sendLocal();
     return desired;
   };
   return {
     fitNow,
+    async setRemoteSize(size: Size) {
+      if (disposed || restoring || !started) throw new Error('Terminal is not ready to resize yet.');
+      remote = size;
+      if (terminal.cols !== size.cols || terminal.rows !== size.rows) terminal.resize(size.cols, size.rows);
+      desired = size;
+      await send();
+    },
+    releaseRemoteSize() { remote = undefined; fitNow(); },
     pauseForRestore() { restoring = true; },
     finishRestore() { restoring = false; },
     requestFit() {
@@ -82,7 +97,7 @@ export function createTerminalResize(
       if (disposed) return;
       started = true;
       sent = initial;
-      void send();
+      sendLocal();
     },
     dispose() {
       disposed = true;

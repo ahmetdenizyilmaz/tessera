@@ -32,7 +32,7 @@ mockIPC(async (command, args) => {
   if (command === 'pty_capabilities') return { windowsPty: { backend: 'conpty', buildNumber: 26200 } };
   if (command === 'codex_configure') return { generation: 'test', threadId: 'test-thread',
     thread: { id: 'test-thread', turns: [] }, events: [], requests: [], materialized: true, busy: false, alive: true };
-  if (command === 'lan_read_terminal') return window.readRemote(args.panelId);
+  if (command === 'lan_read_terminal') return window.readRemote(args.panelId, args.options);
   if (command === 'lan_terminal_input') return window.writeRemote?.(args);
   if (command === 'lan_read_panel') return { messages: [{ role: 'assistant', content: 'Actual chat transcript' }] };
   return null;
@@ -111,5 +111,10 @@ window.setRegistryReady = registryReady => {
   const current = useLanStore.getState().status;
   useLanStore.getState().setStatus({ ...current, peers: current.peers.map(peer => ({ ...peer, registryReady })) });
 };
+window.setStreamSupported = supported => {
+  for (const panel of panels) panel.terminalStream = supported && panel.kind === 'terminal';
+  setStatus(true);
+};
+window.focusRemote = id => useLayoutStore.getState().setFocused(`lan:owner:${id}`);
 window.hideViewer = () => root.render(null);
 window.clearShared = clearTerminalState;

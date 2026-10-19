@@ -540,6 +540,7 @@ pub async fn pty_resize(
     id: String,
     cols: u16,
     rows: u16,
+    input_session: Option<String>,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
     if cols < 2 || rows == 0 {
@@ -547,6 +548,9 @@ pub async fn pty_resize(
     }
     let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
     if let Some(instance) = instances.get_mut(&id) {
+        if input_session.as_ref().is_some_and(|session| instance.input.session().as_ref() != Some(session)) {
+            return Err("Terminal session changed before resize".into());
+        }
         if instance.size.is_some_and(|size| size.cols == cols && size.rows == rows) {
             return Ok(());
         }

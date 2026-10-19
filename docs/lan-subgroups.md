@@ -3,7 +3,30 @@
 Tessera can pair directly with another Tessera installation on the same private IPv4 subnet. Each
 computer appears in the other's workspace as a group containing its currently open agent
 panels. The agents continue to run on the computer that owns them; only panel metadata, recent
-conversation reads, terminal screen snapshots, message delivery, and explicit user terminal input cross the connection.
+conversation reads, terminal output, message delivery, and explicit user terminal input cross the connection.
+
+## Shared terminal sessions (0.4.5)
+
+Install **0.4.5 or newer on both computers**. A remote terminal is a local xterm renderer attached
+to the same running PTY on its host. It does not start another agent or capture images. After one
+initial VT checkpoint, the host sends ordered output bytes and resize events. Idle reads wait for
+new output and return only a small cursor acknowledgement; they do not repeatedly serialize history.
+If a connection drops, a parser is replaced, or the bounded output journal overflows, the reader
+requests a fresh checkpoint rather than rendering an incomplete tail. Partial escape sequences,
+ANSI colors, cursor position, alternate screens and local scrollback are retained.
+
+The focused remote panel negotiates its available rows and columns with the host. A shared PTY has
+one logical size: clicking or typing on the host returns size control to it, and clicking the remote
+terminal takes it back. Other views retain the same logical grid and can scroll. Small inactive
+previews never continuously resize the PTY. A remote size lease expires after five seconds without
+renewal; closed, hidden or disconnected viewers cannot permanently hold it. Resize requests are
+scoped to the authenticated connection and current PTY lifetime, just like direct input.
+
+The **conversation history** button on terminal headers reads up to 100 recent messages separately
+from the live terminal, including with older hosts. Large messages are expandable and older messages
+are shown on demand. The terminal keeps running while history is open. Old hosts keep their legacy
+terminal view and show an update notice; receiving an absent capability is never interpreted as
+permission to send a new protocol extension. Pairings and saved conversations survive the update.
 
 ## Panel views and updates (0.3.7)
 
@@ -104,9 +127,8 @@ missed events. While a peer's capabilities are loading, the viewer shows **Check
 it only shows the read-only notice once that peer's registry actually says input is unsupported.
 Reconnects to already paired computers do not show a new approval prompt.
 
-Remote terminals mirror the host's actual rows and columns. If the large remote view contains a
-tiny screen, focus/enlarge that terminal on the host. Changing the viewer's layout alone does not
-reflow or resize the host's terminal.
+On hosts older than 0.4.5, remote terminals still retain the host's actual rows and columns. A tiny
+screen in a large panel means that host needs updating. Conversation history remains available.
 
 ## Access granted to a paired computer
 
@@ -118,7 +140,8 @@ From 0.4.3 onward, a paired computer's user can also control existing terminal p
 including commands, interrupts and answers to terminal permission prompts. That can cause agents
 or shells to access files and execute tools with the host user's permissions. Only pair computers
 and people you trust with this access. There are no separate filesystem, credential, session-creation,
-host-close or host-resize APIs. Agent-to-agent messaging cannot use the raw-input route or answer
+host-close APIs. Focused terminal viewers can negotiate PTY size; agent-to-agent messaging cannot
+use that route, the raw-input route, or answer
 approval prompts. Use **Disconnect** to stop access or **Forget** to revoke the pinned device key and
 remove its subgroup; a forgotten computer must request approval again.
 
@@ -132,6 +155,10 @@ old-host errors. `node tools/test-lan-input.mjs` additionally exercises direct k
 terminal-query suppression, capability gating, disconnect/restart, delivery failure and local close.
 Browser tests mock native IPC and do not start agents or touch saved workspaces;
 they do not replace a final test between the user's two physical computers.
+
+`node tools/test-lan-stream.mjs` checks two independent xterm renderers streaming actual VT chunks,
+focused resizing, local control takeover, idle payload size, partial escapes, Unicode, missing-event
+recovery, disconnect/reconnect, hidden-host resize/remount, history, and legacy-host notices.
 
 `cargo run --manifest-path src-tauri/Cargo.toml --example lan_pair_probe -- <private-ip>:43721`
 exercises a real encrypted first-contact request using a disposable identity. **Decline** the

@@ -8,6 +8,37 @@ pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TerminalCursor { pub stream_id: String, pub sequence: u64 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalViewport {
+    pub cols: u16, pub rows: u16, pub input_session: String, pub control_id: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalReadOptions {
+    #[serde(default)] pub stream: bool,
+    pub cursor: Option<TerminalCursor>,
+    pub viewport: Option<TerminalViewport>,
+}
+
+impl TerminalReadOptions {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.cursor.as_ref().is_some_and(|c| c.stream_id.is_empty() || c.stream_id.len() > 128 || c.sequence > 9_007_199_254_740_991) {
+            return Err("Invalid terminal stream cursor".into());
+        }
+        if self.viewport.as_ref().is_some_and(|v| !self.stream || v.cols < 2 || v.rows == 0 || v.cols > 500 || v.rows > 300
+            || v.input_session.is_empty() || v.input_session.len() > 128 || v.control_id.is_empty() || v.control_id.len() > 128) {
+            return Err("Invalid terminal viewport".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NodeInfo {
     pub device_id: String,
     pub name: String,
@@ -31,6 +62,9 @@ pub struct RemotePanelInfo {
     /// Optional extension. Never send raw-input requests to older hosts.
     #[serde(default)]
     pub terminal_input: bool,
+    /// Incremental VT output and negotiated viewport (optional extension).
+    #[serde(default)]
+    pub terminal_stream: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +111,8 @@ pub enum WireMessage {
         /// viewer detects and reports as requiring a host update.
         #[serde(default)]
         terminal: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal_options: Option<TerminalReadOptions>,
     },
     ReadResult {
         request_id: String,
@@ -100,8 +136,11 @@ mod tests {
         let mut panel = serde_json::json!({"id":"p", "name":"Terminal", "cwd":"", "kind":"terminal",
             "provider":"claude", "status":"running", "busy":false, "awaitingUser":false, "model":null, "reachable":true});
         assert!(!serde_json::from_value::<RemotePanelInfo>(panel.clone()).unwrap().terminal_input);
+        assert!(!serde_json::from_value::<RemotePanelInfo>(panel.clone()).unwrap().terminal_stream);
         panel["terminalInput"] = Value::Bool(true);
-        assert!(serde_json::from_value::<RemotePanelInfo>(panel).unwrap().terminal_input);
+        panel["terminalStream"] = Value::Bool(true);
+        let current = serde_json::from_value::<RemotePanelInfo>(panel).unwrap();
+        assert!(current.terminal_input && current.terminal_stream);
     }
 
     #[test]
@@ -120,5 +159,26 @@ mod tests {
             serde_json::from_value::<WireMessage>(new).unwrap(),
             WireMessage::ReadRequest { terminal: true, .. }
         ));
+    }
+
+    #[test]
+    fn streaming_requires_valid_bounded_geometry_and_scoped_ids() {
+        let mut options = TerminalReadOptions { stream: true,
+            cursor: Some(TerminalCursor { stream_id: "output-stream".into(), sequence: 8 }),
+            viewport: Some(TerminalViewport { cols: 140, rows: 45, input_session: "pty-lifetime".into(), control_id: "view-focus".into() }) };
+        assert!(options.validate().is_ok());
+        options.viewport.as_mut().unwrap().rows = 0;
+        assert!(options.validate().is_err());
+        options.viewport.as_mut().unwrap().rows = 301;
+        assert!(options.validate().is_err());
+        options.viewport.as_mut().unwrap().rows = 45;
+        options.stream = false;
+        assert!(options.validate().is_err());
+        options.stream = true;
+        options.viewport.as_mut().unwrap().input_session.clear();
+        assert!(options.validate().is_err());
+        options.viewport = None;
+        options.cursor.as_mut().unwrap().sequence = u64::MAX;
+        assert!(options.validate().is_err());
     }
 }
