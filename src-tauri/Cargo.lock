@@ -5524,6 +5524,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "snow",
+ "socket2",
  "sysinfo 0.33.1",
  "tauri",
  "tauri-build",

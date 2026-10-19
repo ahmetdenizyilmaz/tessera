@@ -107,5 +107,9 @@ window.setInputSupported = supported => {
   for (const panel of panels) panel.terminalInput = supported && panel.kind === 'terminal';
   setStatus(true);
 };
+window.setRegistryReady = registryReady => {
+  const current = useLanStore.getState().status;
+  useLanStore.getState().setStatus({ ...current, peers: current.peers.map(peer => ({ ...peer, registryReady })) });
+};
 window.hideViewer = () => root.render(null);
 window.clearShared = clearTerminalState;

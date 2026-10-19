@@ -48,7 +48,7 @@ export function LanConnectStep({ onConnected }: LanConnectStepProps) {
     try {
       const next = await invoke<LanStatus>('lan_connect', { deviceId });
       useLanStore.getState().setStatus(next);
-      if (!next.peers.some(peer => peer.deviceId === deviceId && peer.connected)) {
+      if (!useLanStore.getState().status?.peers.some(peer => peer.deviceId === deviceId && peer.connected)) {
         throw new Error('The computer is not connected. Check that Tessera is open there, then try again.');
       }
       open(deviceId);
@@ -95,6 +95,9 @@ export function LanConnectStep({ onConnected }: LanConnectStepProps) {
         </div>
       )}
       {error && <div role="alert" style={{ marginTop: 8, fontSize: 11, color: 'var(--error, #ff6b6b)', lineHeight: 1.5 }}>{error}</div>}
+      {status?.sharing && status.listenError && <div role="alert" className="form-hint">
+        This PC cannot receive new requests. {status.listenError} Check Settings → Local Network.
+      </div>}
       {status && (
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
           This computer: {ownAddresses.length ? ownAddresses.join(', ') : 'no private IPv4 address found'} · {status.name}

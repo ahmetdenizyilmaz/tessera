@@ -1,5 +1,6 @@
 pub mod protocol;
 pub mod terminal;
+mod network;
 mod transport;
 
 use std::collections::HashMap;
@@ -16,7 +17,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
+#[cfg(test)]
+use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
 
 use protocol::{
@@ -115,7 +118,10 @@ pub struct LanPeerState {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LanStatus {
+    pub revision: u64,
     pub sharing: bool,
+    pub listening: bool,
+    pub listen_error: Option<String>,
     pub device_id: String,
     pub name: String,
     pub fingerprint: String,
@@ -123,6 +129,14 @@ pub struct LanStatus {
     pub addresses: Vec<String>,
     pub peers: Vec<LanPeerState>,
     pub pending_requests: Vec<PairRequestInfo>,
+}
+
+#[derive(Default)]
+struct ListenerState {
+    generation: u64,
+    stop: Option<oneshot::Sender<()>>,
+    listening: bool,
+    error: Option<String>,
 }
 
 pub struct LanManager {
@@ -134,8 +148,8 @@ pub struct LanManager {
     connections: Arc<Mutex<HashMap<String, Connection>>>,
     remote_panels: Arc<Mutex<HashMap<String, Vec<RemotePanelInfo>>>>,
     pending: Arc<Mutex<PendingRequests>>,
-    listener_stop: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    listener_running: Arc<AtomicBool>,
+    listener: Arc<Mutex<ListenerState>>,
+    status_revision: Arc<AtomicU64>,
     reconnect_supervisor_running: Arc<AtomicBool>,
 }
 
@@ -153,8 +167,8 @@ impl LanManager {
             connections: Arc::new(Mutex::new(HashMap::new())),
             remote_panels: Arc::new(Mutex::new(HashMap::new())),
             pending: Arc::new(Mutex::new(HashMap::new())),
-            listener_stop: Arc::new(Mutex::new(None)),
-            listener_running: Arc::new(AtomicBool::new(false)),
+            listener: Arc::new(Mutex::new(ListenerState::default())),
+            status_revision: Arc::new(AtomicU64::new(0)),
             reconnect_supervisor_running: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -177,7 +191,7 @@ impl LanManager {
     }
 
     fn status(&self) -> LanStatus {
-        let cfg = self.config.lock().unwrap().clone();
+        let cfg = self.config.lock().unwrap();
         let connections = self.connections.lock().unwrap();
         let remote = self.remote_panels.lock().unwrap();
         let mut peers = cfg
@@ -201,10 +215,14 @@ impl LanManager {
             .map(|(info, _)| info.clone())
             .collect::<Vec<_>>();
         pending_requests.sort_by_key(|r| r.received_at);
+        let listener = self.listener.lock().unwrap();
         LanStatus {
+            revision: self.status_revision.fetch_add(1, Ordering::SeqCst) + 1,
             sharing: cfg.sharing,
+            listening: listener.listening,
+            listen_error: listener.error.clone(),
             device_id: self.device_id.clone(),
-            name: cfg.name,
+            name: cfg.name.clone(),
             fingerprint: fingerprint(&self.public_key),
             port: cfg.port,
             addresses: private_interfaces()
@@ -221,26 +239,40 @@ impl LanManager {
     }
 
     fn start_listener(&self, app: AppHandle) {
-        if self.listener_running.swap(true, Ordering::SeqCst) {
-            return;
-        }
         let port = self.config.lock().unwrap().port;
         let (stop_tx, mut stop_rx) = oneshot::channel();
-        *self.listener_stop.lock().unwrap() = Some(stop_tx);
+        let generation = {
+            let mut state = self.listener.lock().unwrap();
+            if state.stop.is_some() { return; }
+            state.generation += 1;
+            state.stop = Some(stop_tx);
+            state.generation
+        };
         let manager = app.state::<LanManager>().inner().clone_refs();
         tauri::async_runtime::spawn(async move {
-            let listener = match TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await {
+            // The std/socket2 path creates the handle non-inheritable. A
+            // surviving Codex/Claude child must never keep this port bound.
+            let listener = match network::listen(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port))) {
                 Ok(v) => v,
                 Err(e) => {
-                    manager.listener_running.store(false, Ordering::SeqCst);
-                    let _ = app.emit(
-                        "lan-error",
-                        format!("Could not listen on LAN port {port}: {e}"),
-                    );
+                    {
+                        let mut state = manager.listener.lock().unwrap();
+                        if state.generation != generation { return; }
+                        state.stop = None;
+                        state.listening = false;
+                        state.error = Some(format!("Could not listen on LAN port {port}: {e}. Close the app holding this port, then retry."));
+                    }
                     manager.emit_state(&app);
                     return;
                 }
             };
+            {
+                let mut state = manager.listener.lock().unwrap();
+                if state.generation != generation { return; }
+                state.listening = true;
+                state.error = None;
+            }
+            manager.emit_state(&app);
             loop {
                 tokio::select! {
                     _ = &mut stop_rx => break,
@@ -261,15 +293,26 @@ impl LanManager {
                     }
                 }
             }
-            manager.listener_running.store(false, Ordering::SeqCst);
+            drop(listener);
+            {
+                let mut state = manager.listener.lock().unwrap();
+                // A stopped listener must not clear a newer listener's state.
+                if state.generation != generation { return; }
+                state.stop = None;
+                state.listening = false;
+            }
+            manager.emit_state(&app);
         });
     }
 
     fn stop_listener(&self) {
-        if let Some(stop) = self.listener_stop.lock().unwrap().take() {
-            let _ = stop.send(());
+        {
+            let mut state = self.listener.lock().unwrap();
+            state.generation += 1;
+            if let Some(stop) = state.stop.take() { let _ = stop.send(()); }
+            state.listening = false;
+            state.error = None;
         }
-        self.listener_running.store(false, Ordering::SeqCst);
         for (_, (_, decision)) in self.approvals.lock().unwrap().drain() {
             let _ = decision.send(false);
         }
@@ -298,6 +341,8 @@ impl LanManager {
                         .store(false, Ordering::SeqCst);
                     return;
                 }
+                // Recover after a transient bind failure or a quick off/on.
+                manager.start_listener(app.clone());
                 let peers = manager.config.lock().unwrap().peers.clone();
                 for peer in peers {
                     // Deterministic reconnect ownership prevents both apps from
@@ -387,7 +432,7 @@ impl LanManager {
             .cloned()
             .ok_or("Paired computer not found")?;
         let address = validate_address(&peer.address)?;
-        let mut stream = tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(address))
+        let mut stream = tokio::time::timeout(Duration::from_secs(5), network::connect(address))
             .await
             .map_err(|_| "LAN connection timed out".to_string())?
             .map_err(|e| format!("Connect to {}: {e}", peer.name))?;
@@ -400,7 +445,9 @@ impl LanManager {
             .decode(&peer.public_key)
             .map_err(|_| "Stored peer key is invalid")?;
         let state = transport::reconnect_state(true, &self.private_key, Some(&remote_key))?;
-        let (noise, actual_key) = transport::run_handshake(&mut stream, state, true).await?;
+        let (noise, actual_key) = tokio::time::timeout(
+            Duration::from_secs(10), transport::run_handshake(&mut stream, state, true),
+        ).await.map_err(|_| "The other computer did not complete the encrypted handshake".to_string())??;
         self.finish_connection(
             stream,
             noise,
@@ -420,7 +467,7 @@ impl LanManager {
     async fn request_outgoing(&self, address: String, app: AppHandle) -> Result<(), String> {
         let socket = validate_address(&address)?;
         let hint = "Is Tessera running there with Share on local network enabled?";
-        let mut stream = tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(socket))
+        let mut stream = tokio::time::timeout(Duration::from_secs(5), network::connect(socket))
             .await
             .map_err(|_| format!("{} did not answer. {hint}", socket.ip()))?
             .map_err(|e| format!("Could not reach {}: {e}. {hint}", socket.ip()))?;
@@ -511,7 +558,8 @@ impl LanManager {
             node: self.node_info(),
         };
         write_wire(&mut writer, &noise, &hello).await?;
-        let peer_node = match read_wire(&mut reader, &noise).await? {
+        let peer_node = match tokio::time::timeout(Duration::from_secs(10), read_wire(&mut reader, &noise))
+            .await.map_err(|_| "The other computer did not identify itself in time".to_string())?? {
             WireMessage::Hello { node } => node,
             _ => return Err("Peer did not identify itself".into()),
         };
@@ -1025,8 +1073,8 @@ impl LanManager {
             connections: self.connections.clone(),
             remote_panels: self.remote_panels.clone(),
             pending: self.pending.clone(),
-            listener_stop: self.listener_stop.clone(),
-            listener_running: self.listener_running.clone(),
+            listener: self.listener.clone(),
+            status_revision: self.status_revision.clone(),
             reconnect_supervisor_running: self.reconnect_supervisor_running.clone(),
         }
     }
@@ -1275,6 +1323,15 @@ pub async fn lan_request_pair(
 ) -> Result<LanStatus, String> {
     let socket = validate_address(&address)?;
     let ip = socket.ip().to_string();
+    // Retry a failed listener even if sharing was already enabled or this
+    // peer was paired earlier. Outgoing success alone says nothing about it.
+    {
+        let mut cfg = state.config.lock().unwrap();
+        cfg.sharing = true;
+        save_config(&cfg)?;
+    }
+    state.start_listener(app.clone());
+    state.connect_all(app.clone());
     let existing = state
         .config
         .lock()
@@ -1301,19 +1358,6 @@ pub async fn lan_request_pair(
             state.emit_state(&app);
             return Ok(state.status());
         }
-    }
-    // The other computer will reconnect to us later, so this side must listen too.
-    let was_listening = {
-        let mut cfg = state.config.lock().unwrap();
-        let was = cfg.sharing;
-        cfg.sharing = true;
-        save_config(&cfg)?;
-        was
-    };
-    if !was_listening {
-        state.start_listener(app.clone());
-        state.connect_all(app.clone());
-        state.emit_state(&app);
     }
     state.request_outgoing(address, app.clone()).await?;
     state.emit_state(&app);
@@ -1350,8 +1394,11 @@ pub async fn lan_connect(
         if let Some(peer) = cfg.peers.iter_mut().find(|p| p.device_id == device_id) {
             peer.auto_connect = true;
         }
+        cfg.sharing = true;
         save_config(&cfg)?;
     }
+    state.start_listener(app.clone());
+    state.connect_all(app.clone());
     state.connect_known(&device_id, app.clone()).await?;
     Ok(state.status())
 }

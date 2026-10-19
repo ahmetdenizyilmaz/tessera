@@ -90,6 +90,24 @@ Connections carry length-bounded, encrypted protocol frames. Remote panels use d
 which keeps identical panel names and IDs unambiguous. Direct peers are never forwarded through a
 third Tessera computer.
 
+## Connection recovery
+
+Local Network settings report whether Tessera is actually listening, separately from the sharing
+toggle. If port 43721 is occupied, the error remains visible with **Retry listening**; Tessera also
+retries automatically. Windows LAN sockets are non-inheritable so an agent subprocess cannot keep
+the listener alive after Tessera exits. An orphaned helper from an older build may still need closing
+once to release a port it already inherited.
+
+Connection replies and events carry ordered status revisions. A delayed reply cannot replace a newer
+terminal capability registry or hide an incoming approval request. Periodic status checks recover
+missed events. While a peer's capabilities are loading, the viewer shows **Checking terminal access**;
+it only shows the read-only notice once that peer's registry actually says input is unsupported.
+Reconnects to already paired computers do not show a new approval prompt.
+
+Remote terminals mirror the host's actual rows and columns. If the large remote view contains a
+tiny screen, focus/enlarge that terminal on the host. Changing the viewer's layout alone does not
+reflow or resize the host's terminal.
+
 ## Access granted to a paired computer
 
 A paired computer can list messageable open panels, see their provider/model/status/working-directory
@@ -114,3 +132,7 @@ old-host errors. `node tools/test-lan-input.mjs` additionally exercises direct k
 terminal-query suppression, capability gating, disconnect/restart, delivery failure and local close.
 Browser tests mock native IPC and do not start agents or touch saved workspaces;
 they do not replace a final test between the user's two physical computers.
+
+`cargo run --manifest-path src-tauri/Cargo.toml --example lan_pair_probe -- <private-ip>:43721`
+exercises a real encrypted first-contact request using a disposable identity. **Decline** the
+**Tessera LAN self-test** prompt on the host. The probe never reads panels or sends terminal input.

@@ -10,6 +10,7 @@ export function LanPairRequestDialog() {
   const request = useLanStore((s) => s.status?.pendingRequests[0] ?? null);
   const waiting = useLanStore((s) => s.status?.pendingRequests.length ?? 0);
   const respond = useLanStore((s) => s.respondPairRequest);
+  const error = useLanStore((s) => s.error);
   const [busy, setBusy] = useState(false);
 
   const answer = useCallback(async (accept: boolean) => {
@@ -37,7 +38,7 @@ export function LanPairRequestDialog() {
 
   return (
     <div className="dialog-overlay" style={{ zIndex: 3000 }}>
-      <div className="dialog" style={{ maxWidth: 440 }} onClick={(event) => event.stopPropagation()}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label="Connection request" style={{ maxWidth: 440 }} onClick={(event) => event.stopPropagation()}>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Monitor size={18} /> Connection request
         </h2>
@@ -53,6 +54,7 @@ export function LanPairRequestDialog() {
           Device fingerprint <code>{request.fingerprint}</code>. The same fingerprint is shown on {request.name} while it waits.
           {waiting > 1 && <div style={{ marginTop: 4 }}>{waiting - 1} more request{waiting > 2 ? 's are' : ' is'} waiting behind this one.</div>}
         </div>
+        {error && <p role="alert" style={{ color: 'var(--error, #ff6b6b)', fontSize: 12 }}>{error}</p>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-secondary" disabled={busy} onClick={() => void answer(false)}>Decline</button>
           <button

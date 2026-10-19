@@ -10,6 +10,7 @@ import { RemoteTerminalView } from './RemoteTerminalView';
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { PanelAppearanceButton } from '../appearance/BackgroundSettings';
 import { PanelLockButton } from '../layout/PanelLockButton';
+import './remotePanel.css';
 
 interface TranscriptMessage {
   role?: string;
@@ -90,19 +91,20 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="remote-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
-      <div className="terminal-toolbar" style={{ minHeight: 36, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="terminal-toolbar remote-panel-toolbar">
+        <div className="remote-panel-heading">
         <ProviderIcon provider={panel.provider} size={16} />
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="remote-panel-label" title={`${panel.name} · ${peer.name}${panel.model ? ` · ${panel.model}` : ''} · ${panel.status}`}>
           <div className="panel-title-with-shortcut" style={{ fontSize: 12, fontWeight: 600 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{panel.name}</span>
             <PanelShortcutBadge panelId={instanceId} />
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', gap: 6 }}>
-            <span>{peer.name}</span>
-            {panel.model && <span>· {panel.model}</span>}
-            <span>· {panel.status}</span>
+          <div className="remote-panel-metadata">
+            {peer.name}{panel.model && ` · ${panel.model}`} · {panel.status}
           </div>
         </div>
+        </div>
+        <div className="remote-panel-actions">
         <span title={peer.connected ? 'Encrypted LAN connection active' : 'Remote computer offline'} style={{ color: peer.connected ? '#51cf66' : 'var(--text-muted)', display: 'flex' }}>
           {peer.connected ? <Monitor size={14} /> : <WifiOff size={14} />}
         </span>
@@ -116,6 +118,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
           aria-label="Close remote panel locally" title="Close locally (keeps running on host)">
           <X size={13} />
         </button>
+        </div>
       </div>
 
         {!peer.connected && (
@@ -125,7 +128,7 @@ export function RemotePanel({ instanceId }: { instanceId: string }) {
         )}
       {isTerminal ? (
         <RemoteTerminalView deviceId={parsed.deviceId} panelId={parsed.panelId} connected={peer.connected}
-          inputSupported={peer.registryReady !== false && panel.terminalInput === true} refreshKey={refreshKey} />
+          inputSupported={panel.terminalInput === true} registryReady={peer.registryReady !== false} refreshKey={refreshKey} />
       ) : (
       <div style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {messages.map((message, index) => {

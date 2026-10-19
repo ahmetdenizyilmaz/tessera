@@ -47,6 +47,20 @@ try {
   }
   expect(await viewer.evaluate(() => window.calls.some(c => c.command === 'lan_read_panel' && c.args.panelId !== 'host-chat'))).toBe(false);
   console.log('PASS both providers retain terminal geometry, Unicode, ANSI colors, cursor and alternate screen; chat stays chat');
+  const smallTile = viewer.locator('[data-fixture-id="host-claude"]');
+  for (const width of [180, 270, 380]) {
+    await smallTile.evaluate((tile, width) => { tile.style.width = `${width}px`; tile.style.flexShrink = '0'; }, width);
+    await expect.poll(() => smallTile.evaluate(tile => {
+      const toolbar = tile.querySelector('.remote-panel-toolbar').getBoundingClientRect();
+      const label = tile.querySelector('.remote-panel-label').getBoundingClientRect();
+      return label.width > 60 && [...tile.querySelectorAll('.remote-panel-actions button')].every(button => {
+        const b = button.getBoundingClientRect();
+        return b.left >= toolbar.left && b.right <= toolbar.right + 1 && b.bottom <= toolbar.bottom + 1
+          && (b.left >= label.right || b.top >= label.bottom);
+      });
+    })).toBe(true);
+  }
+  console.log('PASS remote titles and controls remain inside their headers without overlapping in narrow tiles');
   await viewer.screenshot({ path: '.tmp/lan-panel-fix-20260921.png', fullPage: true });
 
   await viewer.evaluate(async () => {

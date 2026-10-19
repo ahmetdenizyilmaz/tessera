@@ -41,7 +41,11 @@ export interface LanPairRequest {
 }
 
 export interface LanStatus {
+  /** Native snapshot order, shared by command replies and events. */
+  revision?: number;
   sharing: boolean;
+  listening?: boolean;
+  listenError?: string | null;
   deviceId: string;
   name: string;
   /** Short digest of this computer's key, shown on both sides during a request. */
@@ -88,6 +92,10 @@ export const useLanStore = create<LanStoreState>()(
       hiddenPanelIds: [],
       hiddenPeerIds: [],
       setStatus: (incoming) => {
+        // A connect/approve command may resolve after a newer registry or
+        // approval event. Never let that reply roll capabilities/prompts back.
+        const revision = get().status?.revision;
+        if (revision !== undefined && incoming.revision !== undefined && incoming.revision < revision) return;
         // The backend deliberately does not persist transcripts or panel
         // rosters. Retain the last public roster in localStorage so an offline
         // computer still has a useful, clearly marked subgroup.
@@ -99,7 +107,7 @@ export const useLanStore = create<LanStoreState>()(
             ? { ...peer, panels: cached?.panels ?? [] } : peer;
         });
         const status = { ...incoming, peers };
-        set({ status, error: null });
+        set({ status });
         scheduleWorkspaceSync();
       },
       setError: (error) => set({ error }),
@@ -113,7 +121,7 @@ export const useLanStore = create<LanStoreState>()(
           // Build the subgroup now so the caller can reveal it immediately.
           flushWorkspaceSync();
           const ip = trimmed.split(':')[0];
-          const peer = status.peers.find((p) => p.address.split(':')[0] === ip && p.connected);
+          const peer = get().status?.peers.find((p) => p.address.split(':')[0] === ip && p.connected);
           if (!peer) {
             set({ error: 'The computer is not connected. Check that Tessera is open there, then try again.' });
             return null;
@@ -127,6 +135,7 @@ export const useLanStore = create<LanStoreState>()(
         }
       },
       respondPairRequest: async (requestId, accept) => {
+        set({ error: null });
         try {
           get().setStatus(await invoke<LanStatus>('lan_respond_pair_request', { requestId, accept }));
         } catch (err) {
@@ -138,7 +147,7 @@ export const useLanStore = create<LanStoreState>()(
       name: 'tessera-lan-public-state',
       // Requests and in-flight state are meaningless after a restart.
       partialize: (state) => ({
-        status: state.status ? { ...state.status, pendingRequests: [] } : null,
+        status: state.status ? { ...state.status, revision: undefined, listening: false, listenError: null, pendingRequests: [] } : null,
         hiddenPanelIds: state.hiddenPanelIds,
         hiddenPeerIds: state.hiddenPeerIds,
       }),
@@ -151,7 +160,7 @@ export const useLanStore = create<LanStoreState>()(
             ? stored.hiddenPanelIds.filter((id): id is string => typeof id === 'string' && !!splitRemotePanelId(id)) : [],
           hiddenPeerIds: Array.isArray(stored?.hiddenPeerIds)
             ? stored.hiddenPeerIds.filter((id): id is string => typeof id === 'string' && !!id) : [],
-          status: saved ? { ...saved, fingerprint: saved.fingerprint ?? '', pendingRequests: [],
+          status: saved ? { ...saved, revision: undefined, listening: false, listenError: null, fingerprint: saved.fingerprint ?? '', pendingRequests: [],
             peers: saved.peers.map(peer => ({ ...peer, connected: false, registryReady: false })),
           } : null,
           error: null,
@@ -312,16 +321,35 @@ export function forgetRemoteGroup(deviceId: string) {
 }
 
 export async function initLanBridge() {
-  useLayoutStore.subscribe(() => scheduleWorkspaceSync());
-  useGroupStore.subscribe(() => scheduleWorkspaceSync());
-  await listen<LanStatus>('lan-state', (event) => useLanStore.getState().setStatus(event.payload));
-  await listen<string>('lan-error', (event) => useLanStore.getState().setError(event.payload));
-  await listen<string>('lan-peer-forgotten', (event) => forgetRemoteGroup(event.payload));
-  try {
-    useLanStore.getState().setStatus(await invoke<LanStatus>('lan_status'));
-  } catch (error) {
-    useLanStore.getState().setError(String(error));
+  const unsubscribers = [
+    useLayoutStore.subscribe(() => scheduleWorkspaceSync()),
+    useGroupStore.subscribe(() => scheduleWorkspaceSync()),
+  ];
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Events give immediate updates; polling recovers a lost event/startup
+  // listener failure. Completion-based polling never stacks status requests.
+  const refresh = async () => {
+    try {
+      const status = await invoke<LanStatus>('lan_status');
+      if (!stopped) useLanStore.getState().setStatus(status);
+    } catch (error) {
+      if (!stopped) useLanStore.getState().setError(String(error));
+    } finally {
+      if (!stopped) timer = setTimeout(() => void refresh(), 3000);
+    }
+  };
+  const listeners = await Promise.allSettled([
+    listen<LanStatus>('lan-state', event => useLanStore.getState().setStatus(event.payload)),
+    listen<string>('lan-error', event => useLanStore.getState().setError(event.payload)),
+    listen<string>('lan-peer-forgotten', event => forgetRemoteGroup(event.payload)),
+    refresh(),
+  ]);
+  for (const result of listeners) {
+    if (result.status === 'fulfilled' && result.value) unsubscribers.push(result.value);
+    else if (result.status === 'rejected') console.warn('[lan] Event listener unavailable; using status refresh.', result.reason);
   }
+  return () => { stopped = true; clearTimeout(timer); unsubscribers.forEach(stop => stop()); };
 }
 
 export function remotePanelByCompositeId(id: string): { peer: LanPeerState; panel: RemotePanelInfo } | null {

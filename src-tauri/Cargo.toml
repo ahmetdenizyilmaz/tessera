@@ -54,6 +54,8 @@ http-body-util = "0.1"
 snow = "0.9"
 sha2 = "0.10"
 if-addrs = "0.13"
+# Already used by Tokio. Creates non-inheritable Windows sockets atomically.
+socket2 = "0.6"
 zip = { version = "=8.6.0", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]

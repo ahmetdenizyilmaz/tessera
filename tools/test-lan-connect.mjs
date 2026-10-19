@@ -67,5 +67,28 @@ try {
   await expect(page.getByRole('alert')).toContainText('Could not reach');
   await expect(page.locator('.nsw')).toBeVisible();
   console.log('PASS unsuccessful connections leave the wizard open with an actionable error');
+
+  await open('root');
+  await page.evaluate(() => window.receiveRequest());
+  const prompt = page.getByRole('dialog', { name: 'Connection request' });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('Requesting PC');
+  await expect(prompt).toContainText('ABCD-1234');
+  expect(await page.evaluate(() => window.calls.filter(call => call.command === 'lan_respond_pair_request'))).toEqual([]);
+  await page.evaluate(() => { window.failApproval = true; });
+  await prompt.getByRole('button', { name: 'Approve' }).click();
+  await expect(prompt.getByRole('alert')).toContainText('Could not answer');
+  await page.evaluate(() => { window.failApproval = false; });
+  await prompt.getByRole('button', { name: 'Approve' }).click();
+  await expect(prompt).toHaveCount(0);
+  console.log('PASS incoming requests stay visible over the wizard despite a stale reply; approval errors remain retryable');
+
+  await page.evaluate(() => window.receiveRequest(true));
+  await expect(prompt).toBeVisible({ timeout: 6000 });
+  await prompt.getByRole('button', { name: 'Decline' }).click();
+  await expect(prompt).toHaveCount(0);
+  const decisions = await page.evaluate(() => window.calls.filter(call => call.command === 'lan_respond_pair_request').map(call => call.args.accept));
+  expect(decisions).toEqual([true, true, false]);
+  console.log('PASS status recovery discovers a missed incoming request; only explicit approval/decline is sent');
   expect(errors).toEqual([]);
 } finally { await browser.close(); }

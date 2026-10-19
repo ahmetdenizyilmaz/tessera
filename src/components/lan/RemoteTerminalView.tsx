@@ -15,10 +15,11 @@ interface Props {
   panelId: string;
   connected: boolean;
   inputSupported: boolean;
+  registryReady?: boolean;
   refreshKey: number;
 }
 
-export function RemoteTerminalView({ deviceId, panelId, connected, inputSupported, refreshKey }: Props) {
+export function RemoteTerminalView({ deviceId, panelId, connected, inputSupported, registryReady = true, refreshKey }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const previous = useRef('');
@@ -154,7 +155,7 @@ export function RemoteTerminalView({ deviceId, panelId, connected, inputSupporte
           if (cancelled) return;
           previous.current = serialized;
         }
-        input.setTarget(inputSupported && userData && snapshot.inputSession && snapshot.connectionId
+        input.setTarget(registryReady && inputSupported && userData && snapshot.inputSession && snapshot.connectionId
           ? { deviceId, panelId, inputSession: snapshot.inputSession, connectionId: snapshot.connectionId }
           : null);
         term.options.disableStdin = !input.ready;
@@ -181,7 +182,7 @@ export function RemoteTerminalView({ deviceId, panelId, connected, inputSupporte
       node.removeEventListener('paste', nativePaste, true);
       node.removeEventListener('contextmenu', contextMenu);
     };
-  }, [deviceId, panelId, connected, inputSupported, refreshKey]);
+  }, [deviceId, panelId, connected, inputSupported, registryReady, refreshKey]);
 
   return (
     <div className="remote-terminal" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
@@ -189,8 +190,11 @@ export function RemoteTerminalView({ deviceId, panelId, connected, inputSupporte
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }} aria-label="Remote terminal screen">
         <div ref={container} style={{ width: 'max-content', minWidth: '100%' }} />
       </div>
-      {connected && !inputSupported && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-        Read-only. Update Tessera on the host computer to enable direct terminal typing.
+      {connected && !registryReady && <div role="status" style={{ padding: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+        Checking terminal access with the host…
+      </div>}
+      {connected && registryReady && !inputSupported && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+        Read-only. This host has not enabled direct terminal typing. Check that both computers are running the latest Tessera build.
       </div>}
       {error && <div role="alert" style={{ padding: 10, color: '#ff6b6b', fontSize: 12 }}>{error}</div>}
       {inputError && <div role="alert" style={{ padding: 10, color: '#ff6b6b', fontSize: 12 }}>{inputError}</div>}

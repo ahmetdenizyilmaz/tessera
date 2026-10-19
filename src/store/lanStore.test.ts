@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { closeRemoteGroup, closeRemotePanel, restoreRemotePanels, revealRemoteGroup, syncRemoteGroups, useLanStore, type LanStatus, type RemotePanelInfo } from './lanStore';
+import { listen } from '@tauri-apps/api/event';
+import { closeRemoteGroup, closeRemotePanel, restoreRemotePanels, revealRemoteGroup, syncRemoteGroups, initLanBridge, useLanStore, type LanStatus, type RemotePanelInfo } from './lanStore';
 import { useGroupStore } from './groupStore';
 import { useLayoutStore } from './layoutStore';
 
@@ -30,6 +31,60 @@ beforeEach(() => {
 });
 afterEach(async () => { await vi.runOnlyPendingTimersAsync(); vi.useRealTimers(); });
 const remoteGroup = () => [...useGroupStore.getState().groups.values()].find(g => g.remotePeerId === 'peer')!;
+
+it('does not replace negotiated input capability with an older connection reply', async () => {
+  let finish!: (value: LanStatus) => void;
+  vi.mocked(invoke).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const connecting = useLanStore.getState().requestPair('192.168.1.2');
+  useLanStore.getState().setStatus({ ...status([{ ...panel, terminalInput: true }]), revision: 12 });
+  finish({ ...status([], true, false), revision: 11 });
+  expect(await connecting).toBe('peer');
+  expect(useLanStore.getState().status?.peers[0]).toMatchObject({ registryReady: true, panels: [{ terminalInput: true }] });
+});
+
+it('does not lose an incoming approval prompt to a delayed status response', () => {
+  const request = { requestId: 'new-request', deviceId: 'new-pc', name: 'New PC', address: '192.168.1.3', fingerprint: '1234', receivedAt: 1 };
+  useLanStore.getState().setStatus({ ...status([]), revision: 2, pendingRequests: [request] });
+  useLanStore.getState().setStatus({ ...status([]), revision: 1 });
+  expect(useLanStore.getState().status?.pendingRequests).toEqual([request]);
+});
+
+it('rechecks native status when an event is missed and preserves operation errors', async () => {
+  vi.mocked(invoke).mockResolvedValue({ ...status([], false), revision: 1 });
+  const stop = await initLanBridge();
+  try {
+    expect(useLanStore.getState().status?.peers[0].connected).toBe(false);
+    const request = { requestId: 'missed-event', deviceId: 'new-pc', name: 'New PC', address: '192.168.1.3', fingerprint: '1234', receivedAt: 1 };
+    vi.mocked(invoke).mockResolvedValue({ ...status([{ ...panel, terminalInput: true }]), revision: 2, pendingRequests: [request] });
+    useLanStore.getState().setError('The previous request was declined');
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(useLanStore.getState().status?.pendingRequests).toEqual([request]);
+    expect(useLanStore.getState().status?.peers[0].registryReady).toBe(true);
+    expect(useLanStore.getState().error).toBe('The previous request was declined');
+  } finally { stop(); }
+});
+
+it('discards saved revisions and listener state when the native process restarts', async () => {
+  storage.setItem('tessera-lan-public-state', JSON.stringify({ state: { status: { ...status([panel]), revision: 900, listening: true } }, version: 0 }));
+  await useLanStore.persist.rehydrate();
+  expect(useLanStore.getState().status?.revision).toBeUndefined();
+  expect(useLanStore.getState().status?.listening).toBe(false);
+  useLanStore.getState().setStatus({ ...status([]), revision: 1 });
+  expect(useLanStore.getState().status?.revision).toBe(1);
+});
+
+it('still reads incoming requests if registering an event listener fails', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  vi.mocked(listen).mockRejectedValueOnce(new Error('Listener registration failed'));
+  vi.mocked(invoke).mockResolvedValue({ ...status([]), revision: 1, listenError: 'Port is occupied', listening: false });
+  const stop = await initLanBridge();
+  try {
+    expect(useLanStore.getState().status?.listenError).toBe('Port is occupied');
+    vi.mocked(invoke).mockResolvedValue({ ...status([]), revision: 2, listenError: null, listening: true });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(useLanStore.getState().status?.listening).toBe(true);
+  } finally { stop(); warn.mockRestore(); }
+});
 
 it('reveals a successful connection from a wizard inside nested groups', async () => {
   const outer = useGroupStore.getState().createGroup(null, 'Local');

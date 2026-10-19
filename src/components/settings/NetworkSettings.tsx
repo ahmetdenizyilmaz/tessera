@@ -22,6 +22,7 @@ export function NetworkSettings() {
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
     setError(null);
+    useLanStore.getState().setError(null);
     try { await work(); } catch (err) { setError(String(err)); } finally { setBusy(false); }
   };
 
@@ -52,6 +53,18 @@ export function NetworkSettings() {
         <p className="form-hint">
           Lets other computers on the same private subnet send connection requests. Every request has to be approved here before anything is shared. Tessera does not use an internet relay or open router ports.
         </p>
+        {status.sharing && status.listenError && (
+          <div role="alert" style={{ color: 'var(--error, #ff6b6b)', fontSize: 12, lineHeight: 1.5 }}>
+            Incoming connection requests are unavailable. {status.listenError}
+            <div style={{ marginTop: 8 }}>
+              <button className="btn btn-secondary" disabled={busy}
+                onClick={() => void run(async () => apply(await invoke<LanStatus>('lan_set_sharing', { enabled: true })))}>
+                Retry listening
+              </button>
+            </div>
+          </div>
+        )}
+        {status.sharing && status.listening && <div className="form-hint">Ready for incoming requests on port {status.port}.</div>}
       </div>
 
       <div className="form-group">

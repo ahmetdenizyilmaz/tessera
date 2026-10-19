@@ -91,6 +91,14 @@ try {
   console.log('PASS screen queries and focus reports never become host input');
 
   writes.length = 0;
+  await viewer.evaluate(() => window.setRegistryReady(false));
+  await expect(tile.getByRole('status')).toContainText('Checking terminal access');
+  await expect(tile.getByText('Read-only.', { exact: false })).toHaveCount(0);
+  await type('not yet'); await viewer.keyboard.press('Enter');
+  expect(writes).toEqual([]);
+  await viewer.evaluate(() => window.setRegistryReady(true)); await ready();
+  console.log('PASS awaiting capability negotiation never claims the host is outdated or sends cached input');
+
   await viewer.evaluate(() => window.setInputSupported(false));
   await expect(tile.getByText('Read-only.', { exact: false })).toBeVisible();
   await type('old host'); await viewer.keyboard.press('Enter');
