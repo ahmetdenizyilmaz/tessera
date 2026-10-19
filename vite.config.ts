@@ -34,7 +34,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     // Native linker/manifest temporary files can be exclusively locked on Windows.
-    watch: { ignored: ['**/src-tauri/target/**'] },
+    watch: { ignored: ['**/src-tauri/target/**', '**/.tmp/**'] },
     hmr: {
       port: 1421,
     },

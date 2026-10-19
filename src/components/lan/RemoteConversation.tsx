@@ -3,13 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { Send } from 'lucide-react';
 import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { PathCwdContext } from '../../lib/openPath';
+import { remoteMessages, type RemoteMessage } from '../../lib/remoteConversation';
 
-interface Message { role?: string; content?: unknown; text?: unknown; timestamp?: string | null }
-const MessageBody = memo(function MessageBody({ message }: { message: Message }) {
+const MessageBody = memo(function MessageBody({ message }: { message: RemoteMessage }) {
   const [expanded, setExpanded] = useState(false);
-  const value = message.content ?? message.text ?? '';
-  const text = typeof value === 'string' ? value : Array.isArray(value)
-    ? value.map(p => typeof p === 'string' ? p : p?.text ?? '').filter(Boolean).join('\n') : JSON.stringify(value);
+  const text = message.content;
   return <div className={`remote-conversation-message ${message.role === 'user' ? 'user' : ''}`}>
     <div className="remote-conversation-role">{message.role ?? 'assistant'}</div>
     {expanded && text.length > 8000 ? <pre className="remote-conversation-long">{text}</pre>
@@ -22,7 +20,7 @@ const MessageBody = memo(function MessageBody({ message }: { message: Message })
 export function RemoteConversation({ deviceId, panelId, connected, reachable, busy, refreshKey, terminal }: {
   deviceId: string; panelId: string; connected: boolean; reachable: boolean; busy: boolean; refreshKey: number; terminal: boolean;
 }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<RemoteMessage[]>([]);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -37,9 +35,10 @@ export function RemoteConversation({ deviceId, panelId, connected, reachable, bu
     let timer: ReturnType<typeof setTimeout>;
     const refresh = async () => {
       try {
-        const result = await invoke<{ messages?: Message[]; note?: string }>('lan_read_panel', { deviceId, panelId, limit: 100 });
+        const result = await invoke<{ messages?: unknown; note?: string }>('lan_read_panel', { deviceId, panelId, limit: 100 });
         if (cancelled) return;
-        setMessages(old => JSON.stringify(old) === JSON.stringify(result.messages ?? []) ? old : result.messages ?? []);
+        const next = remoteMessages(result.messages);
+        setMessages(old => JSON.stringify(old) === JSON.stringify(next) ? old : next);
         setNote(result.note ?? ''); setError('');
       } catch (error) { if (!cancelled) setError(String(error)); }
       finally { if (!cancelled) { setLoading(false); timer = setTimeout(() => void refresh(), busy ? 2000 : 5000); } }

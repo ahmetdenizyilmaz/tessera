@@ -34,7 +34,10 @@ mockIPC(async (command, args) => {
     thread: { id: 'test-thread', turns: [] }, events: [], requests: [], materialized: true, busy: false, alive: true };
   if (command === 'lan_read_terminal') return window.readRemote(args.panelId, args.options);
   if (command === 'lan_terminal_input') return window.writeRemote?.(args);
-  if (command === 'lan_read_panel') return { messages: [{ role: 'assistant', content: 'Actual chat transcript' }] };
+  if (command === 'lan_read_panel') return { messages: args.panelId === 'host-codex'
+    ? [{ id: 'turn-one', items: [{type:'userMessage',content:[{type:'text',text:'Earlier Codex question'}]},
+        {type:'agentMessage',text:'Earlier Codex answer'}] }]
+    : [{ role: 'assistant', content: 'Actual chat transcript' }] };
   return null;
 }, { shouldMockEvents: true });
 

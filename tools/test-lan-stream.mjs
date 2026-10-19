@@ -104,6 +104,11 @@ try {
   await tile.getByTitle('Show terminal').click();
   await expect(tile.locator('.xterm')).toBeVisible();
   await equal();
+  const codexTile = viewer.locator('[data-fixture-id="host-codex"]');
+  await codexTile.getByTitle('Show conversation history').click();
+  await expect(codexTile.getByText('Earlier Codex question')).toBeVisible();
+  await expect(codexTile.getByText('Earlier Codex answer')).toBeVisible();
+  await codexTile.getByTitle('Show terminal').click();
   await viewer.evaluate(() => window.setStreamSupported(false));
   await expect(tile.getByText('Update Tessera on the host PC',{exact:false})).toBeVisible();
   expect(await viewer.evaluate(() => window.calls.filter(c=>c.command==='lan_terminal_input'||c.command==='lan_send_panel'))).toEqual([]);
