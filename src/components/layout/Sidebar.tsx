@@ -215,7 +215,7 @@ export function Sidebar() {
                 borderRadius: 6,
                 background: activeTab === tab.id && isOpen ? 'var(--bg-elevated)' : 'transparent',
                 color: isInPanel ? 'var(--accent)' : (activeTab === tab.id && isOpen ? 'var(--accent)' : 'var(--text-muted)'),
-                cursor: isInPanel ? 'pointer' : 'default',
+                cursor: 'pointer',
                 transition: 'all 0.15s',
                 opacity: isInPanel ? 0.5 : 1,
               }}
