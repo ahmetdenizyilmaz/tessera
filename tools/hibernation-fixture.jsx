@@ -11,6 +11,8 @@ import { useCodexStore } from '../src/store/codexStore';
 import { useSettingsStore } from '../src/store/settingsStore';
 import { usePanelHibernationStore } from '../src/store/panelHibernationStore';
 import { GeneralSettings } from '../src/components/settings/GeneralSettings';
+import { StatusBar } from '../src/components/statusbar/StatusBar';
+import { useSystemStore } from '../src/store/systemStore';
 import { serializeWorkspace, deserializeWorkspace } from '../src/lib/workspaceSerializer';
 import { isPanelViewed } from '../src/lib/panelActivityClock';
 import { ensureCodex } from '../src/lib/codexBridge';
@@ -45,6 +47,7 @@ mockIPC(async (command, args) => {
 }, { shouldMockEvents: true });
 
 useSettingsStore.getState().updateSettings({ panelHibernationMinutes: 60 });
+useSystemStore.getState().setSystemInfo({ cpuPercent: 12, memoryUsedGb: 32, memoryTotalGb: 128, memoryPercent: 25 });
 const saved = localStorage.getItem('hibernation-test-workspace');
 if (saved) deserializeWorkspace(JSON.parse(saved));
 else {
@@ -60,14 +63,15 @@ else {
 }
 Object.assign(window, {
   instances: useInstanceStore, codex: useCodexStore, hibernation: usePanelHibernationStore,
+  settings: useSettingsStore,
   ensureCodex, hibernatePanel, isPanelViewed,
   saveWorkspace: () => localStorage.setItem('hibernation-test-workspace', JSON.stringify(serializeWorkspace())),
-  markOld: id => useInstanceStore.getState().updateInstance(id, { hibernation: { sleeping: false, idleMs: 3600_000 } }),
+  markOld: (id, minutes = 60) => useInstanceStore.getState().updateInstance(id, { hibernation: { sleeping: false, idleMs: minutes * 60_000 } }),
 });
 function Fixture() {
   usePanelHibernation();
-  return <><div style={{ position: 'relative', height: '70vh' }}>
+  return <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}><div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
     <MosaicLayout />
-  </div><div style={{ padding: 12, height: '28vh', overflow: 'auto' }}><GeneralSettings /></div></>;
+  </div><div style={{ padding: 12, maxHeight: '24vh', overflow: 'auto' }}><GeneralSettings /></div><StatusBar /></div>;
 }
 createRoot(document.getElementById('root')).render(<Fixture />);

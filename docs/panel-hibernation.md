@@ -6,6 +6,12 @@ Panel controls menu also has **Hibernate panel**. A dimmed preview keeps the
 last visible terminal text (or recent chat text); **Wake panel** reconnects the
 same saved conversation, model and permissions without sending a prompt.
 
+Click the **RAM indicator** in the status bar for **Hibernate unused panels**.
+This one-off action hibernates eligible panels idle for at least 30 minutes of
+Tessera running time, even if automatic hibernation is disabled. The menu shows
+the eligible count and the result; active work, focus, approvals and drafts are
+still protected, and recently used panels are checked again before stopping.
+
 The idle clock accumulates only while Tessera runs. Closing Tessera or suspending
 the computer does not add time. Auto-save stores each panel's accumulated idle
 duration and sleeping state with its normal conversation identity. Restoring a
@@ -37,3 +43,5 @@ Verification:
 - With Vite running, `node tools/test-panel-hibernation.mjs <vite-url>` exercises
   real panel UI, retained text, app reload, waking from an unfocused tile and
   automatic hibernation with mocked native IPC. It never opens a user session.
+- `node tools/test-memory-hibernation.mjs <vite-url>` checks the RAM menu,
+  30-minute cleanup, busy protection, failed cleanup/retry and narrow windows.

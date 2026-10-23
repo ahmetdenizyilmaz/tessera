@@ -1,3 +1,5 @@
+import { useInstanceStore } from '../store/instanceStore';
+
 // Monotonic activity counters avoid store updates on every terminal byte.
 // Both user input and fresh output invalidate an in-progress idle check.
 const revisions = new Map<string, number>();
@@ -13,10 +15,19 @@ export function noteTerminalInput(id: string, data: string) {
   else if (data.replace(/\x1b\[[0-9;?]*[a-zA-Z~]/g, '').length) terminalDrafts.add(id);
 }
 export function hasTerminalDraft(id: string) { return terminalDrafts.has(id); }
-export function touchPanel(id: string) { revisions.set(id, (revisions.get(id) ?? 0) + 1); }
+export function touchPanel(id: string) {
+  revisions.set(id, (revisions.get(id) ?? 0) + 1);
+  const inst = useInstanceStore.getState().instances.get(id);
+  // A RAM-menu action can run between timer ticks. Invalidate old idle time
+  // immediately, but only write the store once until idle time accumulates again.
+  if (inst?.hibernation?.idleMs && !inst.hibernation.sleeping) {
+    useInstanceStore.getState().updateInstance(id, { hibernation: { ...inst.hibernation, idleMs: 0 } });
+  }
+}
 export function panelActivityRevision(id: string) { return revisions.get(id) ?? 0; }
 export function setPanelViewed(id: string, viewed: boolean, source = 'panel') {
   const sources = focused.get(id) ?? new Set<string>();
+  if (viewed && !sources.has(source)) touchPanel(id);
   if (viewed) sources.add(source); else sources.delete(source);
   if (sources.size) focused.set(id, sources); else focused.delete(id);
 }

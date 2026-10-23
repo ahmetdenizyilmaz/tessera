@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useInstanceStore } from '../store/instanceStore';
+import { useLayoutStore } from '../store/layoutStore';
 import { useCodexStore } from '../store/codexStore';
 import { useChatStore } from '../store/chatStore';
 import { useOpenCodeStore } from '../store/opencodeStore';
@@ -9,9 +10,48 @@ import { readTerminalPreview } from './terminalSharing';
 import { panelWorkState } from './panelWorkState';
 import { hasPanelDraft } from '../hooks/usePanelDraft';
 import { hasTerminalDraft, isPanelViewed, panelActivityRevision, touchPanel } from './panelActivityClock';
-import { supportsHibernation } from './panelHibernationPolicy';
+import { canAutoHibernate, normalizeHibernation, supportsHibernation } from './panelHibernationPolicy';
 
 const operations = new Map<string, Promise<void>>();
+export const UNUSED_PANEL_MINUTES = 30;
+export interface HibernateUnusedResult { hibernated: number; skipped: number; failed: number }
+let unusedOperation: Promise<HibernateUnusedResult> | undefined;
+
+function isIdleCandidate(id: string, minutes: number): boolean {
+  const inst = useInstanceStore.getState().instances.get(id);
+  const type = useLayoutStore.getState().panelTypes[id];
+  if (!inst || !supportsHibernation(inst) || inst.config.fork?.openingMessage
+    || ['remote', 'computer', 'widget', 'plugin', 'group'].includes(type)
+    || usePanelHibernationStore.getState().phases[id]) return false;
+  const saved = normalizeHibernation(inst.hibernation);
+  return canAutoHibernate({ enabledMinutes: minutes, idleMs: saved.idleMs,
+    focused: isPanelViewed(id), hasDraft: hasPanelDraft(id) || hasTerminalDraft(id),
+    ...panelWorkState(id), starting: inst.status === 'starting', sleeping: saved.sleeping });
+}
+
+export function idlePanelIds(minutes = UNUSED_PANEL_MINUTES): string[] {
+  return [...useInstanceStore.getState().instances.keys()].filter(id => isIdleCandidate(id, minutes));
+}
+
+/** One-off cleanup, independent of the automatic hibernation setting. */
+export function hibernateUnusedPanels(): Promise<HibernateUnusedResult> {
+  if (unusedOperation) return unusedOperation;
+  unusedOperation = Promise.resolve().then(async () => {
+    const result: HibernateUnusedResult = { hibernated: 0, skipped: 0, failed: 0 };
+    for (const id of idlePanelIds()) {
+      try {
+        // Recheck each panel at execution time: a turn, draft or focus change
+        // can happen while another panel's preview is being saved.
+        await hibernatePanel(id, true, UNUSED_PANEL_MINUTES);
+        if (useInstanceStore.getState().instances.get(id)?.hibernation?.sleeping) result.hibernated++;
+        else result.skipped++;
+      } catch { result.failed++; }
+    }
+    return result;
+  }).finally(() => { unusedOperation = undefined; });
+  return unusedOperation;
+}
+
 function phase(id: string, value?: 'hibernating' | 'waking', error?: string) {
   usePanelHibernationStore.setState(state => {
     const phases = { ...state.phases }, errors = { ...state.errors };
@@ -37,12 +77,13 @@ function capturePreview(id: string): PanelPreview {
   return { text: lines.filter(Boolean).join('\n\n').slice(-60_000), terminal: false };
 }
 
-export function hibernatePanel(id: string, automatic = false): Promise<void> {
+export function hibernatePanel(id: string, automatic = false, minimumIdleMinutes?: number): Promise<void> {
   const pending = operations.get(id);
   if (pending) return pending;
   const task = Promise.resolve().then(async () => {
     const inst = useInstanceStore.getState().instances.get(id);
     if (!inst || isPanelSuspended(id) || !supportsHibernation(inst)) return;
+    if (minimumIdleMinutes !== undefined && !isIdleCandidate(id, minimumIdleMinutes)) return;
     const work = panelWorkState(id);
     if (inst.status === 'starting' || inst.config.fork?.openingMessage || work.busy || hasPanelDraft(id) || hasTerminalDraft(id))
       throw new Error('Finish the current turn or draft before hibernating this panel.');

@@ -40,7 +40,7 @@ export function usePanelHibernation() {
           starting: inst.status === 'starting', sleeping: saved.sleeping })) candidates.push(id);
       }
       if (changed) useInstanceStore.setState({ instances: next });
-      for (const id of candidates) void hibernatePanel(id, true).catch(() => {
+      for (const id of candidates) void hibernatePanel(id, true, minutes).catch(() => {
         // A busy race or disk error must not hammer the native service.
         const inst = useInstanceStore.getState().instances.get(id);
         if (inst && !inst.hibernation?.sleeping) useInstanceStore.getState().updateInstance(id, {

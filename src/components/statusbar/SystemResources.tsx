@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useSystemStore } from '../../store/systemStore';
+import { MemoryPanelMenu } from './MemoryPanelMenu';
 
 function getLevel(percent: number): string {
   if (percent < 60) return 'low';
@@ -14,6 +15,9 @@ function formatGb(gb: number): string {
 }
 
 export const SystemResources: React.FC = () => {
+  const memoryButton = useRef<HTMLButtonElement>(null);
+  const [memoryMenu, setMemoryMenu] = useState(false);
+  const closeMemoryMenu = useCallback(() => setMemoryMenu(false), []);
   const cpuPercent = useSystemStore((s) => s.cpuPercent);
   const memoryUsedGb = useSystemStore((s) => s.memoryUsedGb);
   const memoryTotalGb = useSystemStore((s) => s.memoryTotalGb);
@@ -38,17 +42,22 @@ export const SystemResources: React.FC = () => {
         <span className="resource-value">{cpuPercent.toFixed(0)}%</span>
       </div>
 
-      <div className="resource-bar" title={`Memory: ${ramLabel}`}>
+      <button ref={memoryButton} type="button" className="resource-bar resource-memory-button"
+        title={`Memory: ${ramLabel} — Hibernate unused panels`}
+        aria-label="Memory usage and panel hibernation" aria-haspopup="dialog" aria-expanded={memoryMenu}
+        onClick={() => setMemoryMenu(open => !open)}>
         <span className="resource-label">RAM</span>
-        <div className="resource-track">
-          <div
+        <span className="resource-track">
+          <span
             className={`resource-fill ${getLevel(memoryPercent)}`}
             style={{ width: `${Math.min(100, memoryPercent)}%` }}
           />
-        </div>
+        </span>
         <span className="resource-value">{memoryPercent.toFixed(0)}%</span>
         {memoryTotalGb > 0 && <span className="resource-memory-detail">{formatGb(memoryUsedGb)} / {formatGb(memoryTotalGb)}</span>}
-      </div>
+      </button>
+      {memoryMenu && memoryButton.current && <MemoryPanelMenu anchor={memoryButton.current}
+        memoryLabel={ramLabel} onClose={closeMemoryMenu} />}
     </div>
   );
 };
