@@ -841,6 +841,7 @@ pub async fn antigravity_configure(
     state: tauri::State<'_, AntigravityManager>,
 ) -> Result<Value, String> {
     let _guard = state.gate.lock().await;
+    crate::hibernation::ensure_awake(&app, &id)?;
     config.validate()?;
     if conversation_id.as_deref().is_some_and(|id| !safe_id(id)) {
         return Err("Invalid Antigravity conversation ID.".into());
@@ -904,7 +905,8 @@ pub async fn antigravity_snapshot(
 }
 
 #[tauri::command]
-pub async fn antigravity_send(id: String, text: String, state: tauri::State<'_, AntigravityManager>) -> Result<(), String> {
+pub async fn antigravity_send(id: String, text: String, app: AppHandle, state: tauri::State<'_, AntigravityManager>) -> Result<(), String> {
+    crate::hibernation::ensure_awake(&app, &id)?;
     if text.trim().is_empty() {
         return Err("Enter a message.".into());
     }

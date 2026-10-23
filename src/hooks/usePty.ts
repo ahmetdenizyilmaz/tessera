@@ -7,6 +7,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useInstanceStore } from '../store/instanceStore';
 import { buildRoutingEnv } from '../lib/routingEnv';
+import { isPanelSuspended } from '../store/panelHibernationStore';
+import { noteTerminalInput } from '../lib/panelActivityClock';
 
 type PtyState = 'spawning' | 'running' | 'killing';
 
@@ -80,6 +82,7 @@ function registerExitListener(id: string) {
 
 export function usePty(instanceId: string) {
   const spawn = async (cols: number, rows: number) => {
+    if (isPanelSuspended(instanceId)) return;
     const currentState = spawnedPtys.get(instanceId);
     if (currentState === 'spawning' || currentState === 'running') return;
     // Allow re-spawn if state is 'killing' (React strict mode unmount/remount race)
@@ -185,6 +188,8 @@ export function usePty(instanceId: string) {
   };
 
   const write = async (data: string) => {
+    if (isPanelSuspended(instanceId)) return;
+    noteTerminalInput(instanceId, data);
     const prev = writeChains.get(instanceId) ?? Promise.resolve();
     const next = prev.then(() =>
       invoke<void>('pty_write', { id: instanceId, data }).catch((err) => {

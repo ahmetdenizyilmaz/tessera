@@ -24,6 +24,7 @@ import { beginPanelResize } from '../../lib/layoutHistory';
 import { installPanelMaximizeShortcut } from '../../lib/panelMaximize';
 import { resizePanels, samePanelRect } from '../../lib/panelResize';
 import { usePanelLockStore } from '../../store/panelLockStore';
+import { useInstanceStore } from '../../store/instanceStore';
 
 const EMPTY_TAB_ORDER: string[] = [];
 const EMPTY_RECTS = new Map<string, PanelRect>();
@@ -55,6 +56,10 @@ export function MosaicLayout() {
   const resetStealFraction = useLayoutStore((s) => s.resetStealFraction);
   const panelTypes = useLayoutStore((s) => s.panelTypes);
   const lockedIds = usePanelLockStore(s => s.lockedIds);
+  // A sleeping panel has no live input to protect; its Wake button should work
+  // on the first click even when it occupies an unfocused small slot.
+  const sleepingKey = useInstanceStore(s => [...s.instances.values()].filter(i => i.hibernation?.sleeping).map(i => i.id).join(','));
+  const sleepingIds = useMemo(() => new Set(sleepingKey.split(',')), [sleepingKey]);
 
   const sidebarDragging = useLayoutStore((s) => s.sidebarDragging);
   const sidebarDragSnap = useLayoutStore((s) => s.sidebarDragSnap);
@@ -600,7 +605,7 @@ export function MosaicLayout() {
             </PanelAppearance>
             </div>
             {/* Unfocused panel overlay: blocks xterm interactions until clicked */}
-            {!isFocused && !isDrag && tabOrder.length > 1 && (
+            {!isFocused && !isDrag && !sleepingIds.has(id) && tabOrder.length > 1 && (
               <div className="unfocused-overlay" />
             )}
           </div>

@@ -7,6 +7,19 @@ export function GeneralSettings() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="form-group">
+        <label className="form-label" htmlFor="panel-hibernation-timeout">Hibernate unused agent panels</label>
+        <select id="panel-hibernation-timeout" className="form-select" value={settings.panelHibernationMinutes}
+          onChange={event => updateSettings({ panelHibernationMinutes: Number(event.target.value) })}>
+          <option value={0}>Never automatically</option>
+          <option value={15}>After 15 minutes</option>
+          <option value={30}>After 30 minutes</option>
+          <option value={60}>After 1 hour</option>
+          <option value={120}>After 2 hours</option>
+          <option value={240}>After 4 hours</option>
+        </select>
+        <span className="form-hint">Frees idle agent processes and their MCP servers, keeping a dimmed preview. Wake resumes the conversation. Time with Tessera closed or your computer asleep does not count. Focused panels, active tasks, pending answers and drafts stay awake. Terminals without reliable activity reporting can be hibernated manually from Panel controls. Auto-save preserves sleeping panels across restarts.</span>
+      </div>
+      <div className="form-group">
         <label className="form-label">Default Model</label>
         <select
           className="form-select"

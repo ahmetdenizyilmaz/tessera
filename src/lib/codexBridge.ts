@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { isPanelSuspended } from '../store/panelHibernationStore';
+import { touchPanel } from './panelActivityClock';
 import { useCodexStore } from "../store/codexStore";
 import { useInstanceStore } from "../store/instanceStore";
 import type { CodexConfig, CodexEvent, CodexSnapshot } from "../types/codex";
@@ -30,6 +32,9 @@ function syncPermissions(id: string) {
 
 export function initCodexBridge() {
   return (listener ??= listen<CodexEvent>("codex-event", ({ payload }) => {
+    if (isPanelSuspended(payload.id)) return;
+    // Account/rate-limit polling is not work performed by this panel.
+    if (/^(turn|item)\//.test(payload.message.method)) touchPanel(payload.id);
     const instance = useInstanceStore.getState().instances.get(payload.id);
     if (instance?.config.agentProvider !== "codex") return;
     useCodexStore.getState().receive(payload);
@@ -64,6 +69,7 @@ export function codexConfig(config: InstanceConfig): CodexConfig {
   };
 }
 export async function ensureCodex(id: string): Promise<void> {
+  if (isPanelSuspended(id)) return;
   if (configuring.has(id)) return configuring.get(id);
   const task = (async () => {
     await initCodexBridge();
@@ -75,7 +81,7 @@ export async function ensureCodex(id: string): Promise<void> {
       config: codexConfig(inst.config),
       threadId: inst.codexThreadId ?? null,
     });
-    if (!useInstanceStore.getState().instances.has(id)) {
+    if (!useInstanceStore.getState().instances.has(id) || isPanelSuspended(id)) {
       await invoke("codex_close", { id });
       return;
     }

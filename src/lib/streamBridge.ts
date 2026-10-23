@@ -13,6 +13,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { parseLine } from './streamJsonParser';
 import { useChatStore } from '../store/chatStore';
 import { useEventBusStore } from '../store/eventBusStore';
+import { isPanelSuspended } from '../store/panelHibernationStore';
+import { touchPanel } from './panelActivityClock';
 
 declare global {
   interface Window {
@@ -25,6 +27,7 @@ declare global {
 
 export function initStreamBridge() {
   window.__streamPush = (instanceId: string, line: string) => {
+    if (isPanelSuspended(instanceId)) return;
     let parsed = parseLine(line);
     // --include-partial-messages wraps deltas: {"type":"stream_event","event":{...}}
     if (parsed && (parsed as { type: string }).type === 'stream_event') {
@@ -32,6 +35,7 @@ export function initStreamBridge() {
       parsed = inner && typeof inner.type === 'string' ? (inner as typeof parsed) : null;
     }
     if (parsed) {
+      touchPanel(instanceId);
       useChatStore.getState().processEvent(instanceId, parsed);
 
       // Forward complete assistant messages to the event bus so plugins can read them
@@ -87,6 +91,7 @@ export function initStreamBridge() {
   };
 
   window.__streamExit = (instanceId: string, exitCode?: number | null) => {
+    if (isPanelSuspended(instanceId)) return;
     const store = useChatStore.getState();
     // Was a turn still in flight when the process died? (A clean /clear or
     // tab close ends the process after the turn completed.)
@@ -111,6 +116,7 @@ export function initStreamBridge() {
   };
 
   window.__streamError = (instanceId: string, error: string) => {
+    if (isPanelSuspended(instanceId)) return;
     // The CLI writes non-fatal diagnostics to stderr (MCP startup notices,
     // node deprecation warnings, --verbose chatter). Only treat clearly
     // fatal-looking lines as session errors; everything else is a warning.

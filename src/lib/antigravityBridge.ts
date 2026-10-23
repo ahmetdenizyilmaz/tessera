@@ -5,6 +5,8 @@ import type { AntigravityConfig, AntigravityOptions, AntigravitySnapshot } from 
 import { snapshot as panelRoster } from './panelBus';
 import { useLayoutStore } from '../store/layoutStore';
 import { useGroupStore } from '../store/groupStore';
+import { isPanelSuspended } from '../store/panelHibernationStore';
+import { touchPanel } from './panelActivityClock';
 
 const configuring = new Map<string, Promise<void>>();
 const watchers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -18,8 +20,10 @@ export function antigravityConfig(id: string): AntigravityConfig {
 }
 
 function apply(id: string, snapshot: AntigravitySnapshot) {
+  if (isPanelSuspended(id)) return;
   const inst = useInstanceStore.getState().instances.get(id);
   if (!inst) return;
+  if (useAntigravityStore.getState().sessions[id]?.revision !== snapshot.revision) touchPanel(id);
   useAntigravityStore.getState().receive(id, snapshot);
   const terminal = inst.config.panelView === 'terminal';
   // A terminal's status belongs to its PTY; a chat panel is usable whenever it is configured.
@@ -61,6 +65,7 @@ export function stopAntigravityWatch(id: string) {
  *  its conversation ID (new chat panels); restored panels stay process-free until
  *  their next message, so opening a workspace costs no CLI start or model call. */
 export async function ensureAntigravity(id: string, start = false): Promise<void> {
+  if (isPanelSuspended(id)) return;
   if (configuring.has(id)) return configuring.get(id);
   if (useAntigravityStore.getState().sessions[id]?.configured && !start) return;
   const task = (async () => {
@@ -71,7 +76,7 @@ export async function ensureAntigravity(id: string, start = false): Promise<void
     epochs.set(id, epoch);
     clearTimeout(watchers.get(id)); watchers.delete(id);
     const result = await invoke<AntigravitySnapshot>('antigravity_configure', { id, config: antigravityConfig(id), conversationId: inst.antigravityConversationId ?? null, start });
-    if (epochs.get(id) !== epoch || !useInstanceStore.getState().instances.has(id)) {
+    if (epochs.get(id) !== epoch || !useInstanceStore.getState().instances.has(id) || isPanelSuspended(id)) {
       await invoke('antigravity_close', { id });
       throw new Error('Panel creation was cancelled.');
     }
@@ -111,7 +116,7 @@ export function initAntigravityBridge(): () => void {
     if (timer) return;
     timer = setTimeout(() => {
       timer = undefined;
-      const live = new Set(panelRoster().filter(panel => panel.provider === 'antigravity').map(panel => panel.id));
+      const live = new Set(panelRoster().filter(panel => panel.provider === 'antigravity' && !isPanelSuspended(panel.id)).map(panel => panel.id));
       for (const id of attempted) if (!live.has(id)) { attempted.delete(id); stopAntigravityWatch(id); }
       for (const id of live) {
         if (attempted.has(id)) continue;

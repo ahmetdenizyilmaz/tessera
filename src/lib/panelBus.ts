@@ -85,7 +85,7 @@ export function snapshot(): PanelInfoPayload[] {
       name: inst.name,
       cwd: inst.config.cwd,
       kind,
-      status: inst.status,
+      status: inst.hibernation?.sleeping ? 'hibernated' : inst.status,
       busy: antigravity ? antigravity.busy : opencode ? opencode.status.type !== 'idle' : codex?.busy ?? session?.isStreaming ?? false,
       awaiting_user: opencode ? opencode.permissions.length + opencode.questions.length > 0 : (codex?.requests.length ?? session?.controlRequests?.length ?? 0) > 0,
       model: inst.config.model || null,

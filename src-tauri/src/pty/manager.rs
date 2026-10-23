@@ -198,6 +198,7 @@ pub async fn pty_spawn(
     app: AppHandle,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
+    crate::hibernation::ensure_awake(&app, &id)?;
     let pty_system = native_pty_system();
 
     let pair = pty_system
@@ -305,6 +306,7 @@ pub async fn pty_spawn(
 
 /// Codex supplies its own command; Claude argument and environment construction stays above.
 pub fn spawn_prepared(id: String, cmd: CommandBuilder, cols: u16, rows: u16, app: &AppHandle, state: &PtyManager, quiet_goal_resume: bool) -> Result<(), String> {
+    crate::hibernation::ensure_awake(app, &id)?;
     let pair = native_pty_system().openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("Cannot start terminal: {e}"))?;
     install_pair(id, pair, child, app, state, None, quiet_goal_resume)

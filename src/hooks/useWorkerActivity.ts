@@ -12,6 +12,7 @@ import { useLayoutStore } from '../store/layoutStore';
 import { interactionTile, workerDestination } from '../lib/officeSpace';
 import { antigravitySignal, claudeSignal, codexSignal, openCodeSignal, recordedSignal, cleanTask, type WorkSignal } from '../lib/officeActivity';
 import type { ActivityPage, ActivityRecord } from '../types/activity';
+import { recordPanelWorkState } from '../lib/panelWorkState';
 
 /** Stable record IDs make polling, replay, and reopening the office idempotent. */
 export function ingestOfficeRecords(records: ActivityRecord[]) {
@@ -29,6 +30,7 @@ export function useWorkerActivity(): void {
     const latest = new Map<string, ActivityRecord>();
     const latestBySession = new Map<string, ActivityRecord>();
     let pricingReady = false;
+    let activityCheckedAt = -Infinity;
 
     function sync() {
       timer = undefined;
@@ -66,6 +68,8 @@ export function useWorkerActivity(): void {
         } else {
           state = claudeSignal(useChatStore.getState().sessions.get(id));
         }
+        recordPanelWorkState(id, state.activity, activityCheckedAt);
+        if (instance.hibernation?.sleeping) state = { activity: 'idle', task: '', detail: 'Hibernating — wake the panel to resume' };
         let worker = useOfficeGameStore.getState().workers[id];
         if (!worker) {
           store.addWorker(id, workerDestination(store.layout, 'new', index, occupied));
@@ -117,6 +121,7 @@ export function useWorkerActivity(): void {
           refreshOffset += 1000;
         } while (!disposed && (before || refreshOffset < pending.length));
         const collected = [...records.values()];
+        activityCheckedAt = performance.now();
         ingestOfficeRecords(collected);
         const waiting = new Set(store.pendingRecords);
         for (const r of collected) {

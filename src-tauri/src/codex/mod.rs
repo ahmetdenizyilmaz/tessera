@@ -378,6 +378,7 @@ pub async fn configure(
 ) -> Result<Value, String> {
     config.validate()?;
     let _gate = manager.gate.lock().await;
+    crate::hibernation::ensure_awake(app, &id)?;
     {
         let sessions = manager.sessions.lock().unwrap();
         if let Some(s) = sessions.get(&id) {
@@ -556,8 +557,10 @@ pub async fn codex_send(
     images: Option<Vec<String>>,
     model: Option<String>,
     effort: Option<String>,
+    app: AppHandle,
     state: tauri::State<'_, CodexManager>,
 ) -> Result<Value, String> {
+    crate::hibernation::ensure_awake(&app, &id)?;
     send(
         &state,
         &id,

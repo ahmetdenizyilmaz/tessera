@@ -92,6 +92,9 @@ pub struct StreamJsonManager {
 }
 
 impl StreamJsonManager {
+    pub fn has_pending_turn(&self, id: &str) -> bool {
+        self.instances.lock().map(|instances| instances.get(id).is_some_and(|i| i.pending_turns > 0)).unwrap_or(true)
+    }
     pub fn new() -> Self {
         Self {
             instances: Arc::new(Mutex::new(HashMap::new())),
@@ -320,6 +323,7 @@ fn ensure_process(
     app: &AppHandle,
     state: &tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
+    crate::hibernation::ensure_awake(app, id)?;
     let claude_exe = claude_paths::find_claude_exe()
         .ok_or_else(|| "Could not find claude executable".to_string())?;
     let window: Webview = app
@@ -831,6 +835,7 @@ pub fn send_user_turn(
     app: &AppHandle,
     state: &tauri::State<'_, StreamJsonManager>,
 ) -> Result<(), String> {
+    crate::hibernation::ensure_awake(app, id)?;
     ensure_process(id, app, state)?;
 
     let payload = serde_json::json!({

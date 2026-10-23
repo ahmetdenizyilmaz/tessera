@@ -11,6 +11,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { XTermView } from "./XTermView";
 import { PathCwdContext } from '../../lib/openPath';
 import { AgentPanelHeader } from "./AgentPanelHeader";
+import { HibernatedPanel } from './HibernatedPanel';
+import { usePanelHibernationStore } from '../../store/panelHibernationStore';
+import { setPanelViewed, touchPanel } from '../../lib/panelActivityClock';
+import { usePanelLayout } from '../windows/PanelWindowContext';
 import ChatView from "../chat/ChatView";
 import { History } from "lucide-react";
 import { startFork, submitForkOpeningToTerminal } from "../../lib/forkActions";
@@ -33,11 +37,34 @@ export function TerminalPanel({ instanceId }: { instanceId: string }) {
     (s) => s.instances.get(instanceId)?.config.agentProvider,
   );
   const cwd = useInstanceStore(s => s.instances.get(instanceId)?.config.cwd);
-  return <PathCwdContext.Provider value={cwd}>{provider === 'antigravity' ? <AntigravityPanel instanceId={instanceId} /> : provider === 'opencode' ? <OpenCodePanel instanceId={instanceId} /> : provider === "codex" ? (
+  const sleeping = useInstanceStore(s => s.instances.get(instanceId)?.hibernation?.sleeping);
+  const phase = usePanelHibernationStore(s => s.phases[instanceId]);
+  const error = usePanelHibernationStore(s => s.errors[instanceId]);
+  const layout = usePanelLayout();
+  const focused = layout(s => s.focusedId === instanceId || s.maximizedId === instanceId);
+  useEffect(() => {
+    setPanelViewed(instanceId, focused);
+    return () => setPanelViewed(instanceId, false);
+  }, [instanceId, focused]);
+  const touch = () => { if (!sleeping) touchPanel(instanceId); };
+  return <PathCwdContext.Provider value={cwd}><div className="panel-lifecycle" onPointerDownCapture={touch}
+    onKeyDownCapture={event => {
+      if (phase === 'hibernating') { event.preventDefault(); event.stopPropagation(); return; }
+      touch();
+    }} onWheelCapture={touch}>
+    {sleeping ? <HibernatedPanel instanceId={instanceId} /> : provider === 'antigravity' ? <AntigravityPanel instanceId={instanceId} /> : provider === 'opencode' ? <OpenCodePanel instanceId={instanceId} /> : provider === "codex" ? (
     <CodexPanel instanceId={instanceId} />
   ) : (
     <ClaudeTerminalPanel instanceId={instanceId} />
-  )}</PathCwdContext.Provider>;
+  )}
+    {!sleeping && phase === 'hibernating' && <div className="hibernating-blocker" />}
+    {!sleeping && (phase || error) && <div className="hibernation-notice" role={error ? 'alert' : 'status'}>
+      {phase === 'waking' ? 'Waking conversation…' : phase ? 'Saving preview and hibernating…' : error}
+      {!phase && <button type="button" aria-label="Dismiss hibernation message" onClick={() => usePanelHibernationStore.setState(s => {
+        const errors = { ...s.errors }; delete errors[instanceId]; return { errors };
+      })}>×</button>}
+    </div>}
+  </div></PathCwdContext.Provider>;
 }
 function ClaudeTerminalPanel({ instanceId }: { instanceId: string }) {
   const instance = useInstanceStore((s) => s.instances.get(instanceId));

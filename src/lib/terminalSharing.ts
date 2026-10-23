@@ -23,6 +23,8 @@ export interface TerminalSnapshot {
 }
 
 const sources = new Map<string, (options?: TerminalReadOptions) => Promise<TerminalSnapshot>>();
+const previews = new Map<string, () => { text: string; terminal: boolean; fontSize: number; fontFamily: string }>();
+export function readTerminalPreview(id: string) { return previews.get(id)?.(); }
 const MAX_SNAPSHOT_BYTES = 800 * 1024;
 
 /** Share the rendered VT state, never a truncated tail of raw PTY output. */
@@ -102,11 +104,22 @@ export function registerSharedTerminal(id: string, terminal: Terminal, serialize
     });
   };
   sources.set(id, snapshot);
+  const preview = () => {
+    const buffer = terminal.buffer.active;
+    const lines: string[] = [];
+    // Save precisely the visible screen, including TUIs in the alternate buffer.
+    for (let row = buffer.viewportY; row < Math.min(buffer.length, buffer.viewportY + terminal.rows); row++)
+      lines.push(buffer.getLine(row)?.translateToString(true) ?? '');
+    return { text: lines.join('\n').slice(-60_000), terminal: true,
+      fontSize: terminal.options.fontSize ?? 14, fontFamily: terminal.options.fontFamily ?? 'monospace' };
+  };
+  previews.set(id, preview);
   const dispose = () => {
     alive = false;
     clearTimeout(expiry); resized.dispose(); journal.dispose();
     terminal.write = originalWrite;
     if (sources.get(id) === snapshot) sources.delete(id);
+    if (previews.get(id) === preview) previews.delete(id);
   };
   return Object.assign(dispose, { reclaimLocal: retire });
 }

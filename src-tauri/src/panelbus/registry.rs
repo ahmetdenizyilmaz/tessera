@@ -56,7 +56,7 @@ impl PanelInfo {
     /// a provider API, not a Claude Code process, so there is nothing to write
     /// a user turn into.
     pub fn reachable(&self) -> bool {
-        self.connected && (self.kind == "chat" || self.kind == "terminal" || self.kind == "html-plugin")
+        self.connected && self.status != "hibernated" && (self.kind == "chat" || self.kind == "terminal" || self.kind == "html-plugin")
     }
 
     pub fn qualified_name(&self) -> String {
@@ -205,6 +205,16 @@ pub enum Resolution {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sleeping_panels_are_listed_but_cannot_receive_messages() {
+        let mut panel = PanelInfo::ui_sender();
+        panel.kind = "terminal".into();
+        assert!(panel.reachable());
+        panel.status = "hibernated".into();
+        assert!(!panel.reachable());
+        panel.status = "running".into();
+        assert!(panel.reachable());
+    }
 
     fn remote_panel(id: &str, name: &str) -> crate::lan::protocol::RemotePanelInfo {
         crate::lan::protocol::RemotePanelInfo {

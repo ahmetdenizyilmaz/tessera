@@ -24,6 +24,8 @@ import type { ClaudeInstance } from '../../types/instance';
 import type { CodexItem, CodexThread } from '../../types/codex';
 import type { OpenCodeSnapshot } from '../../types/opencode';
 import type { AntigravitySnapshot } from '../../types/antigravity';
+import { HibernatedPanel } from '../terminal/HibernatedPanel';
+import { setPanelViewed, touchPanel } from '../../lib/panelActivityClock';
 
 interface HistoryMessage { role: string; content: string; timestamp?: string | null }
 interface History { claude?: HistoryMessage[]; codex?: CodexItem[]; opencode?: OpenCodeSnapshot; antigravity?: AntigravitySnapshot }
@@ -41,7 +43,18 @@ const TranscriptMessage = memo(function TranscriptMessage({ role, text, provider
 
 /** Observe the existing sessions. Opening this view never configures a provider,
  * starts a turn, mounts a second terminal, or registers a second stream consumer. */
-export function OfficeChat({ instance, onClose, onOpen }: { instance: ClaudeInstance; onClose: () => void; onOpen: (id: string) => void }) {
+type OfficeChatProps = { instance: ClaudeInstance; onClose: () => void; onOpen: (id: string) => void };
+export function OfficeChat(props: OfficeChatProps) {
+  const id = props.instance.id;
+  useEffect(() => {
+    setPanelViewed(id, true, 'office'); touchPanel(id);
+    return () => setPanelViewed(id, false, 'office');
+  }, [id]);
+  return props.instance.hibernation?.sleeping
+    ? <aside className="office-chat"><HibernatedPanel instanceId={id} onClose={props.onClose} /></aside>
+    : <ActiveOfficeChat {...props} />;
+}
+function ActiveOfficeChat({ instance, onClose, onOpen }: OfficeChatProps) {
   const id = instance.id, provider = officeProvider(instance), providerName = PROVIDER_NAMES[provider] ?? provider;
   const claude = useChatStore(s => s.sessions.get(id));
   const codex = useCodexStore(s => s.sessions[id]);

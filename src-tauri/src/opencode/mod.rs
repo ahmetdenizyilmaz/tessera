@@ -342,6 +342,7 @@ pub async fn opencode_configure(
     state: tauri::State<'_, OpenCodeManager>,
 ) -> Result<Value, String> {
     let _guard = state.gate.lock().await;
+    crate::hibernation::ensure_awake(&app, &id)?;
     config.validate()?;
     if let Ok(existing) = state.get(&id) {
         if existing.config != config {
@@ -517,6 +518,7 @@ pub async fn opencode_snapshot(
 }
 
 pub async fn send(app: &AppHandle, id: &str, text: String, no_reply: bool) -> Result<(), String> {
+    crate::hibernation::ensure_awake(app, id)?;
     let server = app.state::<OpenCodeManager>().get(id)?;
     let _guard = server.gate.lock().await;
     let snapshot = server.snapshot().await?;

@@ -228,6 +228,7 @@ fn announce_exchange(app: &AppHandle, from_id: &str, to_id: &str, to_name: &str,
 async fn send_to_panel_traced(app: &AppHandle, caller_id: &str, args: Value, trace: &str) -> Result<Value, String> {
     let bus = app.state::<PanelBus>();
     let target = resolve_target(&bus, caller_id, &args)?;
+    if target.remote_device_id.is_none() { crate::hibernation::ensure_awake(app, &target.id)?; }
 
     let message = args
         .get("message")
@@ -461,6 +462,7 @@ pub async fn deliver_inbound(
     target_id: &str,
     wrapped: &str,
 ) -> Result<Value, String> {
+    crate::hibernation::ensure_awake(app, target_id)?;
     let bus = app.state::<PanelBus>();
     let target = bus
         .with_registry(|r| r.get(target_id).cloned())
@@ -498,6 +500,7 @@ pub async fn deliver_inbound(
 /// Read only a local panel. Used by both the MCP tool and the LAN request
 /// handler, with the same transcript implementation and limits.
 pub async fn read_local(app: &AppHandle, target_id: &str, limit: usize) -> Result<Value, String> {
+    crate::hibernation::ensure_awake(app, target_id)?;
     let bus = app.state::<PanelBus>();
     let target = bus
         .with_registry(|r| r.get(target_id).cloned())

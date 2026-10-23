@@ -5,6 +5,14 @@ import { useInstanceStore } from '../store/instanceStore';
 // Group navigation unmounts composers. Keep drafts in memory until the panel
 // really closes; do not save potentially sensitive unsent content to disk.
 const useDrafts = create<{ panels: Record<string, Record<string, unknown>> }>(() => ({ panels: {} }));
+export function hasPanelDraft(id: string): boolean {
+  return Object.values(useDrafts.getState().panels[id] ?? {}).some(value =>
+    value === true || (typeof value === 'string' ? value.trim().length > 0 : Array.isArray(value) && value.length > 0));
+}
+/** Legacy Claude composers also keep queued messages and attachments locally. */
+export function setPanelDraftProtection(id: string, pending: boolean) {
+  useDrafts.setState(state => ({ panels: { ...state.panels, [id]: { ...state.panels[id], pendingClaudeDraft: pending } } }));
+}
 useInstanceStore.subscribe((state, previous) => {
   if (state.instances === previous.instances) return;
   const panels = useDrafts.getState().panels;

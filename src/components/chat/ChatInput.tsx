@@ -7,6 +7,7 @@ import { SlashCommandPopup } from './SlashCommandPopup';
 import { QueueDisplay } from './QueueDisplay';
 import { useProjectFiles } from '../../hooks/useProjectFiles';
 import { useInstanceStore } from '../../store/instanceStore';
+import { setPanelDraftProtection } from '../../hooks/usePanelDraft';
 
 const LINE_HEIGHT = 20;
 const MIN_LINES = 1;
@@ -45,6 +46,7 @@ const FALLBACK_SLASH_COMMANDS = [
 
 /** Call when an instance is permanently closed to free the draft memory. */
 export function clearInstanceDraft(instanceId: string): void {
+  setPanelDraftProtection(instanceId, false);
   draftStore.delete(instanceId);
   draftListeners.delete(instanceId);
 }
@@ -65,6 +67,7 @@ export function insertIntoDraft(instanceId: string, text: string): void {
   const needsSpace = current.length > 0 && !/\s$/.test(current);
   const next = current + (needsSpace ? ' ' : '') + text;
   draftStore.set(instanceId, next);
+  setPanelDraftProtection(instanceId, !!next.trim());
   draftListeners.get(instanceId)?.(next);
 }
 
@@ -132,6 +135,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({ instanceId, onSend, isRead
   }, [value, adjustHeight]);
 
   const hasContent = value.trim().length > 0 || images.length > 0;
+  useEffect(() => {
+    setPanelDraftProtection(instanceId, hasContent || messageQueue.length > 0);
+  }, [instanceId, hasContent, messageQueue.length]);
   const canSend = hasContent && !isSaving;
 
   // Auto-execute queued messages when streaming finishes

@@ -18,6 +18,7 @@ import type { PluginManifest } from '../types/plugin';
 import { useAppearanceStore } from '../store/appearanceStore';
 import type { PanelBackground } from './panelBackground';
 import { usePanelLockStore } from '../store/panelLockStore';
+import { normalizeHibernation, type PanelHibernation } from './panelHibernationPolicy';
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export interface SavedInstance {
   name: string;
   color: string;
   config: InstanceConfig;
+  hibernation?: PanelHibernation;
   claudeSessionId?: string;
   codexThreadId?: string;
   codexHasTurns?: boolean;
@@ -150,6 +152,7 @@ export function serializeWorkspace(): WorkspaceSnapshotV3 {
       name: inst.name,
       color: inst.color,
       config: inst.config,
+      hibernation: inst.hibernation,
       claudeSessionId: inst.claudeSessionId,
       // Older empty chats have no rollout. Named empty terminals do: retain
       // their exact identity without inventing a first message.
@@ -341,6 +344,8 @@ export function deserializeWorkspace(raw: unknown): void {
 
   for (const inst of liveInstances) {
     const newId = useInstanceStore.getState().addInstance(inst.config, inst.name);
+    useInstanceStore.getState().updateInstance(newId, { hibernation: normalizeHibernation(inst.hibernation),
+      ...(inst.hibernation?.sleeping ? { status: 'stopped' as const } : {}) });
     idMap.set(inst.id, newId);
 
     if (inst.config.agentProvider === 'opencode' && inst.opencodeDataId) {
@@ -392,6 +397,8 @@ export function deserializeWorkspace(raw: unknown): void {
   }
 
   const remapId = (id: string) => idMap.get(id) ?? id;
+  const sleepingIds = [...idMap.values()].filter(id => useInstanceStore.getState().instances.get(id)?.hibernation?.sleeping);
+  if (sleepingIds.length) void invoke('panel_hibernation_restore', { ids: sleepingIds }).catch(error => console.error('[hibernation] restore guard:', error));
   useRecentPanelStore.getState().remap(idMap);
 
   // Recreate plugin instances under their saved (stable) panel ids

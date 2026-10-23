@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
   autoSave: true,
+  panelHibernationMinutes: 60,
   autoSaveDir: '',
   systemMonitorInterval: 3000,
   usagePollingInterval: 600000,

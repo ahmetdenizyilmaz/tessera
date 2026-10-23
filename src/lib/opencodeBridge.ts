@@ -6,6 +6,8 @@ import { peekForkContext, markForkConsumed } from './forkActions';
 import { snapshot as panelRoster } from './panelBus';
 import { useLayoutStore } from '../store/layoutStore';
 import { useGroupStore } from '../store/groupStore';
+import { isPanelSuspended } from '../store/panelHibernationStore';
+import { touchPanel } from './panelActivityClock';
 
 const configuring = new Map<string, Promise<void>>();
 const watchers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -17,7 +19,9 @@ export function openCodeConfig(id: string): OpenCodeConfig {
   return { ...inst.config.opencode, cwd: inst.config.cwd, model: inst.config.model, dataId: inst.opencodeDataId };
 }
 function apply(id: string, snapshot: OpenCodeSnapshot) {
+  if (isPanelSuspended(id)) return;
   if (!useInstanceStore.getState().instances.has(id)) return;
+  if (useOpenCodeStore.getState().sessions[id]?.revision !== snapshot.revision) touchPanel(id);
   useOpenCodeStore.getState().receive(id, snapshot);
   const inst = useInstanceStore.getState().instances.get(id)!;
   const model = snapshot.model || inst.config.model;
@@ -54,6 +58,7 @@ export function stopOpenCodeWatch(id: string) {
   useOpenCodeStore.getState().remove(id);
 }
 export async function ensureOpenCode(id: string): Promise<void> {
+  if (isPanelSuspended(id)) return;
   if (configuring.has(id)) return configuring.get(id);
   if (useOpenCodeStore.getState().sessions[id]?.connected && !useInstanceStore.getState().instances.get(id)?.config.fork?.pending) return;
   const task = (async () => {
@@ -63,7 +68,7 @@ export async function ensureOpenCode(id: string): Promise<void> {
     const epoch = (epochs.get(id) ?? 0) + 1;
     epochs.set(id, epoch);
     const result = await invoke<OpenCodeSnapshot>('opencode_configure', { id, config: openCodeConfig(id), sessionId: inst.opencodeSessionId ?? null });
-    if (epochs.get(id) !== epoch || !useInstanceStore.getState().instances.has(id)) {
+    if (epochs.get(id) !== epoch || !useInstanceStore.getState().instances.has(id) || isPanelSuspended(id)) {
       await invoke('opencode_close', { id });
       throw new Error('Panel creation was cancelled.');
     }
@@ -93,7 +98,7 @@ export function initOpenCodeBridge(): () => void {
     if (timer) return;
     timer = setTimeout(() => {
       timer = undefined;
-      const live = new Set(panelRoster().filter(panel => panel.provider === 'opencode').map(panel => panel.id));
+      const live = new Set(panelRoster().filter(panel => panel.provider === 'opencode' && !isPanelSuspended(panel.id)).map(panel => panel.id));
       for (const id of attempted) if (!live.has(id)) { attempted.delete(id); stopOpenCodeWatch(id); }
       for (const id of live) {
         if (attempted.has(id)) continue;

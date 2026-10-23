@@ -25,6 +25,7 @@ pub mod ws;
 pub mod workspace_windows;
 pub mod website_icon;
 pub mod html_plugins;
+pub mod hibernation;
 
 use analytics::posthog::PostHogTracker;
 use db::Database;
@@ -59,6 +60,7 @@ pub fn run() {
         .manage(launch::LaunchQueue::default())
         .manage(browser::BrowserPanels::default())
         .manage(html_plugins::HtmlPlugins::default())
+        .manage(hibernation::HibernationState::default())
         .manage(lan_manager)
         .manage(lan::terminal::TerminalRequests::default())
         .setup(|app| {
@@ -149,6 +151,10 @@ pub fn run() {
             html_plugins::serve(ctx.app_handle().clone(), ctx.webview_label().to_string(), request, responder);
         })
         .invoke_handler(main_view_commands(tauri::generate_handler![
+            hibernation::panel_hibernate,
+            hibernation::panel_wake,
+            hibernation::panel_hibernation_restore,
+            hibernation::panel_preview_read,
             html_plugins::bundled::html_plugin_migrate_notes,
             html_plugins::catalog::html_catalog_list,html_plugins::catalog::html_catalog_preview,
             html_plugins::scan_plugins,

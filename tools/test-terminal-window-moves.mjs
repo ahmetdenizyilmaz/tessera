@@ -8,7 +8,7 @@ await page.route('**/terminal-window-test', route => route.fulfill({ contentType
 <script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script>
 <script type="module" src="/tools/panel-ui-fixture.jsx"></script>` }));
 try {
-  await page.goto('http://127.0.0.1:1420/terminal-window-test');
+  await page.goto(`${process.argv[2] || 'http://127.0.0.1:1420'}/terminal-window-test`);
   await page.waitForFunction(() => !!window.showMosaic);
   await page.evaluate(() => {
     // Observe actual xterm parsing and fitting across component remounts.

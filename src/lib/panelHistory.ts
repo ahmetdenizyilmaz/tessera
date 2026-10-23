@@ -127,7 +127,7 @@ export function restoreClosedPanel(saved: ClosedPanel, wizardId?: string): boole
     if (findRememberedPanel(panel)) return false;
     if (panel.instance) {
       const inst = clone(panel.instance);
-      inst.status = 'starting';
+      inst.status = inst.hibernation?.sleeping ? 'stopped' : 'starting';
       if (inst.codexThreadId) inst.codexResumable = true;
       useInstanceStore.setState(state => ({ instances: new Map(state.instances).set(inst.id, inst) }));
     }

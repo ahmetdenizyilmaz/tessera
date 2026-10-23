@@ -80,6 +80,7 @@ export interface ClaudeInstance {
   color: string;
   config: InstanceConfig;
   status: 'starting' | 'running' | 'stopped' | 'error';
+  hibernation?: import('../lib/panelHibernationPolicy').PanelHibernation;
   claudeSessionId?: string;
   codexThreadId?: string;
   codexHasTurns?: boolean;

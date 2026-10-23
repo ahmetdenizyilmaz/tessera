@@ -91,6 +91,8 @@ export interface AppSettings {
   fontSize: number;
   fontFamily: string;
   autoSave: boolean;
+  /** Zero disables automatic panel hibernation. Counts only Tessera running time. */
+  panelHibernationMinutes: number;
   autoSaveDir: string;
   systemMonitorInterval: number;
   usagePollingInterval: number;

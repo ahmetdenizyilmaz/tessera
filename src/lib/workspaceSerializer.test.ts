@@ -71,6 +71,25 @@ it('backgrounds survive workspace restore with new agent IDs and stable app IDs'
   expect(newAgent).not.toBe(agent);expect(getPanelBackground(newAgent)).toEqual(background);
   expect(getPanelBackground(widget).color).toBe('#112233');
 });
+
+it('restores sleeping panels without ageing recently used panels during time offline', () => {
+  const asleep = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' }, 'Sleeping');
+  const recent = useInstanceStore.getState().addInstance(config, 'Recent');
+  useLayoutStore.getState().addPanel(asleep, 'terminal'); useLayoutStore.getState().addPanel(recent, 'terminal');
+  const previewId = crypto.randomUUID();
+  useInstanceStore.getState().updateInstance(asleep, { claudeSessionId: 'saved-conversation',
+    hibernation: { sleeping: true, idleMs: 3600_000, previewId } });
+  useInstanceStore.getState().updateInstance(recent, { hibernation: { sleeping: false, idleMs: 120_000 } });
+  const saved = serializeWorkspace(); saved.savedAt -= 7 * 86400_000;
+  deserializeWorkspace(saved);
+  const restored = [...useInstanceStore.getState().instances.values()];
+  const sleeper = restored.find(i => i.name === 'Sleeping')!;
+  expect(sleeper.id).not.toBe(asleep);
+  expect(sleeper).toMatchObject({ status: 'stopped', claudeSessionId: 'saved-conversation',
+    hibernation: { sleeping: true, idleMs: 3600_000, previewId } });
+  expect(restored.find(i => i.name === 'Recent')?.hibernation).toMatchObject({ sleeping: false, idleMs: 120_000 });
+  expect(invoke).toHaveBeenCalledWith('panel_hibernation_restore', { ids: [sleeper.id] });
+});
 it('restores panel locks with remapped agent IDs and keeps custom slot geometry through focus changes', () => {
   const agent = useInstanceStore.getState().addInstance({ ...config, panelView: 'terminal' });
   useLayoutStore.getState().addPanel(agent, 'terminal');

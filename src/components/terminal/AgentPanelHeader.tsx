@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInstanceStore } from "../../store/instanceStore";
 import { ColorPickerPopover } from "../dialogs/ColorPickerPopover";
 import { ProviderIcon } from "../icons/ProviderIcons";
-import { GitFork, X } from "lucide-react";
+import { GitFork, Moon, X } from "lucide-react";
 import { PanelShortcutBadge } from '../layout/PanelShortcutBadge';
 import { MovePanelButton } from '../groups/GroupPanelPicker';
 import { PanelAppearanceButton } from '../appearance/BackgroundSettings';
@@ -180,7 +180,7 @@ export function AgentPanelHeader({
           <PanelAppearanceButton panelId={instanceId} />
           <PanelLockButton panelId={instanceId} />
           <MovePanelButton panelId={instanceId} />
-          {controls && (
+          {(controls || !instance.hibernation?.sleeping) && (
             <div style={{ position: "relative" }}>
               <button
                 type="button"
@@ -191,7 +191,12 @@ export function AgentPanelHeader({
               >
                 ☰
               </button>
-              {menu && <div className="toolbar-menu">{controls}</div>}
+              {menu && <div className="toolbar-menu">{controls}
+                {!instance.hibernation?.sleeping && <button type="button" className="hibernation-menu-action"
+                  onClick={() => { setMenu(false); void import('../../lib/panelHibernation').then(m => m.hibernatePanel(instanceId)).catch(() => {}); }}>
+                  <Moon size={15} aria-hidden="true" />Hibernate panel
+                </button>}
+              </div>}
             </div>
           )}
           {onStop && (
