@@ -105,9 +105,23 @@ fn drive_roots() -> Vec<PathBuf> {
 pub fn resolve(raw: &str, cwd: Option<&Path>) -> Option<OpenedPath> {
     let home = dirs::home_dir();
     let drives = drive_roots();
-    candidates(raw, cwd, home.as_deref(), &drives).into_iter().find_map(|(base, p)| {
-        let meta = std::fs::metadata(&p).ok()?;
-        Some(OpenedPath { path: p.to_string_lossy().into_owned(), is_dir: meta.is_dir(), base })
+    let lookup = |text: &str| {
+        candidates(text, cwd, home.as_deref(), &drives).into_iter().find_map(|(base, p)| {
+            let meta = std::fs::metadata(&p).ok()?;
+            let path = p.to_string_lossy().into_owned();
+            // Explorer's /select argument needs native Windows separators,
+            // including when the agent wrote an absolute path with slashes.
+            #[cfg(windows)]
+            let path = path.replace('/', "\\");
+            Some(OpenedPath { path, is_dir: meta.is_dir(), base })
+        })
+    };
+    lookup(raw).or_else(|| {
+        // Some terminal Markdown renderers leave escaped underscores in paths.
+        // Check the literal spelling first: \_ can also be a real Windows
+        // separator before an underscore-prefixed filename. Never rewrite URLs.
+        if !raw.contains("\\_") || raw.contains("://") { return None; }
+        lookup(&raw.replace("\\_", "_"))
     })
 }
 
@@ -209,6 +223,48 @@ mod tests {
         let parent = resolve("../inner", Some(&dir.join("My Files"))).unwrap();
         assert!(parent.is_dir);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn resolves_markdown_escaped_underscores_in_relative_and_absolute_paths() {
+        let dir = std::env::temp_dir().join(format!("tessera-escaped-path-{}", uuid::Uuid::new_v4()));
+        let docs = dir.join("mate_health_report").join("docs");
+        let file = docs.join("JEV_DECISION_TREE.md");
+        std::fs::create_dir_all(&docs).unwrap();
+        std::fs::write(&file, "test").unwrap();
+        let relative = r"mate\_health\_report/docs/JEV\_DECISION\_TREE.md";
+        let absolute = format!("{}/{}", dir.to_string_lossy().replace('\\', "/"), relative);
+        for raw in [relative, absolute.as_str()] {
+            let hit = resolve(raw, Some(&dir)).expect("escaped path resolves to the existing file");
+            assert_eq!(PathBuf::from(&hit.path), file);
+            assert!(!hit.is_dir);
+            #[cfg(windows)]
+            assert!(!hit.path.contains('/'), "Explorer receives Windows separators");
+        }
+        let folder = resolve(r"mate\_health\_report/docs/", Some(&dir)).unwrap();
+        assert!(folder.is_dir);
+        assert_eq!(PathBuf::from(folder.path), docs);
+        assert!(resolve(r"mate\_health\_report/docs/not\_here.md", Some(&dir)).is_none());
+        let url = tauri::Url::from_file_path(&file).unwrap();
+        assert_eq!(PathBuf::from(resolve(url.as_str(), None).unwrap().path), file);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn literal_underscore_prefixed_windows_paths_take_priority_over_markdown_fallbacks() {
+        let dir = std::env::temp_dir().join(format!("tessera-literal-path-{}", uuid::Uuid::new_v4()));
+        let literal = dir.join(r"mate\_health\_report\docs\JEV\_DECISION\_TREE.md");
+        let unescaped = dir.join(r"mate_health_report\docs\JEV_DECISION_TREE.md");
+        for file in [&literal, &unescaped] {
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, "test").unwrap();
+        }
+        let raw = r"mate\_health\_report/docs/JEV\_DECISION\_TREE.md";
+        assert_eq!(PathBuf::from(resolve(raw, Some(&dir)).unwrap().path), literal);
+        let forward = literal.to_string_lossy().replace('\\', "/");
+        assert_eq!(PathBuf::from(resolve(&forward, None).unwrap().path), literal);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

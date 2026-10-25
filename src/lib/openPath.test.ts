@@ -20,6 +20,13 @@ describe('path detection in chats', () => {
     const text = 'Saved to C:\\Users\\ady\\Desktop\\out\\report.md. See `src/lib/office.ts` and `src/lib/office.ts` again, plus ~/Desktop/app/.';
     expect(extractPaths(text)).toEqual(['C:\\Users\\ady\\Desktop\\out\\report.md', 'src/lib/office.ts', '~/Desktop/app/']);
   });
+  it('preserves escaped underscores and the full extension for native lookup without shortening the displayed range', () => {
+    const path = String.raw`C:/Users/DENIZYILMAZ/Desktop/Projects/mate\_health\_report/docs/JEV\_DECISION\_TREE.md`;
+    const text = `Created ${path}.`;
+    const refs = findPathReferences(text);
+    expect(refs.map(ref => ref.path)).toEqual([path]);
+    expect(text.slice(refs[0].start, refs[0].end)).toBe(path);
+  });
   it('does not read a URL scheme as a drive letter', () => {
     expect(extractPaths('Spec: https://example.com/spec and ftp://host/x')).toEqual([]);
     expect(extractPaths('file:///C:/x')).toEqual(['file:///C:/x']);

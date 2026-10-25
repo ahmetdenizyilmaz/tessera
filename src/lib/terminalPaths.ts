@@ -3,6 +3,17 @@ import { findPathReferences, looksLikePath } from './pathDetection';
 import { openPath, resolvePath, type OpenedPath } from './openPath';
 import { activateTerminalLink } from './terminalLinks';
 
+/** Only a selection consisting of one escaped, existing path is normalized.
+ * Prose, commands, code and ordinary terminal copies stay byte-for-byte intact. */
+export async function terminalSelectionForCopy(text: string, cwd?: string): Promise<string> {
+  if (!text.includes('\\_') || /[\r\n]/.test(text)) return text;
+  const selection = text.trim();
+  const references = findPathReferences(selection);
+  if (references.length !== 1 || references[0].path !== selection) return text;
+  const target = await resolvePath(selection, cwd);
+  return target?.path ?? text;
+}
+
 /** OSC 8 file links use the same resolver as detected text. All other URL
  * schemes retain the existing HTTP(S)-only external browser handler. */
 export function localTerminalLinkHandler(cwd: () => string | undefined) {

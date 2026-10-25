@@ -14,7 +14,7 @@ import { installTerminalCursorGuard } from '../../lib/terminalCursor';
 import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/terminalScroll';
 import { terminalPlatform } from '../../lib/terminalPlatform';
 import { createTerminalResize } from '../../lib/terminalResize';
-import { installTerminalPathLinks, localTerminalLinkHandler } from '../../lib/terminalPaths';
+import { installTerminalPathLinks, localTerminalLinkHandler, terminalSelectionForCopy } from '../../lib/terminalPaths';
 import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
 import { panelTerminalTheme, watchTerminalBackground } from '../../lib/terminalTheme';
@@ -29,6 +29,8 @@ const terminalBuffers: Map<string, string> =
   ((globalThis as Record<string, unknown>).__termBuffers = new Map<string, string>());
 const terminalScrollStates = new Map<string, TerminalScrollState>();
 const terminalSizes = new Map<string, { cols: number; rows: number }>();
+// A slow path lookup must not overwrite a newer copy from another terminal.
+let terminalCopyRequest = 0;
 
 // Keep one native subscription across moves. Replacing a listener per React
 // mount creates a gap where the running TUI can emit an unrecoverable frame.
@@ -249,7 +251,10 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const copySelection = (): boolean => {
       const sel = terminal.getSelection();
       if (!sel) return false;
-      navigator.clipboard.writeText(sel).catch((err) => {
+      const request = ++terminalCopyRequest;
+      void terminalSelectionForCopy(sel, getCwd()).then(text => {
+        if (request === terminalCopyRequest) return navigator.clipboard.writeText(text);
+      }).catch((err) => {
         console.error('Copy failed:', err);
       });
       terminal.clearSelection();
