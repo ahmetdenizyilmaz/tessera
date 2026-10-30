@@ -6,15 +6,15 @@ import { installTerminalPathLinks, localTerminalLinkHandler, terminalSelectionFo
 vi.mock('./openPath', () => ({ openPath: vi.fn(), resolvePath: vi.fn() }));
 vi.mock('./terminalLinks', () => ({ activateTerminalLink: vi.fn() }));
 
-function fixture(text: string) {
+/** Rows separated by real line breaks, as an agent TUI writes them. */
+function fixture(text: string | string[], cols = Math.max(80, ...[text].flat().map(row => row.length + 1))) {
   let provider: ILinkProvider;
-  const cols = Math.max(80, text.length + 1);
-  const line = { isWrapped: false, length: cols, getCell: (x: number) => ({ getWidth: () => 1, getChars: () => text[x] ?? '' }) };
-  const terminal = { cols, buffer: { active: { getLine: (y: number) => y === 0 ? line : undefined, getNullCell: () => ({}) } },
+  const lines = [text].flat().map(row => ({ isWrapped: false, length: cols, getCell: (x: number) => ({ getWidth: () => 1, getChars: () => row[x] ?? '' }) }));
+  const terminal = { cols, buffer: { active: { getLine: (y: number) => lines[y], getNullCell: () => ({}) } },
     onWriteParsed: () => ({ dispose() {} }), onScroll: () => ({ dispose() {} }),
     registerLinkProvider: (p: ILinkProvider) => { provider = p; return { dispose: vi.fn() }; },
   } as unknown as Terminal;
-  return { terminal, links: () => new Promise<Parameters<Parameters<ILinkProvider['provideLinks']>[1]>[0]>(resolve => provider.provideLinks(1, resolve)) };
+  return { terminal, links: (y = 1) => new Promise<Parameters<Parameters<ILinkProvider['provideLinks']>[1]>[0]>(resolve => provider.provideLinks(y, resolve)) };
 }
 
 describe('terminal filesystem links', () => {
@@ -71,6 +71,56 @@ describe('terminal filesystem links', () => {
     finish!({ path: 'C:/first/src/assets', isDir: true, base: 'cwd' });
     expect(await pending).toBeUndefined();
     links.dispose();
+  });
+
+  it('joins a path the TUI broke after a separator, on both of its rows', async () => {
+    vi.mocked(resolvePath).mockReset(); vi.mocked(openPath).mockReset();
+    const full = 'C:/Users/ady/projects/star/out/star_music_and_sfx.mp4';
+    vi.mocked(resolvePath).mockImplementation(async path => path === full
+      ? { path: full.replaceAll('/', '\\'), isDir: false, base: 'absolute' } : null);
+    const f = fixture(['Open the video (C:/Users/ady/projects/star/out/', '  star_music_and_sfx.mp4)', 'Saved separately.']);
+    const links = installTerminalPathLinks(f.terminal, () => 'C:/project');
+    const [first, second, after] = [await f.links(1), await f.links(2), await f.links(3)];
+    expect(first?.map(link => link.text)).toEqual([full]);
+    expect(second?.map(link => link.text)).toEqual([full]);
+    expect(after).toEqual([]);
+    // Each row underlines only its own cells; both open the whole path.
+    expect(first![0].range).toEqual({ start: { x: 17, y: 1 }, end: { x: 47, y: 1 } });
+    expect(second![0].range).toEqual({ start: { x: 3, y: 2 }, end: { x: 24, y: 2 } });
+    second![0].activate({ preventDefault() {} } as MouseEvent, full);
+    expect(openPath).toHaveBeenCalledWith(full, 'C:/project');
+    links.dispose();
+  });
+
+  it('joins a path hard-wrapped at the right margin', async () => {
+    vi.mocked(resolvePath).mockReset();
+    const full = 'C:/work/reports/quarterly_summary.md';
+    vi.mocked(resolvePath).mockImplementation(async path => path === full
+      ? { path: full, isDir: false, base: 'absolute' } : null);
+    const f = fixture(['  Wrote C:/work/reports/quarterly_su', '  mmary.md with the results'], 36);
+    const links = installTerminalPathLinks(f.terminal, () => undefined);
+    expect((await f.links(1))?.map(link => link.text)).toEqual([full]);
+    expect((await f.links(2))?.map(link => link.text)).toEqual([full]);
+    links.dispose();
+  });
+
+  it('keeps each line\'s own links when the joined text is not an existing path', async () => {
+    vi.mocked(resolvePath).mockReset();
+    vi.mocked(resolvePath).mockImplementation(async path => path === 'src/lib/'
+      ? { path: 'C:\\project\\src\\lib', isDir: true, base: 'cwd' } : null);
+    const f = fixture(['Changed files are in src/lib/', 'Next, run the tests.']);
+    const links = installTerminalPathLinks(f.terminal, () => 'C:/project');
+    expect((await f.links(1))?.map(link => link.text)).toEqual(['src/lib/']);
+    expect(await f.links(2)).toEqual([]);
+    expect(resolvePath).toHaveBeenCalledWith('src/lib/Next', 'C:/project');
+    links.dispose();
+    // A line that doesn't end in a path is never joined to the next one.
+    vi.mocked(resolvePath).mockClear();
+    const prose = fixture(['A short sentence.', 'src/lib/']);
+    const proseLinks = installTerminalPathLinks(prose.terminal, () => 'C:/project');
+    expect((await prose.links(2))?.map(link => link.text)).toEqual(['src/lib/']);
+    expect(resolvePath).toHaveBeenCalledTimes(1);
+    proseLinks.dispose();
   });
 
   it('routes explicit file links through validated native opening', () => {

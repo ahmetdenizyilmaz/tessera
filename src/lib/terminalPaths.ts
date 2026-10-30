@@ -1,5 +1,5 @@
 import type { IBufferCellPosition, ILink, Terminal } from '@xterm/xterm';
-import { findPathReferences, looksLikePath } from './pathDetection';
+import { findPathReferences, looksLikePath, type PathReference } from './pathDetection';
 import { openPath, resolvePath, type OpenedPath } from './openPath';
 import { activateTerminalLink } from './terminalLinks';
 
@@ -53,7 +53,43 @@ function logicalLine(terminal: Terminal, y: number) {
       }
     }
   }
-  return { buffer, first, text, starts, ends, cols: terminal.cols };
+  return { buffer, first, last, text, starts, ends, cols: terminal.cols };
+}
+
+type LogicalLine = NonNullable<ReturnType<typeof logicalLine>>;
+
+const PATH_TAIL = /[^\s"'`<>|()[\]{}]*[\\/][^\s"'`<>|()[\]{}]*$/u;
+const PATH_HEAD = /^[\p{L}\p{N}_.~$%@+#\\/]/u;
+
+/** Agent TUIs (Codex, Claude Code) insert real line breaks: after a path
+ * separator, or mid-name at the right margin. xterm doesn't mark those rows as
+ * wrapped, so the file name lands on the next line without the folder. */
+function continuesPath(line: LogicalLine, next: LogicalLine) {
+  const end = line.text.trimEnd(), tail = PATH_TAIL.exec(end)?.[0];
+  if (!tail || !PATH_HEAD.test(next.text.trimStart())) return false;
+  return /[\\/]$/.test(tail) || line.ends[end.length - 1].x >= line.cols - 2;
+}
+
+/** The logical line at `y`, joined with neighbours a path may continue into.
+ * `segments` locate each original line (text offsets and buffer rows). */
+function pathLine(terminal: Terminal, y: number) {
+  const line = logicalLine(terminal, y);
+  if (!line) return null;
+  const lines = [line];
+  for (let prev; lines.length < 8 && (prev = logicalLine(terminal, lines[0].first)) && continuesPath(prev, lines[0]);) lines.unshift(prev);
+  for (let next; lines.length < 8 && (next = logicalLine(terminal, lines[lines.length - 1].last + 2)) && continuesPath(lines[lines.length - 1], next);) lines.push(next);
+  let text = '';
+  const starts: IBufferCellPosition[] = [], ends: IBufferCellPosition[] = [];
+  const segments = lines.map((part, i) => {
+    const from = i ? part.text.length - part.text.trimStart().length : 0;
+    const to = i < lines.length - 1 ? part.text.trimEnd().length : part.text.length;
+    const segment = { start: text.length, end: text.length + to - from, first: part.first, last: part.last };
+    text += part.text.slice(from, to);
+    starts.push(...part.starts.slice(from, to));
+    ends.push(...part.ends.slice(from, to));
+    return segment;
+  });
+  return { buffer: line.buffer, first: lines[0].first, text, starts, ends, segments, cols: line.cols };
 }
 
 export function installTerminalPathLinks(terminal: Terminal, getCwd: () => string | undefined) {
@@ -83,31 +119,46 @@ export function installTerminalPathLinks(terminal: Terminal, getCwd: () => strin
   };
   const provider = terminal.registerLinkProvider({
     provideLinks(y, callback) {
-      const line = logicalLine(terminal, y), cwd = getCwd();
+      const line = pathLine(terminal, y), cwd = getCwd();
       if (!line || disposed) { callback(undefined); return; }
       const stillCurrent = () => {
-        const now = !disposed ? logicalLine(terminal, y) : null;
+        const now = !disposed ? pathLine(terminal, y) : null;
         return now?.buffer === line.buffer && now.first === line.first && now.text === line.text && now.cols === line.cols && getCwd() === cwd;
       };
-      const references = findPathReferences(line.text).filter(ref =>
-        line.starts[ref.start]?.y <= y && line.ends[ref.end - 1]?.y >= y).slice(0, 32);
-      void Promise.all(references.map(async ref => {
-        const target = await resolve(ref.path, cwd);
-        if (!target) return undefined;
-        const title = `${target.isDir ? 'Open folder' : 'Show file in folder'}: ${target.path}`;
-        const leave = () => { if (terminal.element?.title === title) terminal.element.removeAttribute('title'); };
-        const link: ILink = {
-          text: ref.path, range: { start: line.starts[ref.start], end: line.ends[ref.end - 1] },
-          activate(event) { event.preventDefault(); if (stillCurrent()) void openPath(ref.path, cwd); },
-          hover() { if (stillCurrent() && terminal.element) terminal.element.title = title; },
-          leave, dispose: leave,
-        };
-        return link;
-      })).then(links => {
-        // Async filesystem checks must not attach links to a different frame
-        // or a replacement conversation while the terminal is streaming.
-        callback(stillCurrent() ? links.filter((link): link is ILink => !!link) : undefined);
-      });
+      // Each row underlines only its own part of a path joined across a break.
+      const segment = line.segments.find(s => s.first < y && y <= s.last + 1)!;
+      const part = (ref: PathReference) => ({ ...ref, start: Math.max(ref.start, segment.start), end: Math.min(ref.end, segment.end) });
+      const onRow = (ref: PathReference) => {
+        const { start, end } = part(ref);
+        return start < end && line.starts[start]?.y <= y && line.ends[end - 1]?.y >= y;
+      };
+      const joined = findPathReferences(line.text).filter(ref =>
+        line.segments.some(s => s.start > 0 && ref.start < s.start && ref.end > s.start) && onRow(ref));
+      const own = findPathReferences(line.text.slice(segment.start, segment.end))
+        .map(ref => ({ ...ref, start: ref.start + segment.start, end: ref.end + segment.start })).filter(onRow);
+      void Promise.all([...joined, ...own].slice(0, 32).map(async ref => ({ ref, target: await resolve(ref.path, cwd) })))
+        .then(found => {
+          // A joined path is used only when it exists. Otherwise the break was
+          // not inside a path, and each line keeps its own references.
+          const whole = found.filter(({ ref, target }) => target && joined.includes(ref)).map(({ ref }) => ref);
+          return found.filter(({ ref, target }) => target && (whole.includes(ref) ||
+            !whole.some(w => w.start < ref.end && ref.start < w.end))).map(({ ref, target }) => {
+            const title = `${target!.isDir ? 'Open folder' : 'Show file in folder'}: ${target!.path}`;
+            const leave = () => { if (terminal.element?.title === title) terminal.element.removeAttribute('title'); };
+            const { start, end } = part(ref);
+            const link: ILink = {
+              text: ref.path, range: { start: line.starts[start], end: line.ends[end - 1] },
+              activate(event) { event.preventDefault(); if (stillCurrent()) void openPath(ref.path, cwd); },
+              hover() { if (stillCurrent() && terminal.element) terminal.element.title = title; },
+              leave, dispose: leave,
+            };
+            return link;
+          });
+        }).then(links => {
+          // Async filesystem checks must not attach links to a different frame
+          // or a replacement conversation while the terminal is streaming.
+          callback(stillCurrent() ? links : undefined);
+        });
     },
   });
   return { dispose() { disposed = true; updates.forEach(update => update.dispose()); provider.dispose(); cache.clear(); } };

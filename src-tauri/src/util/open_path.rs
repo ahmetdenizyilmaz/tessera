@@ -209,6 +209,8 @@ mod tests {
         std::fs::write(dir.join("inner").join("note.md"), "x").unwrap();
         let hit = resolve("inner/note.md:7", Some(&dir)).expect("relative to cwd");
         assert_eq!((hit.is_dir, hit.base.as_str()), (false, "cwd"));
+        #[cfg(windows)]
+        assert_eq!(hit.path, dir.join(r"inner\note.md").to_string_lossy(), "shown and opened with native separators");
         let folder = resolve(&dir.join("inner").to_string_lossy(), None).expect("absolute folder");
         assert!(folder.is_dir);
         assert!(resolve("definitely/not/here", Some(&dir)).is_none());
