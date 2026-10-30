@@ -28,7 +28,7 @@ export function readTerminalPreview(id: string) { return previews.get(id)?.(); }
 const MAX_SNAPSHOT_BYTES = 800 * 1024;
 
 /** Share the rendered VT state, never a truncated tail of raw PTY output. */
-export function registerSharedTerminal(id: string, terminal: Terminal, serializer: SerializeAddon,
+export function registerSharedTerminal(id: string, terminal: Terminal, serializer: Pick<SerializeAddon, 'serialize'>,
   sizing?: { setRemoteSize(size: TerminalViewport): Promise<void>; releaseRemoteSize(): void }) {
   let alive = true;
   const journal = new TerminalJournal();

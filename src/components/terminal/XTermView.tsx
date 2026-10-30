@@ -19,6 +19,7 @@ import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
 import { panelTerminalTheme, watchTerminalBackground } from '../../lib/terminalTheme';
 import { terminalPasteData } from '../../lib/terminalPaste';
+import { withMouseEncoding } from '../../lib/terminalMouseEncoding';
 import { touchPanel } from '../../lib/panelActivityClock';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -209,6 +210,8 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     terminal.loadAddon(serializeAddon);
 
     terminal.open(container);
+    // Lives with the parser (including while hidden), not with this view.
+    const snapshotter = withMouseEncoding(terminal, serializeAddon);
     const unwatchBackground = watchTerminalBackground(terminal, instanceId);
     const pathLinks = installTerminalPathLinks(terminal, getCwd);
     const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));
@@ -238,7 +241,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
     const resizeCoordinator = createTerminalResize(terminal, fitAddon, resize, () => mounted && activeRef.current);
     resizeCoordinator.pauseForRestore();
     resizeCoordinatorRef.current = resizeCoordinator;
-    const unshare = registerSharedTerminal(instanceId, terminal, serializeAddon, resizeCoordinator);
+    const unshare = registerSharedTerminal(instanceId, terminal, snapshotter, resizeCoordinator);
     reclaimLocalRef.current = unshare.reclaimLocal;
     container.addEventListener('pointerdown', unshare.reclaimLocal);
     container.addEventListener('keydown', unshare.reclaimLocal);
@@ -525,7 +528,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         terminalSizes.set(instanceId, { cols: terminal.cols, rows: terminal.rows });
         // xterm parses writes asynchronously. Preserve the queued tail as well
         // as the parsed screen; a move must not drop the TUI's latest repaint.
-        const serialized = serializeAddon.serialize() + pendingWrites.map(p => p.data).join('');
+        const serialized = snapshotter.serialize() + pendingWrites.map(p => p.data).join('');
         if (serialized.trim()) {
           terminalBuffers.set(instanceId, serialized);
         }
@@ -539,6 +542,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
         disposed = true;
         resizeCoordinator.dispose();
         unshare();
+        snapshotter.dispose();
         terminal.dispose();
       };
 
@@ -550,7 +554,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
       scrollGuard.dispose();
       if (useInstanceStore.getState().instances.has(instanceId) && !useInstanceStore.getState().instances.get(instanceId)?.hibernation?.sleeping) {
         startBackgroundBuffering(instanceId, release, () => ({ cols: terminal.cols, rows: terminal.rows,
-          data: serializeAddon.serialize() + pendingWrites.map(p => p.data).join('') }));
+          data: snapshotter.serialize() + pendingWrites.map(p => p.data).join('') }));
       } else {
         release();
         clearTerminalState(instanceId);
