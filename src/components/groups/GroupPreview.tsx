@@ -24,6 +24,13 @@ const ICON_SIZE = 32;
 // Small badge icon size
 const BADGE_SIZE = 12;
 
+/** Names like `Divide_and_conquer` or `antigravityPixelForge` have no spaces.
+ * Let them wrap after separators and between camelCase words, not mid-word. */
+function wrappable(name: string) {
+  return name.split(/(?<=[_\-./\\])|(?<=\p{Ll})(?=\p{Lu})/u)
+    .flatMap((part, i) => i ? [<wbr key={i} />, part] : [part]);
+}
+
 function ChildTile({ childId }: { childId: string }) {
   const rawPanelType = useLayoutStore((s) => s.panelTypes[childId]);
   const panelType: PanelType = rawPanelType ?? 'terminal';
@@ -89,8 +96,9 @@ function ChildTile({ childId }: { childId: string }) {
         alignItems: 'center',
         gap: 8,
         padding: 12,
+        flex: '1 1 120px',
         minWidth: 80,
-        maxWidth: 110,
+        maxWidth: 220,
       }}
     >
       {/* Large icon circle with instance color */}
@@ -134,20 +142,19 @@ function ChildTile({ childId }: { childId: string }) {
           </div>
         )}
       </div>
-      {/* Name label */}
+      {/* Name label: wraps in full instead of being cut short */}
       <span
         style={{
           fontSize: 11,
           fontWeight: 600,
+          lineHeight: 1.35,
           color: 'var(--panel-foreground, var(--text-primary))',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          overflowWrap: 'anywhere',
           maxWidth: '100%',
           textAlign: 'center',
         }}
       >
-        {name}
+        {wrappable(name)}
       </span>
     </div>
   );
@@ -208,7 +215,6 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
             whiteSpace: 'nowrap',
           }}
         >
-          {group?.name ?? 'Group'}
           <PanelShortcutBadge panelId={groupId} />
           {childIds.length > 0 && (
             <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
@@ -269,14 +275,15 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
         </button>
       </div>
 
-      {/* Preview content */}
+      {/* Preview content. The name lives here, where it has the full width
+          (the toolbar is mostly buttons and would cut it to a few letters). */}
       <div
         style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'safe center',
           padding: 16,
           gap: 8,
           overflow: 'auto',
@@ -284,6 +291,19 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
         }}
         onClick={handleEnter}
       >
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            lineHeight: 1.35,
+            color: 'var(--panel-foreground, var(--text-primary))',
+            overflowWrap: 'anywhere',
+            maxWidth: '100%',
+            textAlign: 'center',
+          }}
+        >
+          {wrappable(group?.name ?? 'Group')}
+        </span>
         {childIds.length === 0 ? (
           <div
             style={{
@@ -310,7 +330,8 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
               flexWrap: 'wrap',
               gap: 4,
               justifyContent: 'center',
-              alignItems: 'center',
+              // Icons stay in line when one name wraps to more lines.
+              alignItems: 'flex-start',
               width: '100%',
             }}
           >
@@ -319,7 +340,6 @@ export function GroupPreview({ groupId }: GroupPreviewProps) {
             ))}
           </div>
         )}
-        <AddExistingPanelButton groupId={groupId} />
       </div>
     </div>
   );
