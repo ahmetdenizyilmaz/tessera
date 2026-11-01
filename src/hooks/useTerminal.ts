@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { installTerminalPathLinks, localTerminalLinkHandler } from '../lib/terminalPaths';
+import { TERMINAL_URL_REGEX } from '../lib/terminalLinks';
 import { useInstanceStore } from '../store/instanceStore';
 
 interface TerminalEntry {
@@ -61,7 +62,7 @@ export function useTerminal() {
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon(activateLink);
+    const webLinksAddon = new WebLinksAddon(activateLink, { urlRegex: TERMINAL_URL_REGEX });
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);

@@ -15,6 +15,7 @@ import { installTerminalScrollGuard, type TerminalScrollState } from '../../lib/
 import { terminalPlatform } from '../../lib/terminalPlatform';
 import { createTerminalResize } from '../../lib/terminalResize';
 import { installTerminalPathLinks, localTerminalLinkHandler, terminalSelectionForCopy } from '../../lib/terminalPaths';
+import { TERMINAL_URL_REGEX } from '../../lib/terminalLinks';
 import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
 import { panelTerminalTheme, watchTerminalBackground } from '../../lib/terminalTheme';
@@ -201,7 +202,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon(activateLink);
+    const webLinksAddon = new WebLinksAddon(activateLink, { urlRegex: TERMINAL_URL_REGEX });
     const serializeAddon = new SerializeAddon();
 
     terminal.loadAddon(fitAddon);

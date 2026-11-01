@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { useSettingsStore } from '../../store/settingsStore';
-import { activateTerminalLink } from '../../lib/terminalLinks';
+import { activateTerminalLink, TERMINAL_URL_REGEX } from '../../lib/terminalLinks';
 import type { TerminalSnapshot, TerminalViewport } from '../../lib/terminalSharing';
 import { RemoteTerminalStream } from '../../lib/remoteTerminalStream';
 import { panelTerminalTheme, watchTerminalBackground } from '../../lib/terminalTheme';
@@ -51,7 +51,7 @@ export function RemoteTerminalView({ deviceId, panelId, connected, inputSupporte
       theme: panelTerminalTheme(remotePanelId(deviceId,panelId)), allowTransparency: true,
       linkHandler: { activate: activateTerminalLink },
     });
-    term.loadAddon(new WebLinksAddon(activateTerminalLink));
+    term.loadAddon(new WebLinksAddon(activateTerminalLink, { urlRegex: TERMINAL_URL_REGEX }));
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container.current);
