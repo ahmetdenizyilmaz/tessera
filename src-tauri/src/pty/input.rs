@@ -96,8 +96,13 @@ impl TerminalInput {
         if expected.is_some_and(|revision| revision != writer.revision) {
             return Err("The terminal input changed during delivery. The message was pasted but not submitted; do not resend it automatically.".into());
         }
-        if !super::resume_prompt::terminal_report(data) { writer.resume_prompt = None; }
-        writer.revision = writer.revision.wrapping_add(1);
+        if !super::resume_prompt::terminal_report(data) {
+            writer.resume_prompt = None;
+            // Only user input invalidates a pending submit. xterm sends focus,
+            // cursor and device reports through the same write path; those
+            // must reach the PTY without canceling the delayed Enter.
+            writer.revision = writer.revision.wrapping_add(1);
+        }
         let stream = writer.stream.as_mut()
             .ok_or("That panel's terminal is no longer accepting input")?;
         stream.write_all(data.as_bytes()).map_err(|e| format!("Write failed: {e}"))?;
@@ -210,6 +215,58 @@ mod tests {
         assert_eq!(writes[0].1, "\x1b[200~Ünye\n  code\tline\nDone\x1b[201~".as_bytes());
         assert_eq!(writes[1].1, b"\r");
         assert!(writes[1].0.duration_since(writes[0].0) >= PASTE_SETTLE);
+    }
+
+    #[tokio::test]
+    async fn terminal_reports_during_paste_do_not_cancel_enter() {
+        for report in [
+            "\x1b[I", // Focus gained.
+            "\x1b[O", // Focus lost.
+            "\x1b[10;25R", // Cursor position after a redraw.
+            "\x1b[?1;2c", // Device attributes.
+            "\x1b]11;rgb:1111/1111/1b1b\x1b\\", // Background color.
+            "\x1b[4;800;1200t", // Window size.
+            "\x1b[?2026;2$y", // Synchronized-output mode status.
+            "\x1b[4;2$y", // ANSI insert-mode status.
+            "\x1b[O\x1b[I\x1b[10;25R", // Several automatic reports in one write.
+        ] {
+            let capture = Capture::default();
+            let input = TerminalInput::new(Box::new(capture.clone()));
+            let session = input.session().unwrap();
+            let (result, ()) = tokio::join!(biased; input.submit("panel message"), async {
+                // Poll submit first so the report lands after the paste but
+                // before its delayed Enter, without a scheduling-dependent sleep.
+                assert_eq!(capture.0.lock().unwrap().len(), 1);
+                input.write_for_session(&session, report).unwrap();
+            });
+            assert!(result.is_ok(), "automatic report {report:?} canceled submit: {result:?}");
+            let writes = capture.0.lock().unwrap();
+            assert_eq!(writes.iter().map(|(_, bytes)| bytes.as_slice()).collect::<Vec<_>>(),
+                vec![b"\x1b[200~panel message\x1b[201~".as_slice(), report.as_bytes(), b"\r"]);
+            assert!(writes[2].0.duration_since(writes[0].0) >= PASTE_SETTLE);
+        }
+    }
+
+    #[tokio::test]
+    async fn real_input_among_terminal_reports_still_cancels_enter() {
+        for key in [
+            "editing", "\x7f", "\r", "\x1b", "\x1b[B", "\x1b[<0;25;10M",
+            "\x1b[200~user paste\x1b[201~", "\x1b[Iediting", "\x1b[10;25R\r", "\x1b[?2026;2$yediting",
+        ] {
+            let capture = Capture::default();
+            let input = TerminalInput::new(Box::new(capture.clone()));
+            let session = input.session().unwrap();
+            let (result, ()) = tokio::join!(biased; input.submit("panel message"), async {
+                assert_eq!(capture.0.lock().unwrap().len(), 1);
+                input.write("\x1b[I").unwrap();
+                input.write_for_session(&session, key).unwrap();
+                input.write("\x1b[10;25R").unwrap();
+            });
+            assert!(result.unwrap_err().contains("not submitted"), "user input {key:?} must cancel Enter");
+            let writes = capture.0.lock().unwrap();
+            assert_eq!(writes.iter().map(|(_, bytes)| bytes.as_slice()).collect::<Vec<_>>(),
+                vec![b"\x1b[200~panel message\x1b[201~".as_slice(), b"\x1b[I", key.as_bytes(), b"\x1b[10;25R"]);
+        }
     }
 
     #[tokio::test]

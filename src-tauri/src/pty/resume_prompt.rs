@@ -50,7 +50,7 @@ impl ResumePrompt {
     }
 }
 
-/// Device/color reports and focus notifications are automatic terminal input.
+/// Device/color/mode reports and focus notifications are automatic terminal input.
 /// Actual keys, mouse clicks and pasted text must always take priority.
 pub(super) fn terminal_report(data: &str) -> bool {
     let mut rest = data;
@@ -61,9 +61,16 @@ pub(super) fn terminal_report(data: &str) -> bool {
         }
         if let Some(csi) = rest.strip_prefix("\x1b[") {
             let Some(end) = csi.bytes().position(|b| (0x40..=0x7e).contains(&b)) else { return false };
-            if !matches!(csi.as_bytes()[end], b'c' | b'R' | b'n' | b't')
+            // DECRPM replies to mode queries (e.g. ?2026;2$y) are emitted
+            // automatically by xterm too. Accept only its mode/status shape,
+            // not arbitrary CSI sequences that might represent a user's key.
+            let mode_report = csi.as_bytes()[end] == b'y' && csi[..end].strip_suffix('$')
+                .and_then(|params| params.strip_prefix('?').unwrap_or(params).split_once(';'))
+                .is_some_and(|(mode, status)| !mode.is_empty() && mode.bytes().all(|b| b.is_ascii_digit())
+                    && matches!(status, "0" | "1" | "2" | "3" | "4"));
+            if !mode_report && (!matches!(csi.as_bytes()[end], b'c' | b'R' | b'n' | b't')
                 || !csi[..end].bytes().all(|b| b.is_ascii_digit() || matches!(b, b';' | b'?' | b'>'))
-            { return false; }
+            ) { return false; }
             rest = &csi[end + 1..];
             continue;
         }
@@ -117,6 +124,12 @@ mod tests {
             "\x1b[10;25R",
             "\x1b[>0;276;0c",
             "\x1b[I",
+            "\x1b[O",
+            "\x1b[?2026;2$y",
+            "\x1b[4;2$y",
+            "\x1b[?1004;1$y",
+            "\x1b[?7;0$y",
+            "\x1b[2;4$y",
             "\x1b]11;rgb:0000/0000/0000\x07",
             "\x1b[I\x1b[?1;2c\x1b]11;rgb:1111/1111/1b1b\x1b\\\x1b[1;1R",
         ] {
@@ -131,6 +144,12 @@ mod tests {
             "\x1b[200~paste\x1b[201~",
             "\x1b[?1;2c\r",
             "\x1b[O\x1b[B",
+            "\x1b[?2026;2$yediting",
+            "\x1b[?2026;2$y\r",
+            "\x1b[?2026;2$",
+            "\x1b[?2026;9$y",
+            "\x1b[?;2$y",
+            "\x1b[?2026;1;2$y",
         ] {
             assert!(!terminal_report(key), "{key:?}");
         }
