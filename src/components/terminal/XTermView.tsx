@@ -20,7 +20,7 @@ import { listen } from '@tauri-apps/api/event';
 import { registerSharedTerminal } from '../../lib/terminalSharing';
 import { panelTerminalTheme, watchTerminalBackground } from '../../lib/terminalTheme';
 import { terminalPasteData } from '../../lib/terminalPaste';
-import { withMouseEncoding } from '../../lib/terminalMouseEncoding';
+import { withTerminalState } from '../../lib/terminalSnapshot';
 import { touchPanel } from '../../lib/panelActivityClock';
 
 // ─── Module-Level State (survives unmount/remount for group moves) ───────────
@@ -212,7 +212,7 @@ export function XTermView({ instanceId, isVisible }: XTermViewProps) {
 
     terminal.open(container);
     // Lives with the parser (including while hidden), not with this view.
-    const snapshotter = withMouseEncoding(terminal, serializeAddon);
+    const snapshotter = withTerminalState(terminal, serializeAddon);
     const unwatchBackground = watchTerminalBackground(terminal, instanceId);
     const pathLinks = installTerminalPathLinks(terminal, getCwd);
     const scrollGuard = installTerminalScrollGuard(terminal, terminalScrollStates.get(instanceId));

@@ -1,6 +1,6 @@
 # Tauri embeds its Windows manifest in app binaries only. Unit-test executables
 # also need common-controls v6 and WebView2Loader.dll before they can start.
-param([switch]$Live, [switch]$Permissions, [switch]$Stable, [switch]$OpenCode, [switch]$CodexStartup, [switch]$Antigravity, [switch]$ClaudeSession)
+param([switch]$Live, [switch]$Permissions, [switch]$Stable, [switch]$OpenCode, [switch]$CodexStartup, [switch]$Antigravity, [switch]$AntigravityTerminal, [switch]$ClaudeSession)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Push-Location $repo
@@ -52,6 +52,7 @@ public static class TesseraTestResource {
         if ($CodexStartup) { & $artifact 'live_codex_' '--ignored' '--nocapture' '--test-threads=1' }
         elseif ($ClaudeSession) { & $artifact 'live_claude_tracks_resume_and_clear' '--ignored' '--nocapture' }
         elseif ($Antigravity) { & $artifact 'live_antigravity_turns_resume_cancel_and_isolation' '--ignored' '--nocapture' }
+        elseif ($AntigravityTerminal) { & $artifact 'live_antigravity_terminal_draft_redraw' '--ignored' '--nocapture' '--test-threads=1' }
         elseif ($OpenCode) { & $artifact 'live_opencode_server_and_terminal' '--ignored' '--nocapture' }
         elseif ($Live) { & $artifact 'live_transports_and_exact_thread_resume' '--ignored' '--nocapture' }
         elseif ($Permissions) { & $artifact 'live_native_permission_notifications' '--ignored' '--nocapture' }

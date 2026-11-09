@@ -8,6 +8,7 @@
 pub mod executable;
 pub mod mcp;
 pub mod state;
+mod terminal;
 
 use executable::Executable;
 use serde::{Deserialize, Serialize};
@@ -991,6 +992,7 @@ pub async fn antigravity_terminal_spawn(
     for (key, value) in &session.env {
         command.env(key, value);
     }
+    terminal::configure(&mut command);
     for key in ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CODEX_THREAD_ID"] {
         command.env_remove(key);
     }
