@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::util::claude_paths;
 use super::input::TerminalInput;
+use super::claude_background;
 
 const BUFFER_MAX: usize = 1024 * 1024; // 1MB
 const BUFFER_KEEP: usize = 512 * 1024; // 512KB on drain
@@ -23,6 +24,7 @@ pub struct PtyInstance {
     size: Option<PtySize>,
     // Revokes the hook credential and removes its settings on close/restart.
     _claude_session: Option<super::claude_session::Registration>,
+    claude_background: Option<claude_background::Owner>,
 }
 
 #[derive(serde::Serialize)]
@@ -61,15 +63,20 @@ fn kill_instance(instance: &mut PtyInstance) {
     }
     // Tree-kill first: a claude.cmd shim spawns node.exe children that a
     // plain kill() would orphan.
-    if let Some(pid) = instance.child.process_id() {
-        crate::util::proc::kill_tree(pid);
+    if !matches!(instance.child.try_wait(), Ok(Some(_))) {
+        if let Some(pid) = instance.child.process_id() {
+            crate::util::proc::kill_tree(pid);
+        }
+        let _ = instance.child.kill();
     }
-    let _ = instance.child.kill();
 }
 
+#[derive(Clone)]
 pub struct PtyManager {
     instances: Arc<Mutex<HashMap<String, PtyInstance>>>,
     pub claude_sessions: super::claude_session::ClaudeSessions,
+    panel_gates: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    closing: Arc<AtomicBool>,
 }
 
 impl PtyManager {
@@ -77,17 +84,101 @@ impl PtyManager {
         Self {
             instances: Arc::new(Mutex::new(HashMap::new())),
             claude_sessions: Default::default(),
+            panel_gates: Default::default(),
+            closing: Default::default(),
         }
     }
 
-    /// Kill every running PTY child. Called on app exit so no claude.exe
-    /// processes outlive the window.
-    pub fn kill_all(&self) {
-        if let Ok(mut instances) = self.instances.lock() {
-            for (_, mut instance) in instances.drain() {
-                kill_instance(&mut instance);
+    fn gate(&self, id: &str) -> Result<Arc<Mutex<()>>, String> {
+        Ok(self.panel_gates.lock().map_err(|e| e.to_string())?
+            .entry(id.into()).or_default().clone())
+    }
+
+    // Called with this panel's gate held. Do not hold the shared instance map
+    // during CLI I/O: other terminals must stay responsive while one closes.
+    fn stop_panel(&self, id: &str) -> Result<(), String> {
+        let instance = self.instances.lock().map_err(|e| e.to_string())?.remove(id);
+        if let Some(mut instance) = instance {
+            if let Err(error) = claude_background::stop_owned(instance.claude_background.iter().cloned().collect()) {
+                self.instances.lock().map_err(|e| e.to_string())?.insert(id.into(), instance);
+                return Err(error);
             }
+            kill_instance(&mut instance);
         }
+        Ok(())
+    }
+
+    /// Stop owned background workers through Claude's supervisor before killing
+    /// PTY clients. Closing an attach client alone leaves its worker running.
+    pub fn kill_all(&self) {
+        self.closing.store(true, Ordering::Release);
+        let gates: Vec<_> = self.panel_gates.lock().map(|gates| gates.values().cloned().collect()).unwrap_or_default();
+        let _guards: Vec<_> = gates.iter().filter_map(|gate| gate.lock().ok()).collect();
+        let mut instances: Vec<_> = self.instances.lock()
+            .map(|mut instances| instances.drain().map(|(_, instance)| instance).collect()).unwrap_or_default();
+        if let Err(error) = claude_background::stop_owned(instances.iter().filter_map(|i| i.claude_background.clone()).collect()) {
+            eprintln!("[claude shutdown] {error}");
+        }
+        for instance in &mut instances {
+            kill_instance(instance);
+        }
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::*;
+
+    #[test]
+    fn attach_omits_all_new_session_configuration() {
+        let args = build_claude_args(&Some("opus".into()), true,
+            &Some("bypassPermissions".into()), &Some(vec!["Read".into()]),
+            &Some("prompt".into()), &Some(SessionArg::Attach("b0b7f16f".into())),
+            &Some("user-mcp.json".into()), &Some("panel-mcp.json".into()));
+        assert_eq!(args, ["attach", "b0b7f16f"]);
+        let resumed = build_claude_args(&Some("opus".into()), true, &None, &None, &None,
+            &Some(SessionArg::Resume("saved-session".into())), &None, &Some("panel-mcp.json".into()));
+        assert!(resumed.windows(2).any(|a| a == ["--resume", "saved-session"]));
+        assert!(resumed.contains(&"--dangerously-skip-permissions".into()));
+        assert!(resumed.contains(&"--mcp-config".into()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn closing_a_panel_and_exiting_both_stop_its_background_worker() {
+        let dir = std::env::temp_dir().join(format!("tessera-pty-lifecycle-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("claude.cmd");
+        let log = dir.join("calls.log");
+        let sid = "11111111-1111-4111-8111-111111111111";
+        std::fs::write(&exe, format!("@echo off\r\necho %*>>\"%TESSERA_FAKE_LOG%\"\r\nif \"%1\"==\"agents\" echo [{{\"kind\":\"background\",\"id\":\"11111111\",\"sessionId\":\"{sid}\"}}]\r\nexit /b 0\r\n")).unwrap();
+        let env = Some(HashMap::from([("TESSERA_FAKE_LOG".into(), log.to_string_lossy().into_owned())]));
+        for app_exit in [false, true] {
+            let manager = PtyManager::new();
+            let pair = native_pty_system().openpty(PtySize { rows: 10, cols: 40, pixel_width: 0, pixel_height: 0 }).unwrap();
+            let mut cmd = CommandBuilder::new("cmd.exe");
+            cmd.args(["/d", "/c", "exit 0"]);
+            let child = pair.slave.spawn_command(cmd).unwrap();
+            drop(pair.slave);
+            let input = Arc::new(TerminalInput::new(pair.master.take_writer().unwrap()));
+            let owner = claude_background::Owner {
+                client: claude_background::Client::new(exe.clone(), dir.clone(), &env),
+                ids: Arc::new(Mutex::new(std::collections::HashSet::from([sid.to_string()]))),
+            };
+            manager.instances.lock().unwrap().insert("test-panel".into(), PtyInstance {
+                master: pair.master, child, input, output_buffer: Default::default(),
+                kill_flag: Default::default(), suppress_events: Default::default(), size: None,
+                _claude_session: None, claude_background: Some(owner),
+            });
+            if app_exit { manager.kill_all(); } else { manager.stop_panel("test-panel").unwrap(); }
+            assert!(manager.instances.lock().unwrap().is_empty());
+            assert_eq!(manager.closing.load(Ordering::Acquire), app_exit);
+        }
+        let calls = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(calls.lines().filter(|line| *line == "stop 11111111").count(), 2);
+        std::fs::remove_file(exe).unwrap();
+        std::fs::remove_file(log).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 }
 
@@ -97,6 +188,7 @@ impl PtyManager {
 pub enum SessionArg {
     Resume(String),
     New(String),
+    Attach(String),
 }
 
 fn build_claude_args(
@@ -109,6 +201,11 @@ fn build_claude_args(
     mcp_config_path: &Option<String>,
     panel_mcp_config: &Option<String>,
 ) -> Vec<String> {
+    if let Some(SessionArg::Attach(id)) = session {
+        // A live background worker already owns its settings and tools. Passing
+        // resume/configuration flags makes Claude reject it as already running.
+        return vec!["attach".into(), id.clone()];
+    }
     let mut args: Vec<String> = Vec::new();
 
     if let Some(m) = model {
@@ -154,6 +251,7 @@ fn build_claude_args(
             args.push("--session-id".to_string());
             args.push(sid.clone());
         }
+        Some(SessionArg::Attach(_)) => unreachable!(),
         None => {}
     }
 
@@ -198,121 +296,142 @@ pub async fn pty_spawn(
     app: AppHandle,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
-    crate::hibernation::ensure_awake(&app, &id)?;
-    let pty_system = native_pty_system();
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let gate = state.gate(&id)?;
+        let _guard = gate.lock().map_err(|e| e.to_string())?;
+        if state.closing.load(Ordering::Acquire) { return Err("Tessera is closing".into()); }
+        crate::hibernation::ensure_awake(&app, &id)?;
+        // Finish the previous process before probing/spawning its replacement, or
+        // its cleanup could stop the background worker we just attached to.
+        state.stop_panel(&id)?;
+        let pty_system = native_pty_system();
 
-    let pair = pty_system
-        .openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("Failed to open PTY: {}", e))?;
+        let pair = pty_system
+            .openpty(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-    // Auto-generate MCP config from database if not explicitly provided
-    let effective_mcp_config = if mcp_config_path.is_some() {
-        mcp_config_path
-    } else {
-        // Try to generate from DB - if the Database state is available
-        // This is a best-effort; if DB is not available, we proceed without MCP
-        None
-    };
+        // Auto-generate MCP config from database if not explicitly provided
+        let effective_mcp_config = if mcp_config_path.is_some() {
+            mcp_config_path
+        } else {
+            // Try to generate from DB - if the Database state is available
+            // This is a best-effort; if DB is not available, we proceed without MCP
+            None
+        };
 
-    // Resolve the working directory BEFORE building args — the resume guard
-    // below needs it to locate the session file.
-    let work_dir = claude_paths::resolve_work_dir(&cwd);
+        // Resolve the working directory BEFORE building args — the resume guard
+        // below needs it to locate the session file.
+        let work_dir = claude_paths::resolve_work_dir(&cwd);
+        let claude_exe = claude_paths::find_claude_exe()
+            .ok_or_else(|| "Could not find claude executable on this system. Check that claude is installed and in your PATH.".to_string())?;
+        let background = claude_background::Client::new(claude_exe.clone(), work_dir.clone().into(), &env);
+        let saved_session_id = claude_session_id.filter(|sid| !sid.is_empty());
+        let attachment = saved_session_id.as_deref().and_then(|sid| background.attachment(sid));
 
-    // The panel always hands us an id. If its JSONL already exists we resume
-    // it; if not we pass --session-id so the CLI *starts* the conversation
-    // under that exact id.
-    //
-    // The alternative — let the CLI pick an id and then work out which file it
-    // created — cannot be done reliably: the only signal is "newest session in
-    // this directory", which silently adopts an unrelated conversation whenever
-    // two panels share a working directory, or when a Claude Code session was
-    // run in that directory outside the app. That is exactly how panels ended
-    // up showing each other's transcripts after a restart.
-    let session_arg = claude_session_id
-        .filter(|sid| !sid.is_empty())
-        .map(|sid| {
-            let exists = claude_paths::session_file_path(&work_dir, &sid).exists();
-            if exists {
-                SessionArg::Resume(sid)
-            } else {
-                SessionArg::New(sid)
-            }
-        });
+        // The panel always hands us an id. If its JSONL already exists we resume
+        // it; if not we pass --session-id so the CLI *starts* the conversation
+        // under that exact id.
+        //
+        // The alternative — let the CLI pick an id and then work out which file it
+        // created — cannot be done reliably: the only signal is "newest session in
+        // this directory", which silently adopts an unrelated conversation whenever
+        // two panels share a working directory, or when a Claude Code session was
+        // run in that directory outside the app. That is exactly how panels ended
+        // up showing each other's transcripts after a restart.
+        let session_arg = saved_session_id.clone()
+            .map(|sid| {
+                if let Some(id) = &attachment { return SessionArg::Attach(id.clone()); }
+                let exists = claude_paths::session_file_path(&work_dir, &sid).exists();
+                if exists {
+                    SessionArg::Resume(sid)
+                } else {
+                    SessionArg::New(sid)
+                }
+            });
 
-    let mut args = build_claude_args(
-        &model,
-        dangerously_skip_permissions.unwrap_or(false),
-        &permission_mode,
-        &allowed_tools,
-        &system_prompt,
-        &session_arg,
-        &effective_mcp_config,
-        &crate::panelbus::spawn_config::write_for_panel(&app, &id),
-    );
+        let mut args = build_claude_args(
+            &model,
+            dangerously_skip_permissions.unwrap_or(false),
+            &permission_mode,
+            &allowed_tools,
+            &system_prompt,
+            &session_arg,
+            &effective_mcp_config,
+            &crate::panelbus::spawn_config::write_for_panel(&app, &id),
+        );
 
-    let port = app.state::<crate::panelbus::PanelBus>().port
-        .ok_or("Claude session tracking could not start: the local endpoint is unavailable")?;
-    let session_tracking = state.claude_sessions.prepare(&id, port)?;
-    args.push("--settings".into());
-    args.push(session_tracking.settings_path.to_string_lossy().into_owned());
-
-    let claude_exe = claude_paths::find_claude_exe()
-        .ok_or_else(|| "Could not find claude executable on this system. Check that claude is installed and in your PATH.".to_string())?;
-
-    let mut cmd = CommandBuilder::new(&claude_exe);
-    for arg in &args {
-        cmd.arg(arg);
-    }
-
-    cmd.cwd(&work_dir);
-
-    // Strip nested-session markers: if the GUI itself was launched from
-    // inside a Claude Code session (e.g. `tauri dev` in a CC terminal), the
-    // PTY child would otherwise think it's a child session — refusing to
-    // start ("cannot launch inside another session") or silently disabling
-    // transcript saving ("inherited CLAUDE_CODE_CHILD_SESSION marker").
-    cmd.env_remove("CLAUDECODE");
-    cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
-    cmd.env_remove("CLAUDE_CODE_CHILD_SESSION");
-    cmd.env_remove("CLAUDE_EXE");
-
-    // Windows ConPTY sets no TERM, so the CLI's color detection (chalk /
-    // supports-color) falls back to "no color" and the whole TUI renders
-    // plain white. Declare a 256-color truecolor terminal — xterm.js is one.
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
-    cmd.env("FORCE_COLOR", "3");
-
-    // Per-panel routing env (e.g. ANTHROPIC_BASE_URL → OpenRouter). Set last
-    // so it wins over anything inherited from the host environment.
-    if let Some(extra) = &env {
-        for (key, value) in extra {
-            cmd.env(key, value);
+        let port = app.state::<crate::panelbus::PanelBus>().port
+            .ok_or("Claude session tracking could not start: the local endpoint is unavailable")?;
+        let session_tracking = state.claude_sessions.prepare(&id, port)?;
+        if let Some(sid) = saved_session_id.as_deref().and_then(|sid| uuid::Uuid::parse_str(sid).ok()) {
+            session_tracking.ids.lock().map_err(|e| e.to_string())?.insert(sid.to_string());
         }
-    }
+        if attachment.is_none() {
+            args.push("--settings".into());
+            args.push(session_tracking.settings_path.to_string_lossy().into_owned());
+        }
+        let background_owner = claude_background::Owner { client: background, ids: session_tracking.ids.clone() };
 
-    let child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| format!("Failed to spawn claude: {}", e))?;
+        let mut cmd = CommandBuilder::new(&claude_exe);
+        for arg in &args {
+            cmd.arg(arg);
+        }
 
-    install_pair(id, pair, child, &app, &state, Some(session_tracking), false)
+        cmd.cwd(&work_dir);
+
+        // Strip nested-session markers: if the GUI itself was launched from
+        // inside a Claude Code session (e.g. `tauri dev` in a CC terminal), the
+        // PTY child would otherwise think it's a child session — refusing to
+        // start ("cannot launch inside another session") or silently disabling
+        // transcript saving ("inherited CLAUDE_CODE_CHILD_SESSION marker").
+        cmd.env_remove("CLAUDECODE");
+        cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
+        cmd.env_remove("CLAUDE_CODE_CHILD_SESSION");
+        cmd.env_remove("CLAUDE_EXE");
+
+        // Windows ConPTY sets no TERM, so the CLI's color detection (chalk /
+        // supports-color) falls back to "no color" and the whole TUI renders
+        // plain white. Declare a 256-color truecolor terminal — xterm.js is one.
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        cmd.env("FORCE_COLOR", "3");
+
+        // Per-panel routing env (e.g. ANTHROPIC_BASE_URL → OpenRouter). Set last
+        // so it wins over anything inherited from the host environment.
+        if let Some(extra) = &env {
+            for (key, value) in extra {
+                cmd.env(key, value);
+            }
+        }
+
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| format!("Failed to spawn claude: {}", e))?;
+
+        install_pair(id, pair, child, &app, &state, Some(session_tracking), Some(background_owner), false)
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// Codex supplies its own command; Claude argument and environment construction stays above.
 pub fn spawn_prepared(id: String, cmd: CommandBuilder, cols: u16, rows: u16, app: &AppHandle, state: &PtyManager, quiet_goal_resume: bool) -> Result<(), String> {
+    let gate = state.gate(&id)?;
+    let _guard = gate.lock().map_err(|e| e.to_string())?;
+    if state.closing.load(Ordering::Acquire) { return Err("Tessera is closing".into()); }
     crate::hibernation::ensure_awake(app, &id)?;
+    state.stop_panel(&id)?;
     let pair = native_pty_system().openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("Cannot start terminal: {e}"))?;
-    install_pair(id, pair, child, app, state, None, quiet_goal_resume)
+    install_pair(id, pair, child, app, state, None, None, quiet_goal_resume)
 }
 
-fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable_pty::Child + Send + Sync>, app: &AppHandle, state: &PtyManager, claude_session: Option<super::claude_session::Registration>, quiet_goal_resume: bool) -> Result<(), String> {
+fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable_pty::Child + Send + Sync>, app: &AppHandle, state: &PtyManager, claude_session: Option<super::claude_session::Registration>, claude_background: Option<claude_background::Owner>, quiet_goal_resume: bool) -> Result<(), String> {
     // Drop slave after spawning - we only need the master side
     drop(pair.slave);
 
@@ -334,7 +453,7 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
     let input = Arc::new(if quiet_goal_resume { TerminalInput::with_quiet_goal_resume(writer,
         size.map_or(80, |s| s.cols), size.map_or(24, |s| s.rows)) }
         else { TerminalInput::new(writer) });
-    let instance = PtyInstance {
+    let mut instance = PtyInstance {
         master: pair.master,
         child,
         input: input.clone(),
@@ -343,13 +462,16 @@ fn install_pair(id: String, pair: portable_pty::PtyPair, child: Box<dyn portable
         suppress_events: suppress_events.clone(),
         size,
         _claude_session: claude_session,
+        claude_background,
     };
 
     {
         let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-        // Replacing an existing instance must not leak its process
-        if let Some(mut old) = instances.remove(&id) {
-            kill_instance(&mut old);
+        if state.closing.load(Ordering::Acquire) {
+            drop(instances);
+            let _ = claude_background::stop_owned(instance.claude_background.iter().cloned().collect());
+            kill_instance(&mut instance);
+            return Err("Tessera is closing".into());
         }
         instances.insert(id.clone(), instance);
     }
@@ -579,12 +701,13 @@ pub async fn pty_kill(
     app: AppHandle,
     state: tauri::State<'_, PtyManager>,
 ) -> Result<(), String> {
-    {
-        let mut instances = state.instances.lock().map_err(|e| e.to_string())?;
-        if let Some(mut instance) = instances.remove(&id) {
-            kill_instance(&mut instance);
-        }
-    }
+    let manager = state.inner().clone();
+    let panel_id = id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let gate = manager.gate(&panel_id)?;
+        let _guard = gate.lock().map_err(|e| e.to_string())?;
+        manager.stop_panel(&panel_id)
+    }).await.map_err(|e| e.to_string())??;
     if let Some(bus) = app.try_state::<crate::panelbus::PanelBus>() {
         bus.forget_panel(&id);
     }

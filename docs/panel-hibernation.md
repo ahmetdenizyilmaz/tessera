@@ -27,6 +27,12 @@ Periodic account quota notifications do not count as work.
 
 Native cleanup closes both the PTY and the provider's background process. On
 Windows their owned child process trees, including stdio MCP children, are killed.
+Claude sessions that run in its background service are stopped with `claude stop`
+using full session identities recorded for Tessera panels. This also happens when
+you close a panel or exit Tessera; unrelated Claude sessions stay running. Reopening
+a previously backgrounded Claude terminal uses `claude attach` when that session
+is still hosted. A live attachment retains the worker's current model, permissions,
+and MCP setup; Tessera's launch settings apply when resuming a stopped conversation.
 Shared/external MCP services are not shut down. Suspended panels reject incoming
 panel messages instead of silently spawning an agent. Renderers, retained xterm
 parsers and provider pollers are released too. Preview files are bounded plain

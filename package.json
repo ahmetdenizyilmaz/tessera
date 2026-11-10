@@ -1,5 +1,6 @@
 {
   "name": "tessera",
+  "description": "One workspace for AI agents, terminals, and apps",
   "private": true,
   "version": "0.4.5",
   "type": "module",

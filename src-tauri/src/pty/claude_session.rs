@@ -3,13 +3,18 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 #[derive(Clone, Default)]
-pub struct ClaudeSessions(Arc<Mutex<HashMap<String, String>>>);
+pub struct ClaudeSessions(Arc<Mutex<HashMap<String, SessionOwner>>>);
+
+struct SessionOwner {
+    token: String,
+    ids: Arc<Mutex<HashSet<String>>>,
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +27,7 @@ pub struct Registration {
     token: String,
     pub settings_path: PathBuf,
     sessions: ClaudeSessions,
+    pub ids: Arc<Mutex<HashSet<String>>>,
 }
 
 impl ClaudeSessions {
@@ -53,15 +59,17 @@ impl ClaudeSessions {
             "type": "command", "command": command, "timeout": 3
         }] }] } });
         std::fs::write(&settings_path, settings.to_string()).map_err(|e| e.to_string())?;
+        let ids = Arc::new(Mutex::new(HashSet::new()));
         self.0
             .lock()
             .map_err(|e| e.to_string())?
-            .insert(panel_id.into(), token.clone());
+            .insert(panel_id.into(), SessionOwner { token: token.clone(), ids: ids.clone() });
         Ok(Registration {
             panel_id: panel_id.into(),
             token,
             settings_path,
             sessions: self.clone(),
+            ids,
         })
     }
 
@@ -69,19 +77,24 @@ impl ClaudeSessions {
         self.0.lock().is_ok_and(|sessions| {
             sessions
                 .get(panel_id)
-                .is_some_and(|current| current == token)
+                .is_some_and(|current| current.token == token)
         })
     }
 
     pub fn accept(&self, panel_id: &str, token: &str, event: &Value) -> Option<SessionChanged> {
-        if !self.authorized(panel_id, token) || event["hook_event_name"] != "SessionStart" {
+        if event["hook_event_name"] != "SessionStart" {
             return None;
         }
         let session_id = event["session_id"].as_str()?;
         // A brand-new session has no transcript yet; its ID is still durable.
-        uuid::Uuid::parse_str(session_id).ok()?;
+        let session_id = uuid::Uuid::parse_str(session_id).ok()?.to_string();
+        // Check the credential and record ownership under the same lock: an old
+        // hook must never claim a session for a replacement panel process.
+        let sessions = self.0.lock().ok()?;
+        let owner = sessions.get(panel_id).filter(|owner| owner.token == token)?;
+        owner.ids.lock().ok()?.insert(session_id.clone());
         Some(SessionChanged {
-            session_id: session_id.to_owned(),
+            session_id,
         })
     }
 }
@@ -89,7 +102,7 @@ impl ClaudeSessions {
 impl Drop for Registration {
     fn drop(&mut self) {
         if let Ok(mut sessions) = self.sessions.0.lock() {
-            if sessions.get(&self.panel_id) == Some(&self.token) {
+            if sessions.get(&self.panel_id).is_some_and(|owner| owner.token == self.token) {
                 sessions.remove(&self.panel_id);
             }
         }
@@ -136,9 +149,13 @@ mod tests {
                 sid
             );
             assert!(sessions.accept(&other, &first.token, &event).is_none());
+            assert!(first.ids.lock().unwrap().contains(&sid));
+            assert!(registration.ids.lock().unwrap().is_empty());
         }
         let event = json!({"hook_event_name":"SessionStart", "session_id":uuid::Uuid::new_v4().to_string()});
         let replacement = sessions.prepare_in(&panel, 12345, dir.clone()).unwrap();
+        assert_eq!(first.ids.lock().unwrap().len(), 4);
+        assert!(replacement.ids.lock().unwrap().is_empty());
         assert!(sessions.accept(&panel, &first.token, &event).is_none());
         drop(first);
         assert!(sessions

@@ -1,5 +1,6 @@
 [package]
 name = "tessera"
+description = "One workspace for AI agents, terminals, and apps"
 version = "0.4.5"
 edition = "2021"
 

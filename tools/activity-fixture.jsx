@@ -27,8 +27,10 @@ mockIPC(async (command, args) => {
   if (command === 'activity_list') {
     if (window.activityFail) throw new Error('Activity storage is unavailable');
     const all = window.activityRecords.filter(r => !args.since || r.startedAt >= args.since).sort((a, b) => b.startedAt - a.startedAt || b.id.localeCompare(a.id));
-    const data = args.before ? all.filter(r => r.startedAt < args.before.at) : all;
-    return { records: data, hasMore: window.activityOlder && !args.before, health: { error: null, lastScan: Date.now() } };
+    const data = args.before ? all.filter(r => r.startedAt < args.before.at || (r.startedAt === args.before.at && r.id < args.before.id)) : all;
+    const rows = data.slice(0, args.limit ?? 500);
+    for (const record of all.filter(r => args.refreshIds?.includes(r.id))) if (!rows.some(r => r.id === record.id)) rows.push(record);
+    return { records: rows, hasMore: data.length > (args.limit ?? 500) || (window.activityOlder && !args.before), health: { error: null, lastScan: Date.now() } };
   }
   if (command === 'plugin:dialog|save') return 'C:\\test\\activity.json';
   return null;

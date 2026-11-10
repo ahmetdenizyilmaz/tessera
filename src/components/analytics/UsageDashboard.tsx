@@ -60,7 +60,7 @@ function periodRows(rows: PeriodRow[], totals: Tokens, label: string) {
     <TokenCells t={r} />
   </tr>);
   const foot = rows.length > 0 && <tr><td style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={cell} /><TokenCells t={totals} strong /></tr>;
-  return <Table heads={[label, 'Models', ...TOKEN_HEADS]} rows={body} totals={foot} empty="No Claude Code usage in this range." />;
+  return <Table heads={[label, 'Models', ...TOKEN_HEADS]} rows={body} totals={foot} empty="No recorded usage in this range." />;
 }
 
 export default function UsageDashboard() {
@@ -129,7 +129,7 @@ export default function UsageDashboard() {
 
     <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error && <p role="alert" style={{ textAlign: 'center', color: 'var(--error)', fontSize: 13 }}>{error}</p>}
-      {!report && loading && <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Reading Claude Code session files…</p>}
+      {!report && loading && <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Reading provider sessions and recorded usage…</p>}
       {report && <AnalyticsSummaryCards totalCost={report.totals.cost} totalInputTokens={report.totals.input} totalOutputTokens={report.totals.output} sessionsCount={report.sessions.length} />}
       {report && tab === 'daily' && <>
         {report.daily.length > 1 && <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
@@ -139,7 +139,7 @@ export default function UsageDashboard() {
         {periodRows(report.daily, report.totals, 'Date')}
       </>}
       {report && tab === 'monthly' && periodRows(report.monthly, report.totals, 'Month')}
-      {report && tab === 'sessions' && <Table heads={['Session', 'Models', ...TOKEN_HEADS]} empty="No Claude Code sessions in this range."
+      {report && tab === 'sessions' && <Table heads={['Session', 'Models', ...TOKEN_HEADS]} empty="No recorded sessions in this range."
         rows={report.sessions.map(s => <tr key={`${s.provider}:${s.sessionId}`} style={{ borderBottom: '1px solid var(--border)' }}>
           <td style={{ ...cell, whiteSpace: 'normal' }}><div style={{ color: 'var(--text-primary)', fontWeight: 500 }} title={s.sessionId}>{s.project.split(/[\\/]/).pop() || s.project} · {s.sessionId.slice(0, 8)}</div><div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{providerName(s.provider)} · {new Date(s.lastAt).toLocaleString()} · {s.messages} messages</div></td>
           <td style={{ ...cell, color: 'var(--text-secondary)' }}><ModelList models={s.models} /></td>

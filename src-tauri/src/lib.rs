@@ -50,6 +50,9 @@ pub fn main_view_commands<R: tauri::Runtime>(
 pub fn run() {
     let database = Database::new().expect("Failed to initialize database");
     let lan_manager = lan::LanManager::new().expect("Failed to initialize LAN identity");
+    // 0 = running, 1 = cleaning up, 2 = safe to exit. Keep the UI event loop
+    // alive while bounded Claude supervisor commands finish on a worker thread.
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0));
 
     tauri::Builder::default()
         // Single instance MUST be the first plugin. A second `cgui` launch
@@ -352,20 +355,32 @@ pub fn run() {
         ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            // Kill every spawned claude process when the app exits — otherwise
-            // ConPTY/stream children are orphaned and survive until reboot.
-            if matches!(
-                event,
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
-            ) {
-                use tauri::Manager;
-                app.state::<PtyManager>().kill_all();
-                app.state::<StreamJsonManager>().kill_all();
-                app.state::<codex::CodexManager>().kill_all();
-                app.state::<opencode::OpenCodeManager>().kill_all();
-                app.state::<antigravity::AntigravityManager>().kill_all();
-                app.state::<activity::Recorder>().flush();
+        .run(move |app, event| {
+            use std::sync::atomic::Ordering;
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if shutdown.load(Ordering::Acquire) == 2 { return; }
+                api.prevent_exit();
+                if shutdown.compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+                    let app = app.clone();
+                    let shutdown = shutdown.clone();
+                    std::thread::spawn(move || {
+                        stop_panel_processes(&app);
+                        shutdown.store(2, Ordering::Release);
+                        app.exit(code.unwrap_or(0));
+                    });
+                }
+            } else if matches!(event, tauri::RunEvent::Exit) && shutdown.load(Ordering::Acquire) != 2 {
+                stop_panel_processes(app);
             }
         });
+}
+
+fn stop_panel_processes(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    app.state::<PtyManager>().kill_all();
+    app.state::<StreamJsonManager>().kill_all();
+    app.state::<codex::CodexManager>().kill_all();
+    app.state::<opencode::OpenCodeManager>().kill_all();
+    app.state::<antigravity::AntigravityManager>().kill_all();
+    app.state::<activity::Recorder>().flush();
 }

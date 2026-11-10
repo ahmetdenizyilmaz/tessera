@@ -33,6 +33,8 @@
   },
   "bundle": {
     "active": true,
+    "shortDescription": "One workspace for AI agents, terminals, and apps",
+    "longDescription": "Tessera is a desktop workspace for multiple AI providers. Arrange Claude Code, Codex, OpenCode, Antigravity, cloud and local model chats, terminals, and panel apps in a flexible tiled layout.",
     "targets": ["nsis"],
     "resources": { "resources/codex-terminal/": "codex-terminal/" },
     "icon": [

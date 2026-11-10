@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink, Keyboard, Search, X } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-shell';
 import { BUILD_LABEL, buildDateLabel } from '../../lib/buildInfo';
+import { TesseraIcon } from '../icons/TesseraIcon';
 import './about.css';
 
 interface AboutDialogProps { isOpen: boolean; onClose: () => void }
@@ -41,10 +42,10 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => 
       e.stopPropagation();if(e.key==='Escape'){e.preventDefault();onClose();}
       if(e.key==='Tab'){const items=[...e.currentTarget.querySelectorAll<HTMLElement>('button,input,a')];const first=items[0],last=items.at(-1);if(e.shiftKey&&(document.activeElement===first||document.activeElement===ref.current)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===ref.current)){e.preventDefault();first?.focus();}}
     }}>
-      <header><div className="about-brand"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="3" y="5" width="15" height="30" rx="4" fill="#6781ff"/><rect x="22" y="5" width="15" height="13" rx="4" fill="#f1be5b"/><rect x="22" y="22" width="15" height="13" rx="4" fill="#71819b"/></svg><div><span className="about-eyebrow">Your work, together</span><h2 id="about-title">Tessera</h2></div></div><button type="button" className="about-close" aria-label="Close About" onClick={onClose}><X size={19}/></button></header>
+      <header><div className="about-brand"><TesseraIcon size={48} /><div><span className="about-eyebrow">Your work, together</span><h2 id="about-title">Tessera</h2></div></div><button type="button" className="about-close" aria-label="Close About" onClick={onClose}><X size={19}/></button></header>
       <div className="about-content">
         <div className="about-build"><span>{BUILD_LABEL}</span><small>Built {buildDateLabel()}</small></div>
-        <p className="about-description">AI agents, terminals, and small apps in one flexible workspace. Arrange panels, keep conversations together, and make room for the way you work.</p>
+        <p className="about-description">AI agents, terminals, and apps in one flexible workspace. Use Claude Code, Codex, OpenCode, Antigravity, cloud models, and local models side by side. Arrange panels and keep your conversations together.</p>
         <div className="about-credit"><div><span>Created by</span><strong>Ahmet Deniz YILMAZ</strong></div><a href="https://ady.com.tr" onClick={e=>{e.preventDefault();void open('https://ady.com.tr').catch(()=>setLinkError('Could not open the browser. Visit ady.com.tr in your browser.'));}}>ady.com.tr<ExternalLink size={13}/></a></div>
         {linkError&&<p role="alert" className="about-link-error">{linkError}</p>}
         <section className="about-keys" aria-labelledby="about-keys-title"><div className="about-keys-heading"><h3 id="about-keys-title"><Keyboard size={16}/>Keyboard shortcuts</h3><label><Search size={13}/><input type="search" aria-label="Find a keyboard shortcut" placeholder="Find shortcut" value={search} onChange={e=>setSearch(e.target.value)}/></label></div>

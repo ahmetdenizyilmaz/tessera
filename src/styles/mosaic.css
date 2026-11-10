@@ -28,6 +28,18 @@
   pointer-events: none;
 }
 
+/* Native file drags preview a destination without focusing/rotating tiles. */
+.mosaic-tile[data-file-drop-target]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
 /* Block iframe pointer events during gutter resize and panel drag */
 .mosaic-gutter-dragging iframe,
 .mosaic-panel-dragging iframe,

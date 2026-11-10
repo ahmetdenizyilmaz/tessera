@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/tessera-banner.png" alt="Tessera" width="760">
+<img src="assets/tessera-banner.png" alt="Tessera — one workspace for AI agents, terminals, and apps" width="760">
 
 <p>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-6B7391?style=flat-square&logo=windows&logoColor=white">
@@ -10,16 +10,17 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-4C6EF5?style=flat-square"></a>
 </p>
 
-<strong>One workspace for coding agents, cloud LLMs, and local models.<br>Claude Code, Codex, Antigravity, OpenRouter, Ollama, and more, side by side.</strong>
+<strong>One workspace for AI agents, terminals, and apps.<br>Claude Code, Codex, OpenCode, Antigravity, cloud models, and local models, side by side.</strong>
 
 </div>
 
 ---
 
-**Tessera** is a native desktop workspace for multiple AI providers. Run Claude Code, Codex and
+**Tessera** is a native desktop workspace for multiple AI providers. Run Claude Code, Codex, OpenCode and
 Antigravity coding sessions, chat with cloud models, or use models running on your own machine, all in a
 resizable mosaic. Mix providers in the same window, group related work, and let coding-agent
-panels message each other. Built with [Tauri 2](https://v2.tauri.app/) (Rust) + React 19.
+panels message each other. Keep HTML apps, games, and websites beside your work.
+Built with [Tauri 2](https://v2.tauri.app/) (Rust) + React 19.
 
 > **Status:** beta. Actively developed; expect rough edges.
 
@@ -106,6 +107,9 @@ agents, credentials, model discovery, permissions, and session storage.
   like `code .`; if the app is already running it just adds a tab.
 - **Session management** — resume Claude Code and Codex conversations and save whole workspaces.
   Attach external `claude --resume` sessions by folder drop or paste.
+- **Activity replay** — switch between Flow, Timeline, and Bubbles to follow named chats and
+  panel-to-panel messages. Browse 500 events per page, play history at a configurable pace,
+  or smoothly follow the most recently active conversation. See [Activity history](docs/activity-history.md).
 - **Cloud and local models** — configure API keys and local server addresses in **Settings → LLM Providers**.
   Discover models from OpenRouter, Ollama, and LM Studio.
 - **MCP server manager** — add and toggle MCP servers for coding-agent panels.

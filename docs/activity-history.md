@@ -7,8 +7,27 @@ Select a card to read its question, responses, incoming/outgoing handoffs, and
 input/output/cache breakdown. Search, provider/chat filters, a date range, zoom,
 pan, fit, and jump-to-latest controls help navigate larger histories. The export
 button saves the loaded, filtered records as JSON. Totals apply to those records;
-use **Load older** for earlier pages. The graph draws the newest 100 filtered
-records, while the timeline exposes all loaded records.
+use **Load older** for earlier pages of 500 records. Flow draws the newest 500
+filtered records, while Timeline exposes all loaded records.
+
+## Bubbles and replay
+
+Choose **Bubbles** to see named chats with provider labels and directed arrows
+showing who messaged whom. Your messages originate from the **You** bubble;
+panel handoffs connect their actual sender and recipient. Missing usage remains
+unavailable, and incoming replies do not create duplicate handoff charges.
+
+Use Play, Previous/Next, or the scrubber to replay all loaded filtered history.
+Replay settings offer time pacing (minutes, hours, days, or weeks per second),
+events per second, idle-gap skipping, looping, and a connection trail. The default
+is one day per second with long gaps shortened. Up to 500 events contribute to
+the graph at a time; loading older pages extends the replay history.
+
+**Focus mode** smoothly centers the graph on the current conversation.
+**Live Follow** keeps tracking the latest active conversation, including updates
+to turns that started earlier. Panning or zooming turns off camera following;
+select Focus mode to resume it. These controls move the Activity camera, not
+your terminal panels. Replay settings persist; playback does not auto-start.
 
 ## Recording and attribution
 
@@ -65,9 +84,11 @@ an external analytics service.
 
 ## Validation
 
-`npm test -- src/lib/activityGraph.test.ts` checks graph causality, identical chat
+`npm test -- src/lib/activityGraph.test.ts src/lib/activityReplay.test.ts` checks graph causality, identical chat
 names, filtering boundaries, usage totals, and deduplication. Activity Rust tests
 cover provider parsing, cumulative usage, partial JSONL writes, persistent history,
 interruption, trace IDs, and Antigravity's cumulative, resumed, interrupted, duplicated and missing usage. On Windows run `tools/test-rust.ps1 -Stable` to embed
 the manifest required by native test binaries. With `npm run dev` running,
-`node tools/test-activity.mjs` exercises the real React view with synthetic records.
+`node tools/test-activity.mjs` and `node tools/test-activity-bubbles.mjs` exercise
+the real React views with synthetic records, including 500-event pages, replay,
+live updates, filters, and narrow layouts.

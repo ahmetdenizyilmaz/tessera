@@ -25,7 +25,7 @@ export function EnvironmentSettings() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="form-group">
         <label className="form-label">Custom Environment Variables</label>
-        <p className="form-hint">These will be set when spawning Claude instances.</p>
+        <p className="form-hint">Environment variables for agent processes.</p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

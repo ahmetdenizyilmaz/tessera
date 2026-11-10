@@ -5,6 +5,7 @@ import { createPluginPanel } from '../../lib/newSessionActions';
 import { AddonManager } from '../plugins/AddonManager';
 import { PluginIcon } from '../icons/PluginIcon';
 import { webAppIcon } from '../../lib/webApps';
+import { TesseraIcon } from '../icons/TesseraIcon';
 
 interface MenuBarProps {
   onNewInstance: () => void;
@@ -155,7 +156,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
 
   return (
     <div className="menu-bar" ref={barRef}>
-      <span className="menu-bar-logo">{'\u2726'} Tessera</span>
+      <span className="menu-bar-logo"><TesseraIcon size={19} />Tessera</span>
 
       <div className="menu-bar-menus">
         {menus.map((menu) => (

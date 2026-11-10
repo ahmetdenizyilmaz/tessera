@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ClaudeIcon } from './icons/ProviderIcons';
+import { TesseraIcon } from './icons/TesseraIcon';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -33,10 +33,10 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
     <div className={`splash-screen splash-screen--${phase}`}>
       <div className="splash-content">
         <div className="splash-icon">
-          <ClaudeIcon size={64} />
+          <TesseraIcon size={96} />
         </div>
         <div className="splash-title">Tessera</div>
-        <div className="splash-subtitle">Multi-instance Claude Code IDE</div>
+        <div className="splash-subtitle">One workspace for AI agents, terminals, and apps</div>
       </div>
       <div className="splash-shimmer" />
     </div>

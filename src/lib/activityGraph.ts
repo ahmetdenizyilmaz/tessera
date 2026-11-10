@@ -1,5 +1,7 @@
 import type { ActivityActor, ActivityRecord, ActivityUsage } from '../types/activity';
 
+export const ACTIVITY_GRAPH_LIMIT = 500;
+
 export const providerName = (provider: string) => ({ claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', antigravity: 'Antigravity', unknown: 'Agent' }[provider] ?? provider);
 export const actorKey = (actor: ActivityActor) => `${actor.provider}:${actor.id}`;
 export const tokenTotal = (usage: ActivityUsage | null) => usage ? usage.input + usage.output + usage.cacheRead + usage.cacheWrite : 0;

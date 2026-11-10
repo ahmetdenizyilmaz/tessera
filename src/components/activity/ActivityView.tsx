@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import { Activity, ArrowDown, ArrowRight, Check, Download, Focus, GitBranch, List, Maximize2, MessageSquare, RefreshCw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Activity, ArrowDown, ArrowRight, Check, Download, Focus, GitBranch, List, Maximize2, MessageSquare, Network, RefreshCw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { ActivityActor, ActivityPage, ActivityRecord } from '../../types/activity';
-import { activityGraph, activitySummary, actorKey, byTime, mergeActivity, providerName, shortTokens, tokenTotal } from '../../lib/activityGraph';
+import { ACTIVITY_GRAPH_LIMIT, activityGraph, activitySummary, actorKey, byTime, mergeActivity, providerName, shortTokens, tokenTotal } from '../../lib/activityGraph';
+import { ActivityBubbles } from './ActivityBubbles';
 import { useInstanceStore } from '../../store/instanceStore';
 import { focusShortcutPanel } from '../../lib/panelShortcuts';
 import '../../styles/activity.css';
@@ -27,7 +28,7 @@ function UsageBar({ record }: { record: ActivityRecord }) {
 
 export default function ActivityView() {
   const [records, setRecords] = useState<ActivityRecord[]>([]);
-  const [mode, setMode] = useState<'flow' | 'timeline'>('flow');
+  const [mode, setMode] = useState<'flow' | 'timeline' | 'bubbles'>('flow');
   const [days, setDays] = useState('7');
   const [provider, setProvider] = useState('all');
   const [chat, setChat] = useState('all');
@@ -55,7 +56,7 @@ export default function ActivityView() {
       busy = true;
       try {
         const refreshIds = first ? [] : recordsRef.current.filter(r => ['running', 'recorded', 'sending', 'queued'].includes(r.status)).map(r => r.id);
-        const page = await invoke<ActivityPage>('activity_list', { since: rangeStart, limit: 300, refreshIds });
+        const page = await invoke<ActivityPage>('activity_list', { since: rangeStart, limit: ACTIVITY_GRAPH_LIMIT, refreshIds });
         if (!alive || version !== generation.current) return;
         setRecords(old => mergeActivity(old, page.records));
         if (first) setHasMore(page.hasMore);
@@ -92,7 +93,7 @@ export default function ActivityView() {
     const version = generation.current;
     const oldest = records[0]; setLoading(true);
     try {
-      const page = await invoke<ActivityPage>('activity_list', { since: rangeStart, before: { at: oldest.startedAt, id: oldest.id }, limit: 300 });
+      const page = await invoke<ActivityPage>('activity_list', { since: rangeStart, before: { at: oldest.startedAt, id: oldest.id }, limit: ACTIVITY_GRAPH_LIMIT });
       if (version !== generation.current) return;
       setRecords(old => mergeActivity(old, page.records)); setHasMore(page.hasMore); setError(null);
     } catch (err) { if (version === generation.current) setError(String(err)); }
@@ -114,6 +115,7 @@ export default function ActivityView() {
     <div className="activity-controls"><div className="activity-switch" role="group" aria-label="Activity view">
       <button aria-pressed={mode === 'flow'} onClick={() => setMode('flow')}><GitBranch size={14} />Flow</button>
       <button aria-pressed={mode === 'timeline'} onClick={() => setMode('timeline')}><List size={14} />Timeline</button>
+      <button aria-pressed={mode === 'bubbles'} onClick={() => setMode('bubbles')}><Network size={14} />Bubbles</button>
     </div><select aria-label="Activity date range" value={days} onChange={e => setDays(e.target.value)}><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All recorded history</option></select>
       <button className="activity-icon-button" aria-label="Refresh activity" title="Refresh activity" onClick={() => setReload(v => v + 1)}><RefreshCw size={14} className={loading ? 'spin' : ''} /></button>
       <button className="activity-icon-button" aria-label="Export visible activity" title="Export loaded, filtered records" disabled={exporting || !filtered.length} onClick={() => void exportRecords()}><Download size={14} /></button>
@@ -125,8 +127,9 @@ export default function ActivityView() {
     </div>
     {(error || health.error) && <div className="activity-error" role="alert">{error || health.error} <button onClick={() => setReload(v => v + 1)}>Retry</button></div>}
     <div className="activity-body">
-      {!filtered.length ? <div className="activity-empty"><GitBranch size={32} /><h3>{loading ? 'Loading activity…' : records.length ? 'No matching activity' : 'Your conversations will take shape here'}</h3><p>{records.length ? 'Try another chat, provider, or search.' : 'Ask a question in a Claude or Codex panel. Chat names, replies, token usage, and messages between agents are recorded here automatically.'}</p></div>
+      {!filtered.length ? <div className="activity-empty"><GitBranch size={32} /><h3>{loading ? 'Loading activity…' : records.length ? 'No matching activity' : 'Your conversations will take shape here'}</h3><p>{records.length ? 'Try another chat, provider, or search.' : 'Ask a question in a supported agent panel. Chat names, replies, token usage, and messages between agents are recorded here automatically.'}</p></div>
         : mode === 'flow' ? <FlowGraph records={filtered} selected={selected} onSelect={setSelected} />
+          : mode === 'bubbles' ? <ActivityBubbles records={filtered} selected={selected} onSelect={setSelected} />
           : <div className="activity-timeline">{[...filtered].sort(byTime).reverse().map(record => <button key={record.id} className={`activity-event${selected === record.id ? ' is-selected' : ''}`} onClick={() => setSelected(record.id)}>
             <div className="activity-event-time">{time(record.startedAt)}<small>{date(record.startedAt)}</small></div>
             <div className={`activity-event-dot activity-event-dot--${record.actor.provider}`}>{record.kind === 'handoff' ? <ArrowRight size={14} /> : <MessageSquare size={14} />}</div>
@@ -139,14 +142,14 @@ export default function ActivityView() {
     <footer className="activity-footer"><div className="activity-legend"><span><i className="activity-token--input" />Input</span><span><i className="activity-token--cacheRead" />Cache read</span><span><i className="activity-token--cacheWrite" />Cache write</span><span><i className="activity-token--output" />Output</span></div>
       <span>{filtered.length} loaded records{hasMore ? ' · more available' : ''}</span>{hasMore && <button disabled={loading} onClick={() => void loadOlder()}><ArrowDown size={12} />Load older</button>}
     </footer>
-    <p className="activity-coverage">Claude & Codex panels on this PC. Existing Claude transcripts are imported when open. Codex recording starts with this build. Remote usage and internal subagents are not included; handoffs never add tokens twice.</p>
+    <p className="activity-coverage">Claude and Codex panels, plus Antigravity chat panels on this PC. Open Claude transcripts are imported; Codex and Antigravity turns are recorded while Tessera runs. Remote usage and internal subagents are not included; handoffs never add tokens twice.</p>
   </section>;
   return expanded ? createPortal(<div className="activity-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setExpanded(false); }}>{view}</div>, document.body) : view;
 }
 
 function FlowGraph({ records, selected, onSelect }: { records: ActivityRecord[]; selected: string | null; onSelect: (id: string) => void }) {
   // Bound the drawn graph, not stored history. Timeline/search can reach every loaded record.
-  const shown = records.slice(-100);
+  const shown = records.slice(-ACTIVITY_GRAPH_LIMIT);
   const graph = useMemo(() => activityGraph(shown), [records]);
   const viewport = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -162,7 +165,7 @@ function FlowGraph({ records, selected, onSelect }: { records: ActivityRecord[];
     observer.observe(element); return () => observer.disconnect();
   }, []);
   const fit = useCallback(() => {
-    const scale = Math.max(.02, Math.min(1, (size.width - 48) / graph.width, (size.height - 60) / graph.height));
+    const scale = Math.max(.001, Math.min(1, (size.width - 48) / graph.width, (size.height - 60) / graph.height));
     setCamera({ x: Math.max(16, (size.width - graph.width * scale) / 2), y: 20, scale });
   }, [size, graph.width, graph.height]);
   useEffect(() => {
@@ -172,7 +175,7 @@ function FlowGraph({ records, selected, onSelect }: { records: ActivityRecord[];
     }
   }, [graph.width, size]);
   const zoom = (factor: number) => setCamera(old => {
-    const scale = Math.max(.02, Math.min(2, old.scale * factor));
+    const scale = Math.max(.001, Math.min(2, old.scale * factor));
     return { scale, x: size.width / 2 - (size.width / 2 - old.x) * scale / old.scale, y: size.height / 2 - (size.height / 2 - old.y) * scale / old.scale };
   });
   useEffect(() => {
@@ -181,7 +184,7 @@ function FlowGraph({ records, selected, onSelect }: { records: ActivityRecord[];
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) {
         setCamera(old => {
-          const scale = Math.max(.02, Math.min(2, old.scale * (event.deltaY < 0 ? 1.08 : .92)));
+          const scale = Math.max(.001, Math.min(2, old.scale * (event.deltaY < 0 ? 1.08 : .92)));
           return { scale, x: size.width / 2 - (size.width / 2 - old.x) * scale / old.scale, y: size.height / 2 - (size.height / 2 - old.y) * scale / old.scale };
         });
       } else setCamera(old => ({ ...old, x: old.x - event.deltaX, y: old.y - event.deltaY }));
@@ -191,7 +194,7 @@ function FlowGraph({ records, selected, onSelect }: { records: ActivityRecord[];
   }, [size]);
   const positions = new Map(graph.nodes.map(n => [n.record.id, n]));
   return <div className="activity-graph" ref={viewport}>
-    <div className="activity-graph-help">Drag to pan · select a card{records.length > 100 && ' · latest 100 records shown'}</div>
+    <div className="activity-graph-help">Drag to pan · select a card{records.length > ACTIVITY_GRAPH_LIMIT && ` · latest ${ACTIVITY_GRAPH_LIMIT} records shown`}</div>
     <div className="activity-graph-tools"><button aria-label="Zoom out" onClick={() => zoom(.8)}><ZoomOut size={15} /></button><span>{Math.round(camera.scale * 100)}%</span><button aria-label="Zoom in" onClick={() => zoom(1.25)}><ZoomIn size={15} /></button><button aria-label="Fit graph" title="Fit graph" onClick={fit}><Focus size={15} /></button><button aria-label="Go to latest activity" title="Go to latest" onClick={() => setCamera(old => ({ ...old, y: size.height - 40 - graph.height * old.scale }))}><ArrowDown size={15} /></button></div>
     <svg ref={svg} width="100%" height="100%" aria-label="Conversation flow graph" role="group" onPointerDown={e => {
       if ((e.target as Element).closest('[data-activity-node]')) return;
